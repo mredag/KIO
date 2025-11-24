@@ -6,6 +6,31 @@
   body {
     @apply bg-gray-50 text-gray-900;
   }
+
+  /* Custom scrollbar styling for kiosk mode */
+  .kiosk-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .kiosk-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .kiosk-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  .kiosk-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Firefox scrollbar */
+  .kiosk-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  }
 }
 
 @layer utilities {

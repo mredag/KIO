@@ -147,33 +147,52 @@ export default function MassageDetailPanel({ massage }: MassageDetailPanelProps)
         </div>
 
         {/* Details section - 40% height */}
-        <div className="h-[40%] px-12 py-8 overflow-y-auto bg-black">
+        <div className="h-[40%] px-12 py-8 bg-black flex flex-col">
           {/* Massage name (Requirement 2.4) */}
           <h2 className="text-5xl font-light text-white mb-4 tracking-tight">
             {displayedMassage.name}
           </h2>
 
-          {/* Long description (Requirement 2.4) */}
-          <p className="text-lg text-gray-400 leading-relaxed mb-8 font-light">
-            {displayedMassage.longDescription}
-          </p>
+          {/* Long description (Requirement 2.4) - scrollable if needed */}
+          <div className="flex-1 overflow-y-auto kiosk-scrollbar mb-6">
+            <p className="text-lg text-gray-400 leading-relaxed font-light">
+              {displayedMassage.longDescription}
+            </p>
+          </div>
 
-          {/* Session pricing (Requirement 2.4) */}
+          {/* Session pricing (Requirement 2.4) - fixed height, responsive sizing */}
           {displayedMassage.sessions.length > 0 && (
-            <div className="mt-auto">
-              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-widest mb-6">
+            <div className="flex-shrink-0">
+              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-widest mb-4">
                 {t('menu.pricing')}
               </h3>
-              <div className="flex gap-4">
+              <div className={`grid gap-3 ${
+                displayedMassage.sessions.length === 1 ? 'grid-cols-1 max-w-xs' :
+                displayedMassage.sessions.length === 2 ? 'grid-cols-2' :
+                displayedMassage.sessions.length === 3 ? 'grid-cols-3' :
+                'grid-cols-4'
+              }`}>
                 {displayedMassage.sessions.map((session, index) => (
                   <div
                     key={index}
-                    className="flex-1 bg-white bg-opacity-5 border border-white border-opacity-10 p-6 rounded-2xl hover:bg-opacity-10 transition-all duration-300 cursor-pointer"
+                    className={`bg-white bg-opacity-5 border border-white border-opacity-10 rounded-2xl hover:bg-opacity-10 transition-all duration-300 cursor-pointer ${
+                      displayedMassage.sessions.length <= 2 ? 'p-6' :
+                      displayedMassage.sessions.length === 3 ? 'p-5' :
+                      'p-4'
+                    }`}
                   >
-                    <div className="text-sm text-gray-400 mb-2 font-light">
+                    <div className={`text-gray-400 mb-2 font-light ${
+                      displayedMassage.sessions.length <= 2 ? 'text-sm' :
+                      displayedMassage.sessions.length === 3 ? 'text-xs' :
+                      'text-xs'
+                    }`}>
                       {session.name}
                     </div>
-                    <div className="text-2xl font-medium text-white">
+                    <div className={`font-medium text-white ${
+                      displayedMassage.sessions.length <= 2 ? 'text-2xl' :
+                      displayedMassage.sessions.length === 3 ? 'text-xl' :
+                      'text-lg'
+                    }`}>
                       {formatCurrency(session.price)}
                     </div>
                   </div>

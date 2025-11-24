@@ -19,7 +19,7 @@ export default function MassageList({
   const regularMassages = massages.filter((m) => !m.isFeatured);
 
   return (
-    <div className="h-full w-1/5 bg-black overflow-y-auto py-8 px-6">
+    <div className="h-full w-1/5 bg-black overflow-y-auto py-8 px-6 kiosk-scrollbar">
       {/* Featured massages section (Requirement 2.2) */}
       {featuredMassages.length > 0 && (
         <div className="mb-8">

@@ -70,14 +70,14 @@ export default function MassageDetailPanel({ massage }: MassageDetailPanelProps)
   }
 
   return (
-    <div className="h-full w-3/4 bg-gray-950 overflow-y-auto">
+    <div className="h-full w-4/5 bg-black overflow-hidden">
       <div 
         id="massage-detail-content" 
-        className="h-full fade-transition" 
+        className="h-full fade-transition flex flex-col" 
         style={{ opacity: 1 }}
       >
-        {/* Media section - top half */}
-        <div className="h-1/2 bg-black relative">
+        {/* Media section - 60% height */}
+        <div className="h-[60%] bg-black relative overflow-hidden">
           {!mediaError && displayedMassage.mediaUrl ? (
             <>
               {/* Video player (Requirement 2.5) */}
@@ -101,10 +101,13 @@ export default function MassageDetailPanel({ massage }: MassageDetailPanelProps)
                 <img
                   src={displayedMassage.mediaUrl}
                   alt={displayedMassage.name}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover"
                   onError={() => setMediaError(true)}
                 />
               )}
+              
+              {/* Gradient overlay at bottom */}
+              <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent"></div>
             </>
           ) : (
             // Placeholder for media loading error (Requirement 2.8)
@@ -127,72 +130,52 @@ export default function MassageDetailPanel({ massage }: MassageDetailPanelProps)
               </div>
             </div>
           )}
-        </div>
-
-        {/* Details section - bottom half */}
-        <div className="h-1/2 p-8 overflow-y-auto">
-          {/* Massage name (Requirement 2.4) */}
-          <h2 className="text-4xl font-bold text-white mb-4">
-            {displayedMassage.name}
-          </h2>
-
-          {/* Duration (Requirement 2.4) */}
-          {displayedMassage.duration && (
-            <div className="flex items-center gap-2 text-gray-400 mb-4">
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="text-lg">{displayedMassage.duration}</span>
-            </div>
-          )}
-
-          {/* Purpose tags (Requirement 2.4) */}
+          
+          {/* Purpose tags overlay on media */}
           {displayedMassage.purposeTags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-6">
+            <div className="absolute top-8 left-8 flex flex-wrap gap-3">
               {displayedMassage.purposeTags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-block px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-full"
+                  className="inline-block px-4 py-2 text-sm font-medium bg-white bg-opacity-20 backdrop-blur-md text-white rounded-full border border-white border-opacity-30"
                 >
                   {tag}
                 </span>
               ))}
             </div>
           )}
+        </div>
+
+        {/* Details section - 40% height */}
+        <div className="h-[40%] px-12 py-8 overflow-y-auto bg-black">
+          {/* Massage name (Requirement 2.4) */}
+          <h2 className="text-5xl font-light text-white mb-4 tracking-tight">
+            {displayedMassage.name}
+          </h2>
 
           {/* Long description (Requirement 2.4) */}
-          <p className="text-lg text-gray-300 leading-relaxed mb-6">
+          <p className="text-lg text-gray-400 leading-relaxed mb-8 font-light">
             {displayedMassage.longDescription}
           </p>
 
           {/* Session pricing (Requirement 2.4) */}
           {displayedMassage.sessions.length > 0 && (
-            <div className="mt-8">
-              <h3 className="text-2xl font-semibold text-white mb-4">
+            <div className="mt-auto">
+              <h3 className="text-xs font-medium text-gray-500 uppercase tracking-widest mb-6">
                 {t('menu.pricing')}
               </h3>
-              <div className="space-y-3">
+              <div className="flex gap-4">
                 {displayedMassage.sessions.map((session, index) => (
                   <div
                     key={index}
-                    className="flex justify-between items-center bg-gray-800 p-4 rounded-lg"
+                    className="flex-1 bg-white bg-opacity-5 border border-white border-opacity-10 p-6 rounded-2xl hover:bg-opacity-10 transition-all duration-300 cursor-pointer"
                   >
-                    <span className="text-lg text-gray-200">
+                    <div className="text-sm text-gray-400 mb-2 font-light">
                       {session.name}
-                    </span>
-                    <span className="text-xl font-semibold text-white">
+                    </div>
+                    <div className="text-2xl font-medium text-white">
                       {formatCurrency(session.price)}
-                    </span>
+                    </div>
                   </div>
                 ))}
               </div>

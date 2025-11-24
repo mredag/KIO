@@ -123,15 +123,15 @@ export default function DigitalMenuMode() {
   }
 
   return (
-    <div className="h-full w-full flex">
-      {/* Left column - Massage list (1/4 width) (Requirement 2.1) */}
+    <div className="h-full w-full flex bg-black">
+      {/* Left column - Massage list (1/5 width) (Requirement 2.1) */}
       <MassageList
         massages={sortedMassages}
         selectedMassageId={selectedMassage?.id || null}
         onSelectMassage={setSelectedMassage}
       />
 
-      {/* Right panel - Massage details (3/4 width) (Requirement 2.3) */}
+      {/* Right panel - Massage details (4/5 width) (Requirement 2.3) */}
       <MassageDetailPanel massage={selectedMassage} />
     </div>
   );

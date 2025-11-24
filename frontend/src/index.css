@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer utilities {
+  .touch-target {
+    @apply min-w-[44px] min-h-[44px];
+  }
+}
+
+/* Performance-Optimized Animations for Raspberry Pi */
+/* Requirements: 17.1, 17.2, 17.3, 17.4, 17.5 */
+
+/* Use only transform and opacity for GPU acceleration (Requirement 17.1) */
+@layer components {
+  /* Fade transition - 300ms duration (Requirement 17.2) */
+  .fade-transition {
+    transition: opacity 300ms ease-in-out;
+  }
+
+  /* Fade in animation */
+  .fade-in {
+    animation: fadeIn 300ms ease-in-out forwards;
+  }
+
+  /* Fade out animation */
+  .fade-out {
+    animation: fadeOut 300ms ease-in-out forwards;
+  }
+
+  /* Slideshow slide animation - fade and scale (Requirement 17.3) */
+  .slideshow-slide {
+    animation: slideshowSlide 500ms ease-out forwards;
+  }
+
+  /* Vertical float animation for QR description (2-second duration) */
+  .float-vertical {
+    animation: floatVertical 2s ease-in-out infinite;
+  }
+
+  /* Strategic will-change usage - only on actively animating elements */
+  /* Applied programmatically to limit to 3 concurrent animations (Requirement 17.5) */
+  .will-change-transform {
+    will-change: transform;
+  }
+
+  .will-change-opacity {
+    will-change: opacity;
+  }
+
+  .will-change-transform-opacity {
+    will-change: transform, opacity;
+  }
+
+  /* Remove will-change after animation completes to free resources */
+  .will-change-auto {
+    will-change: auto;
+  }
+}
+
+/* Keyframe definitions - using only transform and opacity */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Slideshow slide animation - fade and scale combined */
+@keyframes slideshowSlide {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Vertical float animation for QR description */
+@keyframes floatVertical {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Spinner animation - optimized for performance */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pulse animation for loading states */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Performance optimization: Reduce motion for accessibility and performance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

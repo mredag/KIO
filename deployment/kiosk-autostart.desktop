@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SPA Digital Kiosk
+Comment=Autostart SPA Digital Kiosk in Chromium
+Exec=/home/pi/spa-digital-kiosk/deployment/start-kiosk.sh
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=10

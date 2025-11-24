@@ -1,0 +1,94 @@
+{
+  "menu": {
+    "title": "Masaj Menüsü",
+    "featured": "Öne Çıkan Masajlar",
+    "regular": "Tüm Masajlar",
+    "duration": "Süre",
+    "sessions": "Seanslar",
+    "selectMassage": "Detayları görmek için bir masaj seçin",
+    "noMassages": "Henüz masaj eklenmemiş",
+    "pricing": "Fiyatlandırma",
+    "mediaUnavailable": "Medya mevcut değil",
+    "loading": "Yükleniyor..."
+  },
+  "survey": {
+    "satisfaction": {
+      "title": "Memnuniyet Anketi",
+      "description": "Hizmetimiz hakkındaki görüşlerinizi öğrenmek isteriz",
+      "ratingQuestion": "Genel memnuniyet dereceniz nedir?",
+      "dissatisfactionQuestion": "Neden memnun kalmadınız?",
+      "notSatisfied": "Memnun Değilim",
+      "verySatisfied": "Çok Memnunum",
+      "reasons": {
+        "notAsExpected": "Masaj beklediğim gibi değildi",
+        "environment": "Ortam sıcaklığı veya gürültü rahatsız ediciydi",
+        "staff": "Personel ile ilgili sorun",
+        "price": "Fiyat",
+        "other": "Diğer"
+      },
+      "thankYou": "Teşekkür ederiz!",
+      "thankYouMessage": "Google'da yorum bırakmak ister misiniz?",
+      "thankYouLowRating": "Geri bildiriminiz için teşekkür ederiz. Gelişmek için çalışacağız.",
+      "googleButton": "Google İnceleme QR Kodunu Göster"
+    },
+    "discovery": {
+      "title": "Keşif Anketi",
+      "description": "Bizi nasıl keşfettiğinizi öğrenmek isteriz",
+      "channelQuestion": "Bizi nasıl duydunuz?",
+      "experienceQuestion": "Daha önce spa deneyiminiz oldu mu?",
+      "optional": "(İsteğe bağlı)",
+      "channels": {
+        "google": "Google arama sonuçları",
+        "instagram": "Instagram",
+        "friend": "Arkadaş tavsiyesi",
+        "passingBy": "Geçerken gördüm",
+        "other": "Diğer"
+      },
+      "experience": {
+        "yes": "Evet",
+        "no": "Hayır"
+      },
+      "thankYou": "Teşekkür ederiz!",
+      "thankYouMessage": "Geri bildiriminiz bizim için değerli."
+    },
+    "submit": "Gönder",
+    "skip": "Atla",
+    "timeout": "İşlem zaman aşımına uğradı. Anket sıfırlandı.",
+    "loading": "Anket yükleniyor...",
+    "notSupported": "Bu anket türü henüz desteklenmiyor"
+  },
+  "googleReview": {
+    "defaultTitle": "Bizi Google'da Değerlendirin",
+    "defaultDescription": "QR kodu telefonunuzla tarayın ve görüşlerinizi paylaşın",
+    "scanPrompt": "Kameranızı QR koda tutun",
+    "close": "Kapat",
+    "loading": "Yükleniyor...",
+    "error": "Yapılandırma Hatası",
+    "errorMessage": "Google inceleme yapılandırılmamış. Lütfen bir yöneticiyle iletişime geçin."
+  },
+  "slideshow": {
+    "promotional": "Özel Kampanya"
+  },
+  "offline": {
+    "indicator": "Çevrimdışı Mod",
+    "message": "Önbellekteki İçerik Kullanılıyor"
+  },
+  "purposeTags": {
+    "relaxation": "Rahatlama",
+    "painRelief": "Ağrı Giderme",
+    "detox": "Detoks",
+    "flexibility": "Esneklik",
+    "postSport": "Spor Sonrası İyileşme"
+  },
+  "aria": {
+    "selectMassage": "{{name}} masajını seç",
+    "closeGoogleReview": "Google inceleme ekranını kapat",
+    "ratingButton": "{{rating}} puan ver",
+    "selectReason": "{{reason}} seçeneğini seç",
+    "submitSurvey": "Anketi gönder",
+    "skipQuestion": "Soruyu atla",
+    "selectChannel": "{{channel}} kanalını seç",
+    "selectExperience": "{{experience}} seçeneğini seç",
+    "googleReviewButton": "Google'da yorum bırak"
+  }
+}

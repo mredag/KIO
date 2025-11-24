@@ -1,0 +1,29 @@
+{
+  "name": "spa-digital-kiosk",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:prod": "NODE_ENV=production npm run build:frontend && npm run build:backend",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "preview": "npm run preview --workspace=frontend",
+    "preview:prod": "NODE_ENV=production npm run build && npm run start:prod",
+    "start:prod": "NODE_ENV=production npm run start --workspace=backend",
+    "test:prod": "node test-production.mjs",
+    "lint": "npm run lint --workspaces",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "check:translations": "node scripts/check-translations.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.1.1"
+  }
+}

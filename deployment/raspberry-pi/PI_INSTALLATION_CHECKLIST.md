@@ -186,7 +186,7 @@ pm2 restart kiosk-backend
 - [ ] Test touch calibration (if touch screen)
 
 ### 23. Backup Configuration
-- [ ] Test manual backup: `~/spa-kiosk/deployment/backup-database.sh`
+- [ ] Test manual backup: `~/spa-kiosk/deployment/raspberry-pi/backup-database.sh`
 - [ ] Verify backup created in data/backups/
 - [ ] Copy backup to external storage
 

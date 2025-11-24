@@ -65,6 +65,7 @@ cd ~/spa-kiosk/deployment/raspberry-pi
 ### Backups
 
 ```bash
+cd ~/spa-kiosk/deployment/raspberry-pi
 ./backup-database.sh          # Manual backup
 crontab -l                    # View scheduled backups (daily 2 AM)
 ```

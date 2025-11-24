@@ -368,7 +368,7 @@ setup_watchdog() {
     log_info "Setting up watchdog service..."
     
     # Copy watchdog script
-    cp $APP_DIR/deployment/watchdog-kiosk.sh /home/$APP_USER/watchdog-kiosk.sh
+    cp $APP_DIR/deployment/raspberry-pi/watchdog-kiosk.sh /home/$APP_USER/watchdog-kiosk.sh
     chmod +x /home/$APP_USER/watchdog-kiosk.sh
     
     # Create systemd service
@@ -403,7 +403,7 @@ setup_backup_cron() {
     log_info "Setting up automatic backups..."
     
     # Add cron job for daily backups at 2 AM
-    (crontab -l 2>/dev/null; echo "0 2 * * * $APP_DIR/deployment/backup-database.sh") | crontab -
+    (crontab -l 2>/dev/null; echo "0 2 * * * $APP_DIR/deployment/raspberry-pi/backup-database.sh") | crontab -
     
     log_success "Automatic backups configured"
 }

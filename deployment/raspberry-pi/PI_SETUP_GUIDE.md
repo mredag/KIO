@@ -226,7 +226,7 @@ Daily backups at 2 AM:
 crontab -l
 
 # Manual backup
-~/spa-kiosk/deployment/backup-database.sh
+~/spa-kiosk/deployment/raspberry-pi/backup-database.sh
 
 # Backups location
 ls -lh ~/spa-kiosk/data/backups/
@@ -330,7 +330,7 @@ sudo systemctl stop ssh
 
 ```bash
 # Backup database
-~/spa-kiosk/deployment/backup-database.sh
+~/spa-kiosk/deployment/raspberry-pi/backup-database.sh
 
 # Backup entire application
 tar -czf ~/spa-kiosk-backup.tar.gz ~/spa-kiosk

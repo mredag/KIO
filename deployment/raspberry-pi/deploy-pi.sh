@@ -103,7 +103,7 @@ echo "  Then copy and run the command shown"
 echo ""
 echo "Setting up kiosk autostart..."
 mkdir -p ~/.config/autostart
-cp deployment/kiosk-autostart.desktop ~/.config/autostart/
+cp deployment/raspberry-pi/kiosk-autostart.desktop ~/.config/autostart/
 chmod +x ~/.config/autostart/kiosk-autostart.desktop
 echo "✅ Kiosk will start automatically on login"
 

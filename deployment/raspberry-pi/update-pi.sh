@@ -48,7 +48,7 @@ cd $APP_DIR
 
 # Backup database
 log_info "Creating database backup..."
-./deployment/backup-database.sh
+./deployment/raspberry-pi/backup-database.sh
 log_success "Database backed up"
 
 # Pull latest code

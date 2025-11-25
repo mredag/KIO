@@ -21,6 +21,7 @@ import {
   handleValidationErrors,
 } from '../middleware/validationMiddleware.js';
 import i18n from '../i18n/config.js';
+import { toSnakeCase } from '../utils/objectUtils.js';
 
 // Configure multer for file uploads
 const upload = multer({
@@ -445,20 +446,7 @@ export function createAdminRoutes(
   router.post('/massages', authMiddleware, validateMassage, handleValidationErrors, async (req: Request, res: Response) => {
     try {
       // Transform camelCase to snake_case for database
-      const massageData = {
-        name: req.body.name,
-        short_description: req.body.shortDescription,
-        long_description: req.body.longDescription,
-        duration: req.body.duration,
-        media_type: req.body.mediaType,
-        media_url: req.body.mediaUrl,
-        purpose_tags: req.body.purposeTags,
-        sessions: req.body.sessions,
-        is_featured: req.body.isFeatured,
-        is_campaign: req.body.isCampaign,
-        sort_order: req.body.sortOrder,
-      };
-
+      const massageData = toSnakeCase(req.body);
       const massage = db.createMassage(massageData);
 
       // Broadcast menu update to kiosks
@@ -494,41 +482,8 @@ export function createAdminRoutes(
         return;
       }
 
-      // Validate fields if provided
-      if (req.body.name !== undefined) {
-        if (req.body.name.length < 1 || req.body.name.length > 100) {
-          res.status(400).json({ error: i18n.t('validation:outOfRange', { field: 'İsim', min: 1, max: 100 }) });
-          return;
-        }
-      }
-
-      if (req.body.short_description !== undefined) {
-        if (req.body.short_description.length < 1 || req.body.short_description.length > 200) {
-          res.status(400).json({ error: i18n.t('validation:outOfRange', { field: 'Kısa açıklama', min: 1, max: 200 }) });
-          return;
-        }
-      }
-
-      if (req.body.long_description !== undefined && req.body.long_description.length > 2000) {
-        res.status(400).json({ error: i18n.t('validation:tooLong', { field: 'Uzun açıklama', max: 2000 }) });
-        return;
-      }
-
-      if (req.body.sessions !== undefined) {
-        if (!Array.isArray(req.body.sessions) || req.body.sessions.length === 0) {
-          res.status(400).json({ error: i18n.t('validation:mustBeArray', { field: 'Seanslar' }) });
-          return;
-        }
-
-        for (const session of req.body.sessions) {
-          if (!session.name || typeof session.price !== 'number' || session.price <= 0) {
-            res.status(400).json({ error: i18n.t('validation:sessionInvalid') });
-            return;
-          }
-        }
-      }
-
-      const massage = db.updateMassage(id, req.body);
+      const massageData = toSnakeCase(req.body);
+      const massage = db.updateMassage(id, massageData);
 
       // Broadcast menu update to kiosks
       kioskEventService.broadcastMenuUpdate();

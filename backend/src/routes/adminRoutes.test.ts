@@ -225,6 +225,47 @@ describe('Admin Routes', () => {
     });
   });
 
+  describe('PUT /api/admin/massages/:id', () => {
+    it('should update an existing massage with camelCase keys', async () => {
+      // Login first
+      await agent
+        .post('/api/admin/login')
+        .send({ username: 'admin', password: 'admin123' });
+
+      // Create a massage to update
+      const createResponse = await agent
+        .post('/api/admin/massages')
+        .send({
+          name: 'Initial Name',
+          shortDescription: 'Initial short description',
+          sessions: [{ name: 'Session 1', price: 50 }],
+        });
+
+      const massageId = createResponse.body.id;
+
+      const updateData = {
+        name: 'Updated Name',
+        shortDescription: 'Updated short description',
+        isFeatured: true,
+        sessions: [{ name: 'Updated Session', price: 150 }],
+      };
+
+      // Update the massage
+      const response = await agent
+        .put(`/api/admin/massages/${massageId}`)
+        .send(updateData);
+
+      expect(response.status).toBe(200);
+      expect(response.body.short_description).toBe('Updated short description');
+      expect(response.body.is_featured).toBe(1);
+
+      // Verify in database
+      const updatedMassage = dbService.getMassageById(massageId);
+      expect(updatedMassage?.short_description).toBe('Updated short description');
+      expect(updatedMassage?.is_featured).toBe(1);
+    });
+  });
+
   describe('PUT /api/admin/kiosk/mode', () => {
     it('should update kiosk mode', async () => {
       // Login first

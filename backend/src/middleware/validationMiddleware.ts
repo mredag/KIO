@@ -42,7 +42,7 @@ export const validateMassage: ValidationChain[] = [
     .withMessage('Massage name must be between 1 and 100 characters')
     .escape(),
   
-  body('short_description')
+  body('shortDescription')
     .trim()
     .notEmpty()
     .withMessage('Short description is required')
@@ -50,7 +50,7 @@ export const validateMassage: ValidationChain[] = [
     .withMessage('Short description must be between 1 and 200 characters')
     .escape(),
   
-  body('long_description')
+  body('longDescription')
     .optional()
     .trim()
     .isLength({ max: 2000 })
@@ -62,21 +62,21 @@ export const validateMassage: ValidationChain[] = [
     .trim()
     .escape(),
   
-  body('media_type')
+  body('mediaType')
     .optional({ nullable: true, checkFalsy: true })
     .isIn(['video', 'photo'])
     .withMessage('Media type must be either "video" or "photo"'),
   
-  body('media_url')
+  body('mediaUrl')
     .optional()
     .trim(),
   
-  body('purpose_tags')
+  body('purposeTags')
     .optional()
     .isArray()
     .withMessage('Purpose tags must be an array'),
   
-  body('purpose_tags.*')
+  body('purposeTags.*')
     .optional()
     .isString()
     .trim()
@@ -100,17 +100,17 @@ export const validateMassage: ValidationChain[] = [
     .isFloat({ min: 0 })
     .withMessage('Session price must be a positive number'),
   
-  body('is_featured')
+  body('isFeatured')
     .optional()
     .isBoolean()
     .withMessage('is_featured must be a boolean'),
   
-  body('is_campaign')
+  body('isCampaign')
     .optional()
     .isBoolean()
     .withMessage('is_campaign must be a boolean'),
   
-  body('sort_order')
+  body('sortOrder')
     .optional()
     .isInt({ min: 0 })
     .withMessage('Sort order must be a non-negative integer'),

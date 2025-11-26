@@ -58,23 +58,30 @@ export function useKioskEvents() {
           // Get current state
           const state = useKioskStore.getState();
           const currentMode = state.mode;
+          const currentSurveyId = state.activeSurveyId;
           const currentUserActive = state.isUserActive;
           
           // If changing to a different mode, always apply immediately
-          // Only queue if staying in the same mode and user is active
           if (mode !== currentMode) {
             console.log('[SSE] Mode changing, applying immediately:', { from: currentMode, to: mode });
             setMode(mode);
             setActiveSurveyId(activeSurveyId);
-          } else if (currentUserActive) {
-            // Same mode but user is active - queue the change
-            console.log('[SSE] Same mode, user active, queueing:', { mode, activeSurveyId });
+          }
+          // If changing survey (different activeSurveyId), apply immediately even if user is active
+          else if (activeSurveyId !== currentSurveyId) {
+            console.log('[SSE] Survey changing, applying immediately:', { from: currentSurveyId, to: activeSurveyId });
+            setActiveSurveyId(activeSurveyId);
+          }
+          // Same mode and same survey, but user is active - queue the change
+          else if (currentUserActive) {
+            console.log('[SSE] Same mode/survey, user active, queueing:', { mode, activeSurveyId });
             setPendingModeChange({
               mode,
               activeSurveyId,
             });
-          } else {
-            // Same mode, user not active - apply immediately
+          }
+          // Same mode/survey, user not active - apply immediately
+          else {
             console.log('[SSE] Applying mode change immediately:', { mode, activeSurveyId });
             setMode(mode);
             setActiveSurveyId(activeSurveyId);

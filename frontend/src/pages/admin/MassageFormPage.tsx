@@ -54,6 +54,7 @@ interface FormData {
   sessions: Session[];
   isFeatured: boolean;
   isCampaign: boolean;
+  layoutTemplate: 'price-list' | 'info-tags' | 'media-focus';
   sortOrder: number;
 }
 
@@ -86,6 +87,7 @@ export default function MassageFormPage() {
     sessions: [{ name: '', price: 0 }],
     isFeatured: false,
     isCampaign: false,
+    layoutTemplate: 'price-list',
     sortOrder: 0,
   });
 
@@ -111,6 +113,7 @@ export default function MassageFormPage() {
           sessions: massage.sessions.length > 0 ? massage.sessions : [{ name: '', price: 0 }],
           isFeatured: massage.isFeatured,
           isCampaign: massage.isCampaign,
+          layoutTemplate: massage.layoutTemplate || 'price-list',
           sortOrder: massage.sortOrder,
         });
       }
@@ -231,6 +234,7 @@ export default function MassageFormPage() {
         sessions: formData.sessions,
         is_featured: formData.isFeatured,
         is_campaign: formData.isCampaign,
+        layout_template: formData.layoutTemplate,
         sort_order: formData.sortOrder,
       };
 
@@ -443,6 +447,141 @@ export default function MassageFormPage() {
                 Yeni dosya seçildi: <span className="font-medium">{mediaFile.name}</span>
               </p>
             )}
+          </div>
+
+          {/* Layout Template */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {t('massages.layoutTemplate')}
+            </label>
+            <p className="text-sm text-gray-500 mb-3">{t('massages.layoutTemplateHelp')}</p>
+            <div className="grid md:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, layoutTemplate: 'price-list' })}
+                className={`w-full text-left border rounded-lg p-4 transition-colors touch-target ${
+                  formData.layoutTemplate === 'price-list'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {t('massages.layoutOptionPriceList')}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      {t('massages.layoutOptionPriceListDescription')}
+                    </p>
+                  </div>
+                  {formData.layoutTemplate === 'price-list' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, layoutTemplate: 'info-tags' })}
+                className={`w-full text-left border rounded-lg p-4 transition-colors touch-target ${
+                  formData.layoutTemplate === 'info-tags'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {t('massages.layoutOptionInfoTags')}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      {t('massages.layoutOptionInfoTagsDescription')}
+                    </p>
+                  </div>
+                  {formData.layoutTemplate === 'info-tags' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, layoutTemplate: 'info-tags' })}
+                className={`w-full text-left border rounded-lg p-4 transition-colors touch-target ${
+                  formData.layoutTemplate === 'info-tags'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {t('massages.layoutOptionInfoTags')}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      {t('massages.layoutOptionInfoTagsDescription')}
+                    </p>
+                  </div>
+                  {formData.layoutTemplate === 'info-tags' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, layoutTemplate: 'media-focus' })}
+                className={`w-full text-left border rounded-lg p-4 transition-colors touch-target ${
+                  formData.layoutTemplate === 'media-focus'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {t('massages.layoutOptionMediaFocus')}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      {t('massages.layoutOptionMediaFocusDescription')}
+                    </p>
+                  </div>
+                  {formData.layoutTemplate === 'media-focus' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, layoutTemplate: 'immersive-showcase' })}
+                className={`w-full text-left border rounded-lg p-4 transition-colors touch-target ${
+                  formData.layoutTemplate === 'immersive-showcase'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">
+                      {t('massages.layoutOptionImmersive')}
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      {t('massages.layoutOptionImmersiveDescription')}
+                    </p>
+                  </div>
+                  {formData.layoutTemplate === 'immersive-showcase' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Purpose Tags */}

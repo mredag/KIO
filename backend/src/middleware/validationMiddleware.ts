@@ -110,6 +110,101 @@ export const validateMassage: ValidationChain[] = [
     .isBoolean()
     .withMessage('is_campaign must be a boolean'),
   
+  body('layout_template')
+    .optional()
+    .isIn(['price-list', 'info-tags', 'media-focus', 'immersive-showcase'])
+    .withMessage('layout_template must be one of price-list, info-tags, media-focus, or immersive-showcase'),
+  
+  body('sort_order')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Sort order must be a non-negative integer'),
+];
+
+/**
+ * Validation rules for partial massage updates
+ * All fields optional but validated when provided
+ */
+export const validateMassageUpdate: ValidationChain[] = [
+  body('name')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Massage name must be between 1 and 100 characters')
+    .escape(),
+
+  body('short_description')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 200 })
+    .withMessage('Short description must be between 1 and 200 characters')
+    .escape(),
+
+  body('long_description')
+    .optional()
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage('Long description must not exceed 2000 characters')
+    .escape(),
+
+  body('duration')
+    .optional()
+    .trim()
+    .escape(),
+
+  body('media_type')
+    .optional({ nullable: true, checkFalsy: true })
+    .isIn(['video', 'photo'])
+    .withMessage('Media type must be either "video" or "photo"'),
+
+  body('media_url')
+    .optional()
+    .trim(),
+
+  body('purpose_tags')
+    .optional()
+    .isArray()
+    .withMessage('Purpose tags must be an array'),
+
+  body('purpose_tags.*')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Purpose tag must be between 1 and 50 characters'),
+
+  body('sessions')
+    .optional()
+    .isArray()
+    .withMessage('Sessions must be an array'),
+
+  body('sessions.*.name')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Session name is required')
+    .escape(),
+
+  body('sessions.*.price')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Session price must be a positive number'),
+
+  body('is_featured')
+    .optional()
+    .isBoolean()
+    .withMessage('is_featured must be a boolean'),
+
+  body('is_campaign')
+    .optional()
+    .isBoolean()
+    .withMessage('is_campaign must be a boolean'),
+
+  body('layout_template')
+    .optional()
+    .isIn(['price-list', 'info-tags', 'media-focus', 'immersive-showcase'])
+    .withMessage('layout_template must be one of price-list, info-tags, media-focus, or immersive-showcase'),
+
   body('sort_order')
     .optional()
     .isInt({ min: 0 })
@@ -199,6 +294,11 @@ export const validateSettings: ValidationChain[] = [
     .optional()
     .isInt({ min: 5, max: 300 })
     .withMessage('Google QR display duration must be between 5 and 300 seconds'),
+
+  body('kioskTheme')
+    .optional()
+    .isIn(['classic', 'immersive'])
+    .withMessage('Kiosk theme must be classic or immersive'),
   
   body('googleReviewUrl')
     .optional()

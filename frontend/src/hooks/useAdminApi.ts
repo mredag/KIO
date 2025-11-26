@@ -77,6 +77,7 @@ function transformMassage(data: any): Massage {
     sessions: data.sessions || [],
     isFeatured: data.is_featured === 1,
     isCampaign: data.is_campaign === 1,
+    layoutTemplate: data.layout_template || 'price-list',
     sortOrder: data.sort_order || 0,
   };
 }

@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [slideshowTimeout, setSlideshowTimeout] = useState<number>(60);
   const [surveyTimeout, setSurveyTimeout] = useState<number>(60);
   const [googleQrDisplayDuration, setGoogleQrDisplayDuration] = useState<number>(10);
+  const [kioskTheme, setKioskTheme] = useState<'classic' | 'immersive'>('classic');
 
   // Google Review settings
   const [googleReviewUrl, setGoogleReviewUrl] = useState<string>('');
@@ -55,6 +56,7 @@ export default function SettingsPage() {
       setSheetsSheetId(backendSettings.sheets_sheet_id || '');
       setSheetsSheetName(backendSettings.sheets_sheet_name || '');
       setSheetsCredentials(backendSettings.sheets_credentials || '');
+      setKioskTheme((backendSettings.kiosk_theme as 'classic' | 'immersive') || 'classic');
     }
   }, [settings]);
 
@@ -112,6 +114,7 @@ export default function SettingsPage() {
         google_review_description: googleReviewDescription,
         sheets_sheet_id: sheetsSheetId,
         sheets_sheet_name: sheetsSheetName,
+        kioskTheme,
       };
 
       if (sheetsCredentials) {
@@ -290,6 +293,54 @@ export default function SettingsPage() {
               <p className="mt-1 text-sm text-gray-500">
                 {t('settings.googleQrDurationHelp')}
               </p>
+            </div>
+          </div>
+
+          {/* Kiosk Theme */}
+          <div className="bg-white rounded-lg shadow p-6 space-y-4">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-lg font-semibold text-gray-900">{t('settings.kioskTheme')}</h3>
+              <p className="text-sm text-gray-600">{t('settings.kioskThemeHelp')}</p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setKioskTheme('classic')}
+                className={`w-full text-left border rounded-lg p-4 transition-colors ${
+                  kioskTheme === 'classic' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{t('settings.kioskThemeClassic')}</div>
+                    <p className="text-xs text-gray-600 mt-1">{t('settings.kioskThemeClassicHelp')}</p>
+                  </div>
+                  {kioskTheme === 'classic' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setKioskTheme('immersive')}
+                className={`w-full text-left border rounded-lg p-4 transition-colors ${
+                  kioskTheme === 'immersive' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900">{t('settings.kioskThemeImmersive')}</div>
+                    <p className="text-xs text-gray-600 mt-1">{t('settings.kioskThemeImmersiveHelp')}</p>
+                  </div>
+                  {kioskTheme === 'immersive' && (
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
             </div>
           </div>
 

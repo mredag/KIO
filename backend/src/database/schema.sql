@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS massages (
   sessions TEXT, -- JSON array of {name, price}
   is_featured INTEGER DEFAULT 0,
   is_campaign INTEGER DEFAULT 0,
+  layout_template TEXT DEFAULT 'price-list',
   sort_order INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   google_review_url TEXT,
   google_review_title TEXT,
   google_review_description TEXT,
+  kiosk_theme TEXT DEFAULT 'classic',
   sheets_sheet_id TEXT,
   sheets_sheet_name TEXT,
   sheets_credentials TEXT,

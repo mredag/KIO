@@ -12,6 +12,8 @@ export default function MassagesPage() {
   const deleteMassage = useDeleteMassage();
   const updateMassage = useUpdateMassage();
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [bulkLayout, setBulkLayout] = useState<Massage['layoutTemplate']>('price-list');
+  const [applyingBulk, setApplyingBulk] = useState(false);
 
   const handleDelete = async (id: string) => {
     try {
@@ -81,6 +83,41 @@ export default function MassagesPage() {
     }
   };
 
+  const handleApplyBulkLayout = async () => {
+    if (!massages || massages.length === 0) return;
+    setApplyingBulk(true);
+    try {
+      const toSnake = (massage: Massage) => ({
+        name: massage.name,
+        short_description: massage.shortDescription,
+        long_description: massage.longDescription || undefined,
+        duration: massage.duration || undefined,
+        media_type: massage.mediaType || undefined,
+        media_url: massage.mediaUrl || undefined,
+        purpose_tags: massage.purposeTags || [],
+        sessions: massage.sessions || [],
+        is_featured: massage.isFeatured,
+        is_campaign: massage.isCampaign,
+        sort_order: massage.sortOrder,
+        layout_template: bulkLayout,
+      });
+
+      await Promise.all(
+        massages.map((massage) =>
+          updateMassage.mutateAsync({
+            id: massage.id,
+            data: toSnake(massage) as any,
+          })
+        )
+      );
+    } catch (bulkError) {
+      console.error('Failed to apply bulk layout:', bulkError);
+      alert(t('massages.reorderError'));
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -107,15 +144,42 @@ export default function MassagesPage() {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-2xl font-bold text-gray-900">{t('massages.title')}</h2>
-          <button
-            onClick={handleCreate}
-            aria-label={t('aria.addMassage')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-target font-medium"
-          >
-            {t('massages.addNew')}
-          </button>
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <div className="flex flex-col md:flex-row md:items-center gap-3 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
+              <div>
+                <p className="text-sm font-medium text-gray-800">{t('massages.layoutBulkTitle')}</p>
+                <p className="text-xs text-gray-500">{t('massages.layoutBulkHelp')}</p>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <select
+                  value={bulkLayout}
+                  onChange={(e) => setBulkLayout(e.target.value as Massage['layoutTemplate'])}
+                  className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="price-list">{t('massages.layoutOptionPriceList')}</option>
+                  <option value="info-tags">{t('massages.layoutOptionInfoTags')}</option>
+                  <option value="media-focus">{t('massages.layoutOptionMediaFocus')}</option>
+                  <option value="immersive-showcase">{t('massages.layoutOptionImmersive')}</option>
+                </select>
+                <button
+                  onClick={handleApplyBulkLayout}
+                  disabled={applyingBulk || updateMassage.isPending}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {applyingBulk ? t('massages.loading') : t('massages.layoutApplyAll')}
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={handleCreate}
+              aria-label={t('aria.addMassage')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-target font-medium"
+            >
+              {t('massages.addNew')}
+            </button>
+          </div>
         </div>
 
         {/* Desktop Table View */}
@@ -133,6 +197,9 @@ export default function MassagesPage() {
                   {t('massages.type')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {t('massages.layoutTemplate')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {t('massages.flags')}
                 </th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -146,7 +213,7 @@ export default function MassagesPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {sortedMassages.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                     {t('massages.noMassages')}
                   </td>
                 </tr>
@@ -165,6 +232,17 @@ export default function MassagesPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
                         {massage.mediaType || t('massages.noMedia')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                        {massage.layoutTemplate === 'info-tags'
+                          ? t('massages.layoutOptionInfoTags')
+                          : massage.layoutTemplate === 'media-focus'
+                            ? t('massages.layoutOptionMediaFocus')
+                            : massage.layoutTemplate === 'immersive-showcase'
+                              ? t('massages.layoutOptionImmersive')
+                              : t('massages.layoutOptionPriceList')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -296,6 +374,15 @@ export default function MassagesPage() {
                 <div className="flex flex-wrap gap-2">
                   <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
                     {massage.mediaType || t('massages.noMedia')}
+                  </span>
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                    {massage.layoutTemplate === 'info-tags'
+                      ? t('massages.layoutOptionInfoTags')
+                      : massage.layoutTemplate === 'media-focus'
+                        ? t('massages.layoutOptionMediaFocus')
+                        : massage.layoutTemplate === 'immersive-showcase'
+                          ? t('massages.layoutOptionImmersive')
+                          : t('massages.layoutOptionPriceList')}
                   </span>
                   {massage.isFeatured && (
                     <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">

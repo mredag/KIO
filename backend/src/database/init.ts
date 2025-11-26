@@ -51,6 +51,21 @@ export function initializeDatabase(dbPath: string): Database.Database {
   }
   
   console.log('Database schema created successfully');
+
+  // Ensure new columns exist on existing installations
+  const massageColumns = db.prepare('PRAGMA table_info(massages)').all() as Array<{ name: string }>;
+  const hasLayoutTemplate = massageColumns.some((column) => column.name === 'layout_template');
+  if (!hasLayoutTemplate) {
+    db.prepare("ALTER TABLE massages ADD COLUMN layout_template TEXT DEFAULT 'price-list'").run();
+    console.log('Added layout_template column to massages table');
+  }
+
+  const settingsColumns = db.prepare('PRAGMA table_info(system_settings)').all() as Array<{ name: string }>;
+  const hasKioskTheme = settingsColumns.some((column) => column.name === 'kiosk_theme');
+  if (!hasKioskTheme) {
+    db.prepare("ALTER TABLE system_settings ADD COLUMN kiosk_theme TEXT DEFAULT 'classic'").run();
+    console.log('Added kiosk_theme column to system_settings table');
+  }
   
   // Seed default data
   seedDatabase(db);

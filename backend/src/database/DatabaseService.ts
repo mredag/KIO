@@ -70,8 +70,8 @@ export class DatabaseService {
         `INSERT INTO massages (
           id, name, short_description, long_description, duration,
           media_type, media_url, purpose_tags, sessions,
-          is_featured, is_campaign, sort_order, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          is_featured, is_campaign, layout_template, sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -85,6 +85,7 @@ export class DatabaseService {
         JSON.stringify(data.sessions || []),
         data.is_featured ? 1 : 0,
         data.is_campaign ? 1 : 0,
+        data.layout_template || 'price-list',
         data.sort_order || 0,
         now,
         now
@@ -141,6 +142,10 @@ export class DatabaseService {
       updates.push('is_campaign = ?');
       values.push(data.is_campaign ? 1 : 0);
     }
+    if (data.layout_template !== undefined) {
+      updates.push('layout_template = ?');
+      values.push(data.layout_template || 'price-list');
+    }
     if (data.sort_order !== undefined) {
       updates.push('sort_order = ?');
       values.push(data.sort_order);
@@ -169,6 +174,7 @@ export class DatabaseService {
       ...row,
       purpose_tags: JSON.parse(row.purpose_tags || '[]'),
       sessions: JSON.parse(row.sessions || '[]'),
+      layout_template: row.layout_template || 'price-list',
     };
   }
 
@@ -510,6 +516,10 @@ export class DatabaseService {
     if (data.google_review_description !== undefined) {
       updates.push('google_review_description = ?');
       values.push(data.google_review_description);
+    }
+    if (data.kiosk_theme !== undefined) {
+      updates.push('kiosk_theme = ?');
+      values.push(data.kiosk_theme);
     }
     if (data.sheets_sheet_id !== undefined) {
       updates.push('sheets_sheet_id = ?');

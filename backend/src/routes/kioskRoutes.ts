@@ -100,6 +100,7 @@ export function createKioskRoutes(
           slideshowTimeout: settings.slideshow_timeout,
           surveyTimeout: settings.survey_timeout,
           googleQrDisplayDuration: settings.google_qr_display_duration,
+          theme: settings.kiosk_theme || 'classic',
         },
         timestamp: new Date().toISOString(),
       };

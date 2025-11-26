@@ -9,6 +9,7 @@ interface KioskStore {
   isOffline: boolean;
   lastSync: Date | null;
   isUserViewingQR: boolean; // Flag to prevent mode override when user is viewing QR
+  theme: 'classic' | 'neo' | 'immersive';
 
   // SSE state management
   isUserActive: boolean; // True when user is interacting (survey/QR)
@@ -29,6 +30,7 @@ interface KioskStore {
   setOffline: (offline: boolean) => void;
   setLastSync: (date: Date) => void;
   setUserViewingQR: (viewing: boolean) => void;
+  setTheme: (theme: 'classic' | 'neo' | 'immersive') => void;
   setMassages: (massages: Massage[]) => void;
   setActiveSurvey: (survey: SurveyTemplate | null) => void;
   setGoogleReviewConfig: (config: GoogleReviewConfig | null) => void;
@@ -57,6 +59,7 @@ export const useKioskStore = create<KioskStore>()(
       isOffline: false,
       lastSync: null,
       isUserViewingQR: false,
+      theme: 'classic',
       isUserActive: false,
       pendingModeChange: null,
       sseConnected: false,
@@ -71,6 +74,7 @@ export const useKioskStore = create<KioskStore>()(
       setOffline: (offline) => set({ isOffline: offline }),
       setLastSync: (date) => set({ lastSync: date }),
       setUserViewingQR: (viewing) => set({ isUserViewingQR: viewing }),
+      setTheme: (theme) => set({ theme }),
       setMassages: (massages) => set({ massages }),
       setActiveSurvey: (survey) => set({ activeSurvey: survey }),
       setGoogleReviewConfig: (config) => set({ googleReviewConfig: config }),
@@ -123,6 +127,7 @@ export const useKioskStore = create<KioskStore>()(
         isOffline: state.isOffline,
         lastSync: state.lastSync,
         isUserViewingQR: state.isUserViewingQR,
+        theme: state.theme,
         massages: state.massages,
         activeSurvey: state.activeSurvey,
         googleReviewConfig: state.googleReviewConfig,

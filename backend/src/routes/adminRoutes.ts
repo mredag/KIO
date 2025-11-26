@@ -14,6 +14,7 @@ import {
 import {
   validateLogin,
   validateMassage,
+  validateMassageUpdate,
   validateKioskMode,
   validateSurveyTemplate,
   validateSettings,
@@ -456,6 +457,7 @@ export function createAdminRoutes(
         sessions: req.body.sessions,
         is_featured: req.body.isFeatured,
         is_campaign: req.body.isCampaign,
+        layout_template: req.body.layout_template || req.body.layoutTemplate,
         sort_order: req.body.sortOrder,
       };
 
@@ -483,7 +485,7 @@ export function createAdminRoutes(
    * Update an existing massage
    * Requirements: 4.2, 33.1
    */
-  router.put('/massages/:id', authMiddleware, validateIdParam, validateMassage, handleValidationErrors, async (req: Request, res: Response) => {
+  router.put('/massages/:id', authMiddleware, validateIdParam, validateMassageUpdate, handleValidationErrors, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -525,6 +527,14 @@ export function createAdminRoutes(
             res.status(400).json({ error: i18n.t('validation:sessionInvalid') });
             return;
           }
+        }
+      }
+
+      if (req.body.layout_template !== undefined) {
+        const allowedLayouts = ['price-list', 'info-tags', 'media-focus', 'immersive-showcase'];
+        if (!allowedLayouts.includes(req.body.layout_template)) {
+          res.status(400).json({ error: i18n.t('validation:outOfRange', { field: 'Düzen', min: 1, max: allowedLayouts.length }) });
+          return;
         }
       }
 
@@ -1144,6 +1154,12 @@ export function createAdminRoutes(
 
       if (req.body.google_review_description !== undefined) {
         updates.google_review_description = req.body.google_review_description;
+      }
+
+      if (req.body.kioskTheme !== undefined) {
+        updates.kiosk_theme = req.body.kioskTheme;
+      } else if (req.body.kiosk_theme !== undefined) {
+        updates.kiosk_theme = req.body.kiosk_theme;
       }
 
       // Google Sheets settings

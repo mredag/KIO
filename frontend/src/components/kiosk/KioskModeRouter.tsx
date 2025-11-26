@@ -15,7 +15,6 @@ export default function KioskModeRouter() {
   const { t } = useTranslation('kiosk');
   const mode = useKioskStore((state) => state.mode);
   const isOffline = useKioskStore((state) => state.isOffline);
-  const sseConnected = useKioskStore((state) => state.sseConnected);
   const pendingModeChange = useKioskStore((state) => state.pendingModeChange);
   const [displayMode, setDisplayMode] = useState(mode);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -120,13 +119,6 @@ export default function KioskModeRouter() {
             />
           </svg>
           Mod değişikliği bekliyor...
-        </div>
-      )}
-
-      {/* SSE connection status (dev mode) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="absolute bottom-4 right-4 z-50 bg-gray-800 text-white px-3 py-1 rounded text-xs font-mono">
-          SSE: {sseConnected ? '🟢 Connected' : '🔴 Disconnected'}
         </div>
       )}
 

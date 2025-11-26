@@ -20,6 +20,7 @@ export interface KioskState {
     slideshowTimeout: number;
     surveyTimeout: number;
     googleQrDisplayDuration: number;
+    theme?: 'classic' | 'immersive' | 'neo';
   };
 }
 
@@ -41,6 +42,7 @@ export interface Massage {
   sessions: Session[];
   isFeatured: boolean;
   isCampaign: boolean;
+  layoutTemplate: 'price-list' | 'info-tags' | 'media-focus' | 'immersive-showcase';
   sortOrder: number;
 }
 
@@ -106,6 +108,7 @@ export interface SystemSettings {
   slideshowTimeout: number;
   surveyTimeout: number;
   googleQrDisplayDuration: number;
+  kioskTheme?: 'classic' | 'immersive';
   googleReviewUrl?: string;
   googleReviewTitle?: string;
   googleReviewDescription?: string;

@@ -14,6 +14,7 @@ export interface Massage {
   sessions: Session[]; // Stored as JSON in DB
   is_featured: number; // SQLite boolean (0 or 1)
   is_campaign: number; // SQLite boolean (0 or 1)
+  layout_template: 'price-list' | 'info-tags' | 'media-focus' | 'immersive-showcase';
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ export interface MassageInput {
   sessions?: Session[];
   is_featured?: boolean;
   is_campaign?: boolean;
+  layout_template?: 'price-list' | 'info-tags' | 'media-focus' | 'immersive-showcase';
   sort_order?: number;
 }
 
@@ -105,6 +107,7 @@ export interface SystemSettings {
   slideshow_timeout: number;
   survey_timeout: number;
   google_qr_display_duration: number;
+  kiosk_theme: 'classic' | 'immersive';
   google_review_url: string | null;
   google_review_title: string | null;
   google_review_description: string | null;
@@ -119,6 +122,7 @@ export interface SystemSettingsUpdate {
   slideshow_timeout?: number;
   survey_timeout?: number;
   google_qr_display_duration?: number;
+  kiosk_theme?: 'classic' | 'immersive';
   google_review_url?: string;
   google_review_title?: string;
   google_review_description?: string;

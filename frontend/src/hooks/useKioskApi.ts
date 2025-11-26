@@ -16,9 +16,9 @@ export function useKioskState() {
   const setActiveSurveyId = useKioskStore((state) => state.setActiveSurveyId);
   const setOffline = useKioskStore((state) => state.setOffline);
   const setLastSync = useKioskStore((state) => state.setLastSync);
+  const setTheme = useKioskStore((state) => state.setTheme);
   const mode = useKioskStore((state) => state.mode);
   const isUserViewingQR = useKioskStore((state) => state.isUserViewingQR);
-  const sseConnected = useKioskStore((state) => state.sseConnected);
   const isUserActive = useKioskStore((state) => state.isUserActive);
 
   const query = useQuery({
@@ -30,12 +30,19 @@ export function useKioskState() {
         // Don't override mode if user is actively viewing QR code (user-initiated)
         // But allow admin to change mode remotely in all other cases
         if (!isUserViewingQR && !isUserActive) {
-          setMode(response.data.mode);
-        }
-        
-        setActiveSurveyId(response.data.activeSurveyId || null);
-        setOffline(false);
-        setLastSync(new Date());
+        setMode(response.data.mode);
+      }
+      
+      setActiveSurveyId(response.data.activeSurveyId || null);
+
+      // Apply kiosk theme from settings (with fallback)
+      const theme = response.data.config?.theme as 'classic' | 'immersive' | 'neo' | undefined;
+      if (theme) {
+        setTheme(theme === 'neo' ? 'immersive' : theme);
+      }
+
+      setOffline(false);
+      setLastSync(new Date());
         
         return response.data;
       } catch (error) {
@@ -92,6 +99,7 @@ export function useMassageMenu() {
             sessions,
             isFeatured: data.is_featured === 1,
             isCampaign: data.is_campaign === 1,
+            layoutTemplate: data.layout_template || 'price-list',
             sortOrder: data.sort_order || 0,
           };
         };

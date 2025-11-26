@@ -116,7 +116,8 @@ self.addEventListener('fetch', (event) => {
           if (networkResponse && networkResponse.status === 200) {
             // Cache the new translation
             caches.open(TRANSLATION_CACHE).then((cache) => {
-              cache.put(request, networkResponse.clone());
+              const clone = networkResponse.clone();
+              cache.put(request, clone);
             });
           }
           return networkResponse;

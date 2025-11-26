@@ -59,6 +59,19 @@
     "sessionPricePlaceholder": "0",
     "addSession": "Seans Ekle",
     "purposeTags": "Amaç Etiketleri",
+    "layoutTemplate": "Dijital menü düzeni",
+    "layoutTemplateHelp": "Kiosk ekranında bu masaj için hangi sunumun kullanılacağını seçin",
+    "layoutOptionPriceList": "Fiyat listesi odaklı",
+    "layoutOptionPriceListDescription": "Medya, açıklama ve fiyat kartlarıyla mevcut fiyat listesi görünümünü kullanır.",
+    "layoutOptionInfoTags": "Açıklama + etiketler",
+    "layoutOptionInfoTagsDescription": "Medya yanında isim, açıklama ve amaç etiketlerini ön plana çıkar; fiyatlar kompakt görünür.",
+    "layoutOptionMediaFocus": "Medya odaklı",
+    "layoutOptionMediaFocusDescription": "Tam ekran medya üzerinde yalnızca isim ve açıklamayı gösterir; hızlı vitrin için sade bir görünüm.",
+    "layoutOptionImmersive": "İmmersif vitrin",
+    "layoutOptionImmersiveDescription": "Tüm ekranı dolduran, cam efekti ve büyük tipografiyle etkileyici bir vitrin görünümü.",
+    "layoutBulkTitle": "Tüm masajların düzeni",
+    "layoutBulkHelp": "Seçtiğiniz düzeni listedeki tüm masajlara uygular.",
+    "layoutApplyAll": "Tümüne uygula",
     "featured": "Öne Çıkan",
     "campaign": "Kampanya",
     "sortOrder": "Sıralama",
@@ -226,6 +239,12 @@
     "googleReviewTitleHelp": "QR kodunun üzerinde gösterilen başlık",
     "googleReviewDescription": "Açıklama Metni",
     "googleReviewDescriptionHelp": "QR kodunun altında gösterilen açıklama",
+    "kioskTheme": "Kiosk teması",
+    "kioskThemeHelp": "Kiosk ekranının genel görünümünü belirleyin",
+    "kioskThemeClassic": "Klasik tema",
+    "kioskThemeClassicHelp": "Mevcut siyah arka planlı düzeni kullanır.",
+    "kioskThemeImmersive": "İmmersif tema",
+    "kioskThemeImmersiveHelp": "Geniş görseller, cam efekti ve cesur tipografiyle modern vitrin görünümü.",
     "sheetsIntegration": "Google Sheets Entegrasyonu",
     "sheetsSubtitle": "Anket yanıtlarının Google Sheets'e otomatik senkronizasyonunu yapılandırın",
     "sheetId": "Sheet ID",
@@ -342,3 +361,6 @@
     "toggleCampaign": "Kampanya durumunu değiştir"
   }
 }
+
+
+

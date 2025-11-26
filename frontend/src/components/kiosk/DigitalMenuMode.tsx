@@ -1,23 +1,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMassageMenu, useKioskState } from '../../hooks/useKioskApi';
+import { useMassageMenu, useKioskState, useGoogleReviewConfig } from '../../hooks/useKioskApi';
 import { Massage } from '../../types';
 import MassageList from './MassageList';
 import MassageDetailPanel from './MassageDetailPanel';
 import SlideshowMode from './SlideshowMode';
+import NeoDigitalMenu from './NeoDigitalMenu';
+import { useKioskStore } from '../../stores/kioskStore';
+import { useMemo } from 'react';
 
 export default function DigitalMenuMode() {
   const { t } = useTranslation('kiosk');
   const { data: massages, isLoading, isError } = useMassageMenu();
   const { data: kioskState } = useKioskState();
+  const { data: googleReviewConfig } = useGoogleReviewConfig();
+  const theme = useKioskStore((state) => state.theme);
+  const setMode = useKioskStore((state) => state.setMode);
+  const setUserViewingQR = useKioskStore((state) => state.setUserViewingQR);
   const [selectedMassage, setSelectedMassage] = useState<Massage | null>(null);
   const [isSlideshow, setIsSlideshow] = useState(false);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sort massages by sortOrder (Requirement 4.7)
-  const sortedMassages = massages && Array.isArray(massages)
-    ? [...massages].sort((a, b) => a.sortOrder - b.sortOrder)
-    : [];
+  // Sort massages by sortOrder (Requirement 4.7) with memoization to reduce recalculations
+  const sortedMassages = useMemo(
+    () => (massages && Array.isArray(massages)
+      ? [...massages].sort((a, b) => a.sortOrder - b.sortOrder)
+      : []),
+    [massages]
+  );
 
   // Auto-select first massage if none selected (using useEffect to avoid setState during render)
   useEffect(() => {
@@ -122,8 +132,12 @@ export default function DigitalMenuMode() {
     );
   }
 
+  if (theme === 'immersive') {
+    return <NeoDigitalMenu massages={sortedMassages} />;
+  }
+
   return (
-    <div className="h-full w-full flex bg-black">
+    <div className="h-full w-full flex bg-black relative">
       {/* Left column - Massage list (1/5 width) (Requirement 2.1) */}
       <MassageList
         massages={sortedMassages}
@@ -133,6 +147,50 @@ export default function DigitalMenuMode() {
 
       {/* Right panel - Massage details (4/5 width) (Requirement 2.3) */}
       <MassageDetailPanel massage={selectedMassage} />
+
+      {googleReviewConfig && (
+        <div className="absolute bottom-6 right-6 z-30 pointer-events-none">
+          <button
+            onClick={() => {
+              setUserViewingQR(true);
+              setMode('google-qr');
+            }}
+            className="pointer-events-auto group rounded-full bg-gradient-to-r from-emerald-500/90 to-cyan-500/90 hover:from-emerald-400 hover:to-cyan-400 text-white px-4 py-3 shadow-[0_10px_40px_rgba(16,185,129,0.35)] flex items-center gap-3 transition-transform duration-200 hover:scale-105"
+            aria-label={t('googleReview.openCta')}
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 border border-white/20 shadow-inner">
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </span>
+            <div className="flex flex-col items-start">
+              <span className="text-sm font-semibold leading-tight">{t('googleReview.ctaTitle')}</span>
+              <span className="text-xs text-white/80 leading-tight">{t('googleReview.ctaSubtitle')}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide">
+              {t('googleReview.ctaButton')}
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

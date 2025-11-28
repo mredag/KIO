@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
-import { useSurveyTemplates } from '../../hooks/useAdminApi';
+import { useSurveyTemplates, useDeleteSurveyTemplate } from '../../hooks/useAdminApi';
 
 export default function SurveysPage() {
   const { t } = useTranslation('admin');
   const navigate = useNavigate();
   const { data: surveys, isLoading, error } = useSurveyTemplates();
+  const deleteSurvey = useDeleteSurveyTemplate();
 
   const handleEdit = (id: string) => {
     navigate(`/admin/surveys/${id}`);
@@ -14,6 +15,16 @@ export default function SurveysPage() {
 
   const handleCreateNew = () => {
     navigate('/admin/surveys/new');
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (window.confirm(t('surveys.confirmDelete', { name }) || `"${name}" anketini silmek istediğinizden emin misiniz?`)) {
+      try {
+        await deleteSurvey.mutateAsync(id);
+      } catch (error: any) {
+        alert(error.response?.data?.error || t('surveys.deleteError') || 'Anket silinemedi');
+      }
+    }
   };
 
   if (isLoading) {
@@ -149,6 +160,13 @@ export default function SurveysPage() {
                         >
                           {t('surveys.edit')}
                         </button>
+                        <button
+                          onClick={() => handleDelete(survey.id, survey.name)}
+                          className="text-red-600 hover:text-red-900 touch-target"
+                          disabled={deleteSurvey.isPending}
+                        >
+                          {t('surveys.delete')}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -197,6 +215,13 @@ export default function SurveysPage() {
                     className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-target font-medium"
                   >
                     {t('surveys.editTemplate')}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(survey.id, survey.name)}
+                    className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors touch-target font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={deleteSurvey.isPending}
+                  >
+                    {deleteSurvey.isPending ? t('surveys.deleting') || 'Siliniyor...' : t('surveys.delete')}
                   </button>
                 </div>
               </div>

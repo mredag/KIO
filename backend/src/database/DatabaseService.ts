@@ -275,9 +275,13 @@ export class DatabaseService {
   }
 
   /**
-   * Delete a survey template
+   * Delete a survey template and all its responses
    */
   deleteSurvey(id: string): void {
+    // First delete all responses for this survey (foreign key constraint)
+    this.db.prepare('DELETE FROM survey_responses WHERE survey_id = ?').run(id);
+    
+    // Then delete the survey template
     this.db.prepare('DELETE FROM survey_templates WHERE id = ?').run(id);
   }
 

@@ -96,12 +96,15 @@ export const corsOptions = {
       return;
     }
     
-    // In production, only allow configured frontend URL
-    const allowedOrigins = [
-      process.env.FRONTEND_URL || 'http://localhost:3000',
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-    ];
+    // In production, allow same-origin requests (frontend served from same server)
+    if (process.env.NODE_ENV === 'production') {
+      // Allow any origin that matches the backend port (same-origin)
+      const backendPort = process.env.PORT || '3001';
+      if (origin.includes(`:${backendPort}`)) {
+        callback(null, true);
+        return;
+      }
+    }
     
     // In development, allow localhost with any port
     if (process.env.NODE_ENV !== 'production') {
@@ -110,6 +113,13 @@ export const corsOptions = {
         return;
       }
     }
+    
+    // Fallback allowed origins
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ].filter(Boolean);
     
     if (allowedOrigins.includes(origin)) {
       callback(null, true);

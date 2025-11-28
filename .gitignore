@@ -49,8 +49,9 @@ backups/
 # PM2
 .pm2/
 
-# Database export/import temp files
-*-import.sql
-*-export.json
-*.cjs
-massages-export.json
+# Database export/import temp files (in root only)
+/*-import.sql
+/*-export.json
+/massages-export.json
+/settings-import.sql
+/surveys-import.sql

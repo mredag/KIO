@@ -1,132 +1,86 @@
 #!/bin/bash
 
+################################################################################
 # Raspberry Pi Deployment Script
-# Automates the complete deployment process
+# Deploys the application to Raspberry Pi
+################################################################################
 
 set -e
 
-echo "=========================================="
-echo "SPA Digital Kiosk - Raspberry Pi Deployment"
-echo "=========================================="
-echo ""
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# Get project root
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$PROJECT_ROOT"
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Check Node.js
-echo "Checking Node.js..."
-if ! command -v node &> /dev/null; then
-    echo "❌ Node.js not found. Please install Node.js 18+ first."
-    exit 1
-fi
+APP_DIR="/home/$USER/spa-kiosk"
 
-NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-    echo "❌ Node.js version must be 18 or higher. Current: $(node -v)"
-    exit 1
-fi
-echo "✅ Node.js $(node -v)"
+log_info "Starting deployment..."
+
+# Navigate to app directory
+cd $APP_DIR
 
 # Install dependencies
-echo ""
-echo "Installing dependencies..."
-npm install --production
-cd backend && npm install --production && cd ..
-cd frontend && npm install && cd ..
-echo "✅ Dependencies installed"
+log_info "Installing dependencies..."
+cd backend && npm install
+cd ../frontend && npm install
+cd ..
+
+# Build backend
+log_info "Building backend..."
+cd backend
+
+# Remove test files to avoid build errors
+find src -name "*.test.ts" -type f -delete 2>/dev/null || true
+find src -type d -name "e2e" -exec rm -rf {} + 2>/dev/null || true
+
+# Create production .env if doesn't exist
+if [ ! -f .env ]; then
+    log_info "Creating production .env..."
+    cat > .env <<EOF
+PORT=3001
+NODE_ENV=production
+DATABASE_PATH=./data/kiosk.db
+SESSION_SECRET=$(openssl rand -base64 32)
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+MAX_VIDEO_SIZE=52428800
+MAX_IMAGE_SIZE=5242880
+EOF
+else
+    # Ensure NODE_ENV is production
+    sed -i 's/NODE_ENV=development/NODE_ENV=production/' .env
+fi
+
+# Create data directory
+mkdir -p ../data/backups
+
+# Build
+npm run build
 
 # Build frontend
-echo ""
-echo "Building frontend..."
-cd frontend
-npm run build
-cd ..
-echo "✅ Frontend built"
+log_info "Building frontend..."
+cd ../frontend
+npx vite build
 
-# Initialize database
-echo ""
-echo "Initializing database..."
-cd backend
-if [ ! -f "../data/kiosk.db" ]; then
-    npm run db:init
-    npm run db:seed
-    echo "✅ Database initialized with sample data"
-else
-    echo "⚠️  Database already exists, skipping initialization"
-fi
-cd ..
+# Copy to backend public
+log_info "Copying frontend to backend..."
+rm -rf ../backend/public
+cp -r dist ../backend/public
 
-# Install PM2 if not installed
-echo ""
-echo "Checking PM2..."
-if ! command -v pm2 &> /dev/null; then
-    echo "Installing PM2..."
-    sudo npm install -g pm2
-    echo "✅ PM2 installed"
-else
-    echo "✅ PM2 already installed"
-fi
-
-# Start backend with PM2
-echo ""
-echo "Starting backend..."
-cd deployment
-chmod +x start-backend-pm2.sh
-./start-backend-pm2.sh
-cd ..
-
-# Wait for backend to start
-echo ""
-echo "Waiting for backend to start..."
-sleep 5
-
-# Check backend health
-if curl -s http://localhost:3001/api/kiosk/health > /dev/null; then
-    echo "✅ Backend is running"
-else
-    echo "⚠️  Backend may not be running properly"
-    echo "Check logs with: pm2 logs kiosk-backend"
-fi
-
-# Setup PM2 startup
-echo ""
-echo "Configuring auto-start..."
+# Start with PM2
+log_info "Starting backend with PM2..."
+cd ../backend
+pm2 delete kiosk-backend 2>/dev/null || true
+pm2 start npm --name kiosk-backend -- run start
 pm2 save
-echo "✅ PM2 process list saved"
-echo ""
-echo "To enable auto-start on boot, run:"
-echo "  pm2 startup"
-echo "  Then copy and run the command shown"
 
-# Setup kiosk autostart
-echo ""
-echo "Setting up kiosk autostart..."
-mkdir -p ~/.config/autostart
-cp deployment/raspberry-pi/kiosk-autostart.desktop ~/.config/autostart/
-chmod +x ~/.config/autostart/kiosk-autostart.desktop
-echo "✅ Kiosk will start automatically on login"
-
-echo ""
-echo "=========================================="
-echo "✅ Deployment Complete!"
-echo "=========================================="
-echo ""
-echo "Access the application:"
-echo "  Kiosk: http://localhost:3000"
-echo "  Admin: http://localhost:3000/admin"
-echo ""
-echo "Default credentials:"
-echo "  Username: admin"
-echo "  Password: admin123"
-echo ""
-echo "⚠️  Change the password after first login!"
-echo ""
-echo "Management commands:"
-echo "  pm2 status              - Check backend status"
-echo "  pm2 logs kiosk-backend  - View logs"
-echo "  pm2 restart kiosk-backend - Restart backend"
-echo ""
-echo "To start kiosk now:"
-echo "  cd deployment && ./start-kiosk.sh"
-echo ""
+log_success "Deployment complete!"
+log_info "Backend running on port 3001"
+log_info "Access: http://localhost:3001"

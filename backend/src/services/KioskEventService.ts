@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import { randomUUID } from 'crypto';
 
 /**
  * Kiosk Event Types

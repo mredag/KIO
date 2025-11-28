@@ -23,6 +23,12 @@ APP_DIR="/home/$USER/spa-kiosk"
 
 log_info "Starting deployment..."
 
+# Create backup before deployment
+if [ -f "$APP_DIR/backend/data/kiosk.db" ]; then
+    log_info "Creating pre-deployment backup..."
+    bash "$APP_DIR/deployment/raspberry-pi/backup-before-deploy.sh" || log_warning "Backup failed, continuing anyway..."
+fi
+
 # Navigate to app directory
 cd $APP_DIR
 

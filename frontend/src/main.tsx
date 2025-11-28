@@ -19,22 +19,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 
 // Register service worker for offline support and translation caching
-serviceWorkerRegistration.register({
-  onSuccess: () => {
-    console.log('[App] Service worker registered successfully');
-  },
-  onUpdate: (registration) => {
-    console.log('[App] New content available, please refresh');
-    // Optionally show a notification to the user
-    if (confirm('Yeni içerik mevcut. Sayfayı yenilemek ister misiniz?')) {
-      registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
-      window.location.reload();
-    }
-  },
-  onOffline: () => {
-    console.log('[App] App is now offline');
-  },
-  onOnline: () => {
-    console.log('[App] App is back online');
-  },
-});
+// Only register if service worker is supported
+if ('serviceWorker' in navigator) {
+  serviceWorkerRegistration.register({
+    onSuccess: () => {
+      console.log('[App] Service worker registered successfully');
+    },
+    onUpdate: (registration) => {
+      console.log('[App] New content available, please refresh');
+      // Optionally show a notification to the user
+      if (confirm('Yeni içerik mevcut. Sayfayı yenilemek ister misiniz?')) {
+        registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+        window.location.reload();
+      }
+    },
+    onOffline: () => {
+      console.log('[App] App is now offline');
+    },
+    onOnline: () => {
+      console.log('[App] App is back online');
+    },
+  });
+}

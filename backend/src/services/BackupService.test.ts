@@ -74,10 +74,20 @@ describe('BackupService', () => {
       expect(backupData.data).toHaveProperty('survey_responses');
       expect(backupData.data).toHaveProperty('kiosk_state');
       expect(backupData.data).toHaveProperty('system_settings');
+      expect(backupData.data).toHaveProperty('coupon_tokens');
+      expect(backupData.data).toHaveProperty('coupon_wallets');
+      expect(backupData.data).toHaveProperty('coupon_redemptions');
+      expect(backupData.data).toHaveProperty('coupon_events');
+      expect(backupData.data).toHaveProperty('coupon_rate_limits');
 
       // Verify data types
       expect(Array.isArray(backupData.data.massages)).toBe(true);
       expect(Array.isArray(backupData.data.survey_templates)).toBe(true);
+      expect(Array.isArray(backupData.data.coupon_tokens)).toBe(true);
+      expect(Array.isArray(backupData.data.coupon_wallets)).toBe(true);
+      expect(Array.isArray(backupData.data.coupon_redemptions)).toBe(true);
+      expect(Array.isArray(backupData.data.coupon_events)).toBe(true);
+      expect(Array.isArray(backupData.data.coupon_rate_limits)).toBe(true);
       expect(Array.isArray(backupData.data.survey_responses)).toBe(true);
       expect(typeof backupData.data.kiosk_state).toBe('object');
       expect(typeof backupData.data.system_settings).toBe('object');

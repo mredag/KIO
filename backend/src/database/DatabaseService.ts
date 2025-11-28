@@ -631,6 +631,403 @@ export class DatabaseService {
     };
   }
 
+  // ==================== COUPON TOKEN OPERATIONS ====================
+
+  /**
+   * Create a coupon token
+   */
+  createCouponToken(data: {
+    token: string;
+    issuedFor?: string;
+    kioskId?: string;
+    expiresAt: Date;
+  }): void {
+    const now = new Date().toISOString();
+    
+    this.db
+      .prepare(
+        `INSERT INTO coupon_tokens (
+          token, status, issued_for, kiosk_id, expires_at, created_at, updated_at
+        ) VALUES (?, 'issued', ?, ?, ?, ?, ?)`
+      )
+      .run(
+        data.token,
+        data.issuedFor || null,
+        data.kioskId || null,
+        data.expiresAt.toISOString(),
+        now,
+        now
+      );
+  }
+
+  /**
+   * Get a coupon token by token string
+   */
+  getCouponToken(token: string): any | null {
+    return this.db
+      .prepare('SELECT * FROM coupon_tokens WHERE token = ?')
+      .get(token) as any;
+  }
+
+  /**
+   * Update coupon token status
+   */
+  updateCouponToken(token: string, data: {
+    status?: 'issued' | 'used' | 'expired';
+    phone?: string;
+    usedAt?: Date;
+  }): void {
+    const now = new Date().toISOString();
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (data.status !== undefined) {
+      updates.push('status = ?');
+      values.push(data.status);
+    }
+    if (data.phone !== undefined) {
+      updates.push('phone = ?');
+      values.push(data.phone);
+    }
+    if (data.usedAt !== undefined) {
+      updates.push('used_at = ?');
+      values.push(data.usedAt.toISOString());
+    }
+
+    updates.push('updated_at = ?');
+    values.push(now);
+    values.push(token);
+
+    this.db
+      .prepare(`UPDATE coupon_tokens SET ${updates.join(', ')} WHERE token = ?`)
+      .run(...values);
+  }
+
+  // ==================== COUPON WALLET OPERATIONS ====================
+
+  /**
+   * Get or create a coupon wallet
+   */
+  getOrCreateWallet(phone: string): any {
+    let wallet = this.db
+      .prepare('SELECT * FROM coupon_wallets WHERE phone = ?')
+      .get(phone) as any;
+
+    if (!wallet) {
+      const now = new Date().toISOString();
+      this.db
+        .prepare(
+          `INSERT INTO coupon_wallets (
+            phone, coupon_count, total_earned, total_redeemed, 
+            opted_in_marketing, updated_at
+          ) VALUES (?, 0, 0, 0, 0, ?)`
+        )
+        .run(phone, now);
+      
+      wallet = this.db
+        .prepare('SELECT * FROM coupon_wallets WHERE phone = ?')
+        .get(phone) as any;
+    }
+
+    return wallet;
+  }
+
+  /**
+   * Update coupon wallet
+   */
+  updateWallet(phone: string, data: {
+    couponCount?: number;
+    totalEarned?: number;
+    totalRedeemed?: number;
+    optedInMarketing?: boolean;
+    lastMessageAt?: Date;
+  }): void {
+    const now = new Date().toISOString();
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (data.couponCount !== undefined) {
+      updates.push('coupon_count = ?');
+      values.push(data.couponCount);
+    }
+    if (data.totalEarned !== undefined) {
+      updates.push('total_earned = ?');
+      values.push(data.totalEarned);
+    }
+    if (data.totalRedeemed !== undefined) {
+      updates.push('total_redeemed = ?');
+      values.push(data.totalRedeemed);
+    }
+    if (data.optedInMarketing !== undefined) {
+      updates.push('opted_in_marketing = ?');
+      values.push(data.optedInMarketing ? 1 : 0);
+    }
+    if (data.lastMessageAt !== undefined) {
+      updates.push('last_message_at = ?');
+      values.push(data.lastMessageAt.toISOString());
+    }
+
+    updates.push('updated_at = ?');
+    values.push(now);
+    values.push(phone);
+
+    this.db
+      .prepare(`UPDATE coupon_wallets SET ${updates.join(', ')} WHERE phone = ?`)
+      .run(...values);
+  }
+
+  // ==================== COUPON REDEMPTION OPERATIONS ====================
+
+  /**
+   * Create a coupon redemption
+   */
+  createRedemption(data: {
+    id: string;
+    phone: string;
+    couponsUsed: number;
+  }): void {
+    const now = new Date().toISOString();
+    
+    this.db
+      .prepare(
+        `INSERT INTO coupon_redemptions (
+          id, phone, coupons_used, status, created_at
+        ) VALUES (?, ?, ?, 'pending', ?)`
+      )
+      .run(data.id, data.phone, data.couponsUsed, now);
+  }
+
+  /**
+   * Get redemption by ID
+   */
+  getRedemption(id: string): any | null {
+    return this.db
+      .prepare('SELECT * FROM coupon_redemptions WHERE id = ?')
+      .get(id) as any;
+  }
+
+  /**
+   * Get pending redemption by phone
+   */
+  getPendingRedemption(phone: string): any | null {
+    return this.db
+      .prepare("SELECT * FROM coupon_redemptions WHERE phone = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1")
+      .get(phone) as any;
+  }
+
+  /**
+   * Update redemption status
+   */
+  updateRedemption(id: string, data: {
+    status?: 'pending' | 'completed' | 'rejected';
+    note?: string;
+    completedAt?: Date;
+    rejectedAt?: Date;
+    notifiedAt?: Date;
+  }): void {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (data.status !== undefined) {
+      updates.push('status = ?');
+      values.push(data.status);
+    }
+    if (data.note !== undefined) {
+      updates.push('note = ?');
+      values.push(data.note);
+    }
+    if (data.completedAt !== undefined) {
+      updates.push('completed_at = ?');
+      values.push(data.completedAt.toISOString());
+    }
+    if (data.rejectedAt !== undefined) {
+      updates.push('rejected_at = ?');
+      values.push(data.rejectedAt.toISOString());
+    }
+    if (data.notifiedAt !== undefined) {
+      updates.push('notified_at = ?');
+      values.push(data.notifiedAt.toISOString());
+    }
+
+    values.push(id);
+
+    this.db
+      .prepare(`UPDATE coupon_redemptions SET ${updates.join(', ')} WHERE id = ?`)
+      .run(...values);
+  }
+
+  /**
+   * Get redemptions with optional filters
+   */
+  getRedemptions(filters?: {
+    status?: 'pending' | 'completed' | 'rejected';
+    limit?: number;
+    offset?: number;
+  }): any[] {
+    let query = 'SELECT * FROM coupon_redemptions WHERE 1=1';
+    const params: any[] = [];
+
+    if (filters?.status) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (filters?.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    if (filters?.offset) {
+      query += ' OFFSET ?';
+      params.push(filters.offset);
+    }
+
+    return this.db.prepare(query).all(...params) as any[];
+  }
+
+  /**
+   * Get recent tokens (last N)
+   */
+  getRecentTokens(limit: number = 10): any[] {
+    const query = `
+      SELECT token, status, created_at, expires_at, used_at
+      FROM coupon_tokens
+      ORDER BY created_at DESC
+      LIMIT ?
+    `;
+    return this.db.prepare(query).all(limit) as any[];
+  }
+
+  // ==================== COUPON EVENT OPERATIONS ====================
+
+  /**
+   * Create a coupon event
+   */
+  createCouponEvent(data: {
+    phone?: string;
+    event: string;
+    token?: string;
+    details?: Record<string, any>;
+  }): void {
+    const now = new Date().toISOString();
+    
+    this.db
+      .prepare(
+        `INSERT INTO coupon_events (phone, event, token, details, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(
+        data.phone || null,
+        data.event,
+        data.token || null,
+        data.details ? JSON.stringify(data.details) : null,
+        now
+      );
+  }
+
+  /**
+   * Get events by phone
+   */
+  getCouponEventsByPhone(phone: string, limit?: number): any[] {
+    let query = 'SELECT * FROM coupon_events WHERE phone = ? ORDER BY created_at DESC';
+    
+    if (limit) {
+      query += ' LIMIT ?';
+      return this.db.prepare(query).all(phone, limit) as any[];
+    }
+    
+    return this.db.prepare(query).all(phone) as any[];
+  }
+
+  // ==================== RATE LIMIT OPERATIONS ====================
+
+  /**
+   * Get rate limit counter
+   */
+  getRateLimit(phone: string, endpoint: string): any | null {
+    return this.db
+      .prepare('SELECT * FROM coupon_rate_limits WHERE phone = ? AND endpoint = ?')
+      .get(phone, endpoint) as any;
+  }
+
+  /**
+   * Increment or create rate limit counter
+   */
+  incrementRateLimit(phone: string, endpoint: string, resetAt: Date): void {
+    const existing = this.getRateLimit(phone, endpoint);
+    
+    if (existing) {
+      this.db
+        .prepare('UPDATE coupon_rate_limits SET count = count + 1 WHERE phone = ? AND endpoint = ?')
+        .run(phone, endpoint);
+    } else {
+      this.db
+        .prepare(
+          `INSERT INTO coupon_rate_limits (phone, endpoint, count, reset_at)
+           VALUES (?, ?, 1, ?)`
+        )
+        .run(phone, endpoint, resetAt.toISOString());
+    }
+  }
+
+  /**
+   * Delete expired rate limit counters
+   */
+  deleteExpiredRateLimits(): number {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare('DELETE FROM coupon_rate_limits WHERE reset_at <= ?')
+      .run(now);
+    return result.changes;
+  }
+
+  /**
+   * Get all coupon tokens for backup
+   */
+  getAllCouponTokens(): any[] {
+    return this.db
+      .prepare('SELECT * FROM coupon_tokens ORDER BY created_at DESC')
+      .all() as any[];
+  }
+
+  /**
+   * Get all coupon wallets for backup
+   */
+  getAllCouponWallets(): any[] {
+    return this.db
+      .prepare('SELECT * FROM coupon_wallets ORDER BY updated_at DESC')
+      .all() as any[];
+  }
+
+  /**
+   * Get all coupon redemptions for backup
+   */
+  getAllCouponRedemptions(): any[] {
+    return this.db
+      .prepare('SELECT * FROM coupon_redemptions ORDER BY created_at DESC')
+      .all() as any[];
+  }
+
+  /**
+   * Get all coupon events for backup
+   */
+  getAllCouponEvents(): any[] {
+    return this.db
+      .prepare('SELECT * FROM coupon_events ORDER BY created_at DESC')
+      .all() as any[];
+  }
+
+  /**
+   * Get all coupon rate limits for backup
+   */
+  getAllCouponRateLimits(): any[] {
+    return this.db
+      .prepare('SELECT * FROM coupon_rate_limits ORDER BY reset_at DESC')
+      .all() as any[];
+  }
+
   /**
    * Close the database connection
    */

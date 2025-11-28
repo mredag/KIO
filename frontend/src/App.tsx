@@ -1,131 +1,158 @@
+import { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import KioskPage from './pages/KioskPage';
-import LoginPage from './pages/admin/LoginPage';
-import DashboardPage from './pages/admin/DashboardPage';
-import MassagesPage from './pages/admin/MassagesPage';
-import MassageFormPage from './pages/admin/MassageFormPage';
-import KioskControlPage from './pages/admin/KioskControlPage';
-import SurveysPage from './pages/admin/SurveysPage';
-import SurveyEditorPage from './pages/admin/SurveyEditorPage';
-import SurveyAnalyticsPage from './pages/admin/SurveyAnalyticsPage';
-import SurveyResponsesPage from './pages/admin/SurveyResponsesPage';
-import SettingsPage from './pages/admin/SettingsPage';
-import BackupPage from './pages/admin/BackupPage';
-import SystemLogsPage from './pages/admin/SystemLogsPage';
+import * as LazyRoutes from './routes/lazyRoutes';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuthStore } from './stores/authStore';
+
+// Loading fallback component
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 dark:border-sky-400"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <Routes>
-        {/* Kiosk route */}
-        <Route path="/kiosk" element={<KioskPage />} />
-        
-        {/* Admin routes */}
-        <Route path="/admin/login" element={<LoginPageWrapper />} />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/massages"
-          element={
-            <ProtectedRoute>
-              <MassagesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/massages/new"
-          element={
-            <ProtectedRoute>
-              <MassageFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/massages/:id/edit"
-          element={
-            <ProtectedRoute>
-              <MassageFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/kiosk-control"
-          element={
-            <ProtectedRoute>
-              <KioskControlPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/surveys"
-          element={
-            <ProtectedRoute>
-              <SurveysPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/surveys/:id"
-          element={
-            <ProtectedRoute>
-              <SurveyEditorPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/surveys/:id/analytics"
-          element={
-            <ProtectedRoute>
-              <SurveyAnalyticsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/survey-responses"
-          element={
-            <ProtectedRoute>
-              <SurveyResponsesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/backup"
-          element={
-            <ProtectedRoute>
-              <BackupPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/logs"
-          element={
-            <ProtectedRoute>
-              <SystemLogsPage />
-            </ProtectedRoute>
-          }
-        />
-        
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/kiosk" replace />} />
-        </Routes>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Kiosk route */}
+            <Route path="/kiosk" element={<LazyRoutes.KioskPage />} />
+
+            {/* Admin routes */}
+            <Route path="/admin/login" element={<LoginPageWrapper />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/massages"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MassagesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/massages/new"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MassageFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/massages/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MassageFormPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/kiosk-control"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.KioskControlPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/surveys"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SurveysPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/surveys/:id"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SurveyEditorPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/surveys/:id/analytics"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SurveyAnalyticsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/survey-responses"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SurveyResponsesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/coupons/issue"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.CouponIssuePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/coupons/redemptions"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.CouponRedemptionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/coupons/wallet"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.CouponWalletLookupPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/settings"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/backup"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.BackupPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/logs"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SystemLogsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Default redirect */}
+            <Route path="/" element={<Navigate to="/kiosk" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </ErrorBoundary>
   );
@@ -134,12 +161,12 @@ function App() {
 // Wrapper to redirect authenticated users away from login page
 function LoginPageWrapper() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  
+
   if (isAuthenticated) {
     return <Navigate to="/admin" replace />;
   }
-  
-  return <LoginPage />;
+
+  return <LazyRoutes.LoginPage />;
 }
 
 export default App;

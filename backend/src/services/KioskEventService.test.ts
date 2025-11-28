@@ -146,12 +146,13 @@ describe('KioskEventService', () => {
 
       const call = (mockResponse.write as any).mock.calls[0][0];
       
-      // Should be SSE format: data: {...}\n\n
-      expect(call).toMatch(/^data: /);
+      // Should be SSE format: event: ...\ndata: {...}\n\n
+      expect(call).toMatch(/^event: /);
       expect(call).toMatch(/\n\n$/);
 
-      // Parse the JSON
-      const jsonStr = call.replace('data: ', '').replace('\n\n', '');
+      // Parse the JSON (extract data line)
+      const dataLine = call.split('\n').find((line: string) => line.startsWith('data: '));
+      const jsonStr = dataLine.replace('data: ', '');
       const event = JSON.parse(jsonStr);
 
       expect(event).toHaveProperty('type', 'mode-change');

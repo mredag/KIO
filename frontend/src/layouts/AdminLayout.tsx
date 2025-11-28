@@ -1,153 +1,121 @@
-import { ReactNode, useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { ReactNode, useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { useLogout } from '../hooks/useAdminApi';
+import { ToastProvider } from '../contexts/ToastContext';
+import ToastContainer from '../components/ui/Toast';
+import Sidebar from '../components/admin/Sidebar';
+import Header from '../components/admin/Header';
+import SearchModal from '../components/admin/SearchModal';
+import { skipLinkClasses } from '../lib/accessibility';
+import { prefetchLikelyNextPages } from '../lib/routePrefetch';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
-  const { t } = useTranslation('admin');
-  const { isAuthenticated, user } = useAuthStore();
-  const navigate = useNavigate();
+  const { isAuthenticated } = useAuthStore();
   const location = useLocation();
-  const logout = useLogout();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const mainContentRef = useRef<HTMLElement>(null);
 
-  const handleLogout = async () => {
-    try {
-      await logout.mutateAsync();
-      navigate('/admin/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      // Even if API call fails, clear local state and redirect
-      navigate('/admin/login');
-    }
-  };
+  // Ctrl+K keyboard shortcut for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchModalOpen(true);
+      }
+    };
 
-  const closeMobileMenu = () => {
-    setMobileMenuOpen(false);
-  };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-  const isActivePath = (path: string) => {
-    if (path === '/admin') {
-      return location.pathname === '/admin';
-    }
-    return location.pathname.startsWith(path);
-  };
+  // Prefetch likely next pages when route changes
+  useEffect(() => {
+    prefetchLikelyNextPages(location.pathname);
+  }, [location.pathname]);
 
   if (!isAuthenticated) {
     return null;
   }
 
-  const navLinks = [
-    { to: '/admin', label: t('navigation.dashboard') },
-    { to: '/admin/massages', label: t('navigation.massages') },
-    { to: '/admin/kiosk-control', label: t('navigation.kioskControl') },
-    { to: '/admin/surveys', label: t('navigation.surveys') },
-    { to: '/admin/survey-responses', label: t('navigation.responses') },
-    { to: '/admin/settings', label: t('navigation.settings') },
-    { to: '/admin/backup', label: t('navigation.backup') },
-    { to: '/admin/logs', label: t('navigation.logs') },
-  ];
+  const handleSkipToContent = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    mainContentRef.current?.focus();
+    mainContentRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleToggleCollapse = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  const handleMobileMenuToggle = () => {
+    setMobileSidebarOpen(!mobileSidebarOpen);
+  };
+
+  const handleCloseMobile = () => {
+    setMobileSidebarOpen(false);
+  };
+
+  const handleSearchClick = () => {
+    setSearchModalOpen(true);
+  };
+
+  const handleSearchClose = () => {
+    setSearchModalOpen(false);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 touch-target"
-                aria-label="Toggle menu"
-              >
-                {mobileMenuOpen ? (
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
-              </button>
-              <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
-                SPA Kiosk Admin
-              </h1>
+    <ToastProvider>
+      {/* Skip to content link for keyboard navigation */}
+      <a
+        href="#main-content"
+        onClick={handleSkipToContent}
+        className={skipLinkClasses}
+      >
+        Skip to main content
+      </a>
+
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex">
+        {/* Sidebar */}
+        <Sidebar
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={handleToggleCollapse}
+          isMobileOpen={mobileSidebarOpen}
+          onCloseMobile={handleCloseMobile}
+        />
+
+        {/* Main content area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header */}
+          <Header
+            onMobileMenuToggle={handleMobileMenuToggle}
+            onSearchClick={handleSearchClick}
+          />
+
+          {/* Main content */}
+          <main
+            id="main-content"
+            ref={mainContentRef}
+            tabIndex={-1}
+            className="flex-1 overflow-auto focus:outline-none"
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+              {children}
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <span className="text-xs sm:text-sm text-gray-600 hidden sm:inline">
-                {user?.username}
-              </span>
-              <button
-                onClick={handleLogout}
-                disabled={logout.isPending}
-                aria-label={t('aria.logout')}
-                className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors touch-target disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {logout.isPending ? t('navigation.logout') + '...' : t('navigation.logout')}
-              </button>
-            </div>
-          </div>
+          </main>
         </div>
-      </header>
 
-      {/* Desktop Navigation */}
-      <nav className="hidden md:block bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8 overflow-x-auto">
-            {navLinks.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                aria-label={t('aria.navigateTo', { page: link.label })}
-                aria-current={isActivePath(link.to) ? 'page' : undefined}
-                className={`px-3 py-4 text-sm font-medium border-b-2 whitespace-nowrap touch-target transition-colors ${
-                  isActivePath(link.to)
-                    ? 'text-primary-600 border-primary-500'
-                    : 'text-gray-700 hover:text-gray-900 border-transparent hover:border-primary-500'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </nav>
+        {/* Toast notifications */}
+        <ToastContainer />
 
-      {/* Mobile Navigation Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-gray-200 shadow-lg">
-          <div className="px-4 py-2 space-y-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                onClick={closeMobileMenu}
-                aria-label={t('aria.navigateTo', { page: link.label })}
-                aria-current={isActivePath(link.to) ? 'page' : undefined}
-                className={`block px-3 py-3 rounded-md text-base font-medium touch-target transition-colors ${
-                  isActivePath(link.to)
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {children}
-      </main>
-    </div>
+        {/* Search modal */}
+        <SearchModal isOpen={searchModalOpen} onClose={handleSearchClose} />
+      </div>
+    </ToastProvider>
   );
 }

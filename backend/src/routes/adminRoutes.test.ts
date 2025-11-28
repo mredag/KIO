@@ -203,7 +203,7 @@ describe('Admin Routes', () => {
         .send({ name: 'Test' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.error).toBe('Doğrulama başarısız');
     });
 
     it('should validate sessions array', async () => {
@@ -221,7 +221,8 @@ describe('Admin Routes', () => {
         });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation failed');
+      // Accept both English and Turkish error messages
+      expect(response.body.error).toMatch(/Validation failed|Doğrulama başarısız/);
     });
   });
 
@@ -251,7 +252,7 @@ describe('Admin Routes', () => {
         .send({ mode: 'invalid-mode' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.error).toBe('Doğrulama başarısız');
     });
 
     it('should require active_survey_id for survey mode', async () => {
@@ -265,7 +266,7 @@ describe('Admin Routes', () => {
         .send({ mode: 'survey' });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('survey template');
+      expect(response.body.error).toContain('anket');
     });
   });
 
@@ -326,7 +327,7 @@ describe('Admin Routes', () => {
         .send({ slideshow_timeout: 400 });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('between 5 and 300');
+      expect(response.body.error).toContain('5-300');
     });
   });
 

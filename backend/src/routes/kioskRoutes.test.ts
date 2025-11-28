@@ -155,7 +155,7 @@ describe('Kiosk Routes', () => {
       const response = await request(app).get('/api/kiosk/survey/non-existent-id');
 
       expect(response.status).toBe(404);
-      expect(response.body).toHaveProperty('error', 'Survey not found');
+      expect(response.body).toHaveProperty('error', 'Anket bulunamadı');
     });
 
     it('should respond within 1 second', async () => {
@@ -200,7 +200,7 @@ describe('Kiosk Routes', () => {
         });
 
       expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error', 'Validation failed');
+      expect(response.body).toHaveProperty('error', 'Doğrulama başarısız');
     });
 
     it('should return 400 if answers are missing', async () => {
@@ -211,7 +211,7 @@ describe('Kiosk Routes', () => {
         });
 
       expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error', 'Validation failed');
+      expect(response.body).toHaveProperty('error', 'Doğrulama başarısız');
     });
 
     it('should return 404 if survey does not exist', async () => {
@@ -223,7 +223,7 @@ describe('Kiosk Routes', () => {
         });
 
       expect(response.status).toBe(404);
-      expect(response.body).toHaveProperty('error', 'Survey not found');
+      expect(response.body).toHaveProperty('error', 'Anket bulunamadı');
     });
 
     it('should store response in database with synced=0', async () => {

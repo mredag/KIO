@@ -47,5 +47,18 @@
   "connectionFailed": "Google Sheets'e bağlanılamadı. Kimlik bilgilerini ve erişim izinlerini kontrol edin",
   "testFailed": "Bağlantı testi başarısız oldu",
   "submitFailed": "Gönderim başarısız oldu",
-  "googleReviewNotConfigured": "Google inceleme URL'si yapılandırılmamış"
+  "googleReviewNotConfigured": "Google inceleme URL'si yapılandırılmamış",
+  "missingApiKey": "API anahtarı eksik",
+  "invalidAuthFormat": "Geçersiz yetkilendirme formatı. Beklenen: Bearer <token>",
+  "invalidApiKey": "Geçersiz API anahtarı",
+  "serverError": "Sunucu hatası",
+  "invalidToken": "Bu kupon geçersiz veya kullanılmış",
+  "expiredToken": "Bu kuponun süresi dolmuş",
+  "insufficientCoupons": "Yeterli kupon yok",
+  "couponWalletNotFound": "Kupon cüzdanı bulunamadı",
+  "couponRedemptionNotFound": "Kupon kullanımı bulunamadı",
+  "rejectionNoteRequired": "Reddetme sebebi gereklidir",
+  "phoneRequired": "Telefon numarası gereklidir",
+  "tokenRequired": "Token gereklidir",
+  "invalidPhoneFormat": "Geçersiz telefon numarası formatı"
 }

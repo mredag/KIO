@@ -6,15 +6,18 @@ import './index.css';
 import { queryClient, persister } from './lib/queryClient';
 import './i18n/config'; // Initialize i18n
 import * as serviceWorkerRegistration from './lib/serviceWorkerRegistration';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{ persister }}
-    >
-      <App />
-    </PersistQueryClientProvider>
+    <ThemeProvider>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister }}
+      >
+        <App />
+      </PersistQueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );
 

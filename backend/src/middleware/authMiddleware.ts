@@ -15,7 +15,7 @@ declare module 'express-session' {
 /**
  * Authentication middleware to protect admin routes
  * Verifies that user has valid session
- * Requirements: 12.4
+ * Requirements: 12.4, 16.1
  */
 export function authMiddleware(
   req: Request,

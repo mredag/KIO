@@ -26,5 +26,11 @@
   "backupTriggered": "Yedekleme başarıyla tetiklendi",
   "syncCompleted": "Senkronizasyon tamamlandı",
   "sheetsConnectionTest": "Google Sheets bağlantı testi başarılı",
-  "operationSuccessful": "İşlem başarılı"
+  "operationSuccessful": "İşlem başarılı",
+  "couponTokenIssued": "Kupon token'ı başarıyla oluşturuldu",
+  "couponConsumed": "Kupon başarıyla kullanıldı",
+  "couponRedemptionClaimed": "Kupon kullanımı talep edildi",
+  "couponRedemptionCompleted": "Kupon kullanımı tamamlandı",
+  "couponRedemptionRejected": "Kupon kullanımı reddedildi",
+  "couponOptedOut": "Bildirimlerden çıkış yapıldı"
 }

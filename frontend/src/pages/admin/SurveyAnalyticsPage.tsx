@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import AdminLayout from '../../layouts/AdminLayout';
 import { useSurveyAnalytics, useSurveyTemplates, useDeleteSurveyResponses } from '../../hooks/useAdminApi';
 import { formatDate } from '../../lib/dateFormatter';
+import { KPICard } from '../../components/admin/KPICard';
+import { LazyLineChart } from '../../components/admin/LazyCharts';
 
 export default function SurveyAnalyticsPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,11 +39,22 @@ export default function SurveyAnalyticsPage() {
     }
   };
 
+  // Calculate completion rate
+  const completionRate = analytics && analytics.questions.length > 0
+    ? (analytics.questions.reduce((sum: number, q: any) => sum + parseFloat(q.responseRate), 0) / analytics.questions.length).toFixed(1)
+    : '0.0';
+
+  // Prepare chart data
+  const trendChartData = analytics?.timeline?.map((point: any) => ({
+    date: formatDate(new Date(point.date)),
+    value: point.count,
+  })) || [];
+
   if (isLoading) {
     return (
       <AdminLayout>
         <div className="flex justify-center items-center h-64">
-          <div className="text-gray-600">Yükleniyor...</div>
+          <div className="text-gray-600 dark:text-gray-400">Yükleniyor...</div>
         </div>
       </AdminLayout>
     );
@@ -50,8 +63,8 @@ export default function SurveyAnalyticsPage() {
   if (error || !analytics) {
     return (
       <AdminLayout>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">Anket verileri yüklenirken hata oluştu</p>
+        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4">
+          <p className="text-red-800 dark:text-red-200">Anket verileri yüklenirken hata oluştu</p>
         </div>
       </AdminLayout>
     );
@@ -65,12 +78,12 @@ export default function SurveyAnalyticsPage() {
           <div>
             <button
               onClick={() => navigate('/admin/surveys')}
-              className="text-blue-600 hover:text-blue-700 mb-2 flex items-center gap-1"
+              className="text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 mb-2 flex items-center gap-1 font-medium"
             >
-              ← Anketlere Dön
+              ← Back to Surveys
             </button>
-            <h2 className="text-2xl font-bold text-gray-900">{analytics.survey.title}</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50">{analytics.survey.title}</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {analytics.survey.type === 'satisfaction' ? 'Memnuniyet Anketi' : 'Keşif Anketi'}
             </p>
           </div>
@@ -78,7 +91,7 @@ export default function SurveyAnalyticsPage() {
             <select
               value={id}
               onChange={(e) => navigate(`/admin/surveys/${e.target.value}/analytics`)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-sky-500"
             >
               {surveys?.map((survey) => (
                 <option key={survey.id} value={survey.id}>
@@ -91,247 +104,232 @@ export default function SurveyAnalyticsPage() {
                 onClick={() => setShowDeleteConfirm(true)}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                🗑️ Yanıtları Sil
+                🗑️ Delete Responses
               </button>
             )}
           </div>
         </div>
 
         {/* Date Filters */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Tarih Filtresi</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">Date Filter</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 mb-1">
-                Başlangıç Tarihi
+              <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Start Date
               </label>
               <input
                 type="date"
                 id="start-date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-sky-500"
               />
             </div>
             <div>
-              <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 mb-1">
-                Bitiş Tarihi
+              <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                End Date
               </label>
               <input
                 type="date"
                 id="end-date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-sky-500"
               />
             </div>
             {(startDate || endDate) && (
               <div className="flex items-end">
                 <button
                   onClick={handleClearFilters}
-                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
-                  Filtreleri Temizle
+                  Clear Filters
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="text-sm font-medium opacity-90">Toplam Yanıt</div>
-            <div className="text-4xl font-bold mt-2">{analytics.totalResponses}</div>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="text-sm font-medium opacity-90">Soru Sayısı</div>
-            <div className="text-4xl font-bold mt-2">{analytics.questions.length}</div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg p-6 text-white">
-            <div className="text-sm font-medium opacity-90">Ortalama Yanıt Oranı</div>
-            <div className="text-4xl font-bold mt-2">
-              {analytics.questions.length > 0
-                ? (
-                    analytics.questions.reduce(
-                      (sum: number, q: any) => sum + parseFloat(q.responseRate),
-                      0
-                    ) / analytics.questions.length
-                  ).toFixed(1)
-                : '0.0'}
-              %
-            </div>
-          </div>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <KPICard
+            title="Total Responses"
+            value={analytics.totalResponses}
+            icon="📊"
+            status="normal"
+          />
+          <KPICard
+            title="Questions"
+            value={analytics.questions.length}
+            icon="❓"
+            status="normal"
+          />
+          <KPICard
+            title="Completion Rate"
+            value={`${completionRate}%`}
+            icon="✓"
+            status={parseFloat(completionRate) >= 80 ? 'success' : parseFloat(completionRate) >= 50 ? 'normal' : 'warning'}
+          />
         </div>
 
-        {/* Timeline Chart */}
+        {/* Response Trend Chart - Lazy loaded for performance */}
         {analytics.timeline && analytics.timeline.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Zaman Çizelgesi</h3>
-            <div className="space-y-2">
-              {analytics.timeline.map((point: any) => (
-                <div key={point.date} className="flex items-center gap-3">
-                  <div className="text-sm text-gray-600 w-28">{formatDate(new Date(point.date))}</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-8 relative overflow-hidden">
-                    <div
-                      className="bg-blue-500 h-full rounded-full flex items-center justify-end pr-3 text-white text-sm font-medium transition-all"
-                      style={{
-                        width: `${Math.max(
-                          (point.count / Math.max(...analytics.timeline.map((p: any) => p.count))) * 100,
-                          10
-                        )}%`,
-                      }}
-                    >
-                      {point.count}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <LazyLineChart
+            data={trendChartData}
+            title="Response Trend Over Time"
+            color="#0284c7"
+            emptyMessage="No response data available"
+          />
         )}
 
-        {/* Questions Analytics */}
-        <div className="space-y-6">
-          {analytics.questions.map((question: any, index: number) => (
-            <div key={question.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-semibold text-sm">
-                      {index + 1}
-                    </span>
-                    <h3 className="text-lg font-semibold text-gray-900">{question.text}</h3>
-                  </div>
-                  <div className="flex gap-4 text-sm text-gray-600">
-                    <span>
-                      Tip: <span className="font-medium">{question.type === 'rating' ? 'Puanlama' : 'Tek Seçim'}</span>
-                    </span>
-                    <span>
-                      Yanıt: <span className="font-medium">{question.totalAnswers}</span>
-                    </span>
-                    <span>
-                      Oran: <span className="font-medium">{question.responseRate}%</span>
-                    </span>
+        {/* Question Breakdown */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">Question Breakdown</h3>
+          <div className="space-y-6">
+            {analytics.questions.map((question: any, index: number) => (
+              <div key={question.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900 text-sky-600 dark:text-sky-400 font-semibold text-sm">
+                        {index + 1}
+                      </span>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">{question.text}</h3>
+                    </div>
+                    <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400 ml-11">
+                      <span>
+                        Type: <span className="font-medium">{question.type === 'rating' ? 'Rating' : 'Single Choice'}</span>
+                      </span>
+                      <span>
+                        Responses: <span className="font-medium">{question.totalAnswers}</span>
+                      </span>
+                      <span>
+                        Rate: <span className="font-medium">{question.responseRate}%</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Rating Statistics */}
-              {question.type === 'rating' && question.statistics && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600">Ortalama</div>
-                      <div className="text-2xl font-bold text-blue-600">{question.statistics.average}</div>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600">En Düşük</div>
-                      <div className="text-2xl font-bold text-green-600">{question.statistics.min}</div>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg p-4">
-                      <div className="text-sm text-gray-600">En Yüksek</div>
-                      <div className="text-2xl font-bold text-purple-600">{question.statistics.max}</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-gray-700">Puan Dağılımı</h4>
-                    {question.statistics.distribution.map((item: any) => (
-                      <div key={item.value} className="flex items-center gap-3">
-                        <div className="text-sm text-gray-600 w-16">Puan {item.value}</div>
-                        <div className="flex-1 bg-gray-100 rounded-full h-8 relative overflow-hidden">
-                          <div
-                            className="bg-gradient-to-r from-blue-400 to-blue-600 h-full rounded-full flex items-center justify-end pr-3 text-white text-sm font-medium transition-all"
-                            style={{ width: `${item.percentage}%` }}
-                          >
-                            {item.count} ({item.percentage}%)
-                          </div>
-                        </div>
+                {/* Rating Statistics */}
+                {question.type === 'rating' && question.statistics && (
+                  <div className="space-y-4 ml-11">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-sky-50 dark:bg-sky-900 rounded-lg p-4">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Average</div>
+                        <div className="text-2xl font-bold text-sky-600 dark:text-sky-400">{question.statistics.average}</div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Single Choice Statistics */}
-              {question.type === 'single-choice' && question.statistics && (
-                <div className="space-y-4">
-                  {question.statistics.mostSelected && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="text-sm text-green-700 font-medium">En Çok Seçilen</div>
-                      <div className="text-lg font-bold text-green-900 mt-1">
-                        {question.statistics.mostSelected}
+                      <div className="bg-emerald-50 dark:bg-emerald-900 rounded-lg p-4">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Min</div>
+                        <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{question.statistics.min}</div>
+                      </div>
+                      <div className="bg-purple-50 dark:bg-purple-900 rounded-lg p-4">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Max</div>
+                        <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{question.statistics.max}</div>
                       </div>
                     </div>
-                  )}
 
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-gray-700">Seçenek Dağılımı</h4>
-                    {question.statistics.distribution.map((item: any, idx: number) => {
-                      const colors = [
-                        'from-blue-400 to-blue-600',
-                        'from-green-400 to-green-600',
-                        'from-purple-400 to-purple-600',
-                        'from-pink-400 to-pink-600',
-                        'from-yellow-400 to-yellow-600',
-                      ];
-                      const color = colors[idx % colors.length];
-
-                      return (
-                        <div key={item.value} className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-700 font-medium">{item.value}</span>
-                            <span className="text-gray-600">
-                              {item.count} yanıt ({item.percentage}%)
-                            </span>
-                          </div>
-                          <div className="bg-gray-100 rounded-full h-6 relative overflow-hidden">
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Rating Distribution</h4>
+                      {question.statistics.distribution.map((item: any) => (
+                        <div key={item.value} className="flex items-center gap-3">
+                          <div className="text-sm text-gray-600 dark:text-gray-400 w-16">Rating {item.value}</div>
+                          <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-8 relative overflow-hidden">
                             <div
-                              className={`bg-gradient-to-r ${color} h-full rounded-full transition-all`}
+                              className="bg-gradient-to-r from-sky-400 to-sky-600 h-full rounded-full flex items-center justify-end pr-3 text-white text-sm font-medium transition-all"
                               style={{ width: `${item.percentage}%` }}
-                            />
+                            >
+                              {item.count} ({item.percentage}%)
+                            </div>
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+
+                {/* Single Choice Statistics */}
+                {question.type === 'single-choice' && question.statistics && (
+                  <div className="space-y-4 ml-11">
+                    {question.statistics.mostSelected && (
+                      <div className="bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4">
+                        <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">Most Selected</div>
+                        <div className="text-lg font-bold text-emerald-900 dark:text-emerald-100 mt-1">
+                          {question.statistics.mostSelected}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Option Distribution</h4>
+                      {question.statistics.distribution.map((item: any, idx: number) => {
+                        const colors = [
+                          'from-sky-400 to-sky-600',
+                          'from-emerald-400 to-emerald-600',
+                          'from-purple-400 to-purple-600',
+                          'from-pink-400 to-pink-600',
+                          'from-amber-400 to-amber-600',
+                        ];
+                        const color = colors[idx % colors.length];
+
+                        return (
+                          <div key={item.value} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">{item.value}</span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {item.count} responses ({item.percentage}%)
+                              </span>
+                            </div>
+                            <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-6 relative overflow-hidden">
+                              <div
+                                className={`bg-gradient-to-r ${color} h-full rounded-full transition-all`}
+                                style={{ width: `${item.percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* No Data Message */}
         {analytics.totalResponses === 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
-            <div className="text-yellow-800 text-lg font-medium">Henüz yanıt yok</div>
-            <p className="text-yellow-700 mt-2">Bu anket için henüz yanıt alınmamış.</p>
+          <div className="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-xl p-12 text-center">
+            <svg className="mx-auto h-12 w-12 text-yellow-600 dark:text-yellow-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <div className="text-yellow-800 dark:text-yellow-200 text-lg font-medium">No responses yet</div>
+            <p className="text-yellow-700 dark:text-yellow-300 mt-2">This survey hasn't received any responses yet.</p>
           </div>
         )}
 
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Yanıtları Sil?</h3>
-              <p className="text-gray-700 mb-6">
-                Bu anketin <strong>{analytics.totalResponses}</strong> yanıtını silmek istediğinizden emin misiniz? 
-                Bu işlem geri alınamaz.
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">Delete Responses?</h3>
+              <p className="text-gray-700 dark:text-gray-300 mb-6">
+                Are you sure you want to delete <strong>{analytics.totalResponses}</strong> responses from this survey? 
+                This action cannot be undone.
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
-                  İptal
+                  Cancel
                 </button>
                 <button
                   onClick={handleDeleteResponses}
                   disabled={deleteMutation.isPending}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
-                  {deleteMutation.isPending ? 'Siliniyor...' : 'Evet, Sil'}
+                  {deleteMutation.isPending ? 'Deleting...' : 'Yes, Delete'}
                 </button>
               </div>
             </div>

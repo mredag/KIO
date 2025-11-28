@@ -11,7 +11,7 @@ i18next
   .init({
     lng: 'tr',
     fallbackLng: 'tr',
-    ns: ['errors', 'validation', 'success', 'logs'],
+    ns: ['errors', 'validation', 'success', 'logs', 'coupons'],
     defaultNS: 'errors',
     backend: {
       loadPath: path.join(__dirname, '../locales/{{lng}}/{{ns}}.json'),

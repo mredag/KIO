@@ -1,12 +1,17 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
-import { useSurveyTemplates, useDeleteSurveyTemplate } from '../../hooks/useAdminApi';
+import { useSurveyTemplates, useDeleteSurveyTemplate, useSurveyResponses } from '../../hooks/useAdminApi';
+
+type TabType = 'all' | 'satisfaction' | 'discovery';
 
 export default function SurveysPage() {
   const { t } = useTranslation('admin');
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<TabType>('all');
   const { data: surveys, isLoading, error } = useSurveyTemplates();
+  const { data: allResponses } = useSurveyResponses({});
   const deleteSurvey = useDeleteSurveyTemplate();
 
   const handleEdit = (id: string) => {
@@ -58,176 +63,226 @@ export default function SurveysPage() {
     }
   };
 
+  // Get response count for a survey
+  const getResponseCount = (surveyId: string) => {
+    if (!allResponses) return 0;
+    return allResponses.filter((r) => r.surveyId === surveyId).length;
+  };
+
+  // Get average rating for a survey (if it has rating questions)
+  const getAverageRating = (surveyId: string) => {
+    if (!allResponses || !surveys) return null;
+    const survey = surveys.find((s) => s.id === surveyId);
+    if (!survey) return null;
+
+    const ratingQuestions = survey.questions.filter((q) => q.type === 'rating');
+    if (ratingQuestions.length === 0) return null;
+
+    const responses = allResponses.filter((r) => r.surveyId === surveyId);
+    if (responses.length === 0) return null;
+
+    let totalRating = 0;
+    let ratingCount = 0;
+
+    responses.forEach((response) => {
+      ratingQuestions.forEach((question) => {
+        const rating = response.answers[question.id];
+        if (typeof rating === 'number') {
+          totalRating += rating;
+          ratingCount++;
+        }
+      });
+    });
+
+    return ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : null;
+  };
+
+  // Filter surveys by tab
+  const filteredSurveys = surveys?.filter((survey) => {
+    if (activeTab === 'all') return true;
+    return survey.type === activeTab;
+  });
+
   return (
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{t('surveys.title')}</h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50">{t('surveys.title')}</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               {t('surveys.subtitle')}
             </p>
           </div>
           <button
             onClick={handleCreateNew}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-target font-medium"
+            className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors touch-target font-medium"
           >
-            {t('surveys.createNewButton')}
+            + {t('surveys.createNewButton')}
           </button>
         </div>
 
-        {/* Info Box */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg
-                className="h-5 w-5 text-blue-400"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-blue-800">
-                {t('surveys.infoMessage')}
-              </p>
-            </div>
+        {/* Tabs for filtering by type */}
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`
+                py-2 px-1 border-b-2 font-medium text-sm transition-colors
+                ${
+                  activeTab === 'all'
+                    ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }
+              `}
+            >
+              All Surveys ({surveys?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('satisfaction')}
+              className={`
+                py-2 px-1 border-b-2 font-medium text-sm transition-colors
+                ${
+                  activeTab === 'satisfaction'
+                    ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }
+              `}
+            >
+              Satisfaction ({surveys?.filter((s) => s.type === 'satisfaction').length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('discovery')}
+              className={`
+                py-2 px-1 border-b-2 font-medium text-sm transition-colors
+                ${
+                  activeTab === 'discovery'
+                    ? 'border-sky-600 text-sky-600 dark:border-sky-400 dark:text-sky-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                }
+              `}
+            >
+              Discovery ({surveys?.filter((s) => s.type === 'discovery').length || 0})
+            </button>
+          </nav>
+        </div>
+
+        {/* Survey Cards Grid */}
+        {!filteredSurveys || filteredSurveys.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600 mb-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">{t('surveys.noSurveys')}</p>
+            <button
+              onClick={handleCreateNew}
+              className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors font-medium"
+            >
+              Create Your First Survey
+            </button>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredSurveys.map((survey) => {
+              const responseCount = getResponseCount(survey.id);
+              const avgRating = getAverageRating(survey.id);
 
-        {/* Desktop Table View */}
-        <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('surveys.name')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('surveys.type')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('surveys.questions')}
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('surveys.actions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {surveys && surveys.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                    {t('surveys.noSurveys')}
-                  </td>
-                </tr>
-              ) : (
-                surveys?.map((survey) => (
-                  <tr key={survey.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{survey.name}</div>
+              return (
+                <div
+                  key={survey.id}
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow"
+                >
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-1">
+                        {survey.name}
+                      </h3>
                       {survey.title && (
-                        <div className="text-sm text-gray-500 truncate max-w-xs">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                           {survey.title}
-                        </div>
+                        </p>
                       )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                        {getTypeDisplayName(survey.type)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {survey.questions.length} {survey.questions.length !== 1 ? t('surveys.questions').toLowerCase() : t('surveys.question')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end gap-3">
-                        <button
-                          onClick={() => navigate(`/admin/surveys/${survey.id}/analytics`)}
-                          className="text-green-600 hover:text-green-900 touch-target"
-                        >
-                          📊 İstatistikler
-                        </button>
-                        <button
-                          onClick={() => handleEdit(survey.id)}
-                          className="text-blue-600 hover:text-blue-900 touch-target"
-                        >
-                          {t('surveys.edit')}
-                        </button>
-                        <button
-                          onClick={() => handleDelete(survey.id, survey.name)}
-                          className="text-red-600 hover:text-red-900 touch-target"
-                          disabled={deleteSurvey.isPending}
-                        >
-                          {t('surveys.delete')}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                    <span
+                      className={`
+                        px-2.5 py-1 text-xs font-medium rounded-full
+                        ${
+                          survey.type === 'satisfaction'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                            : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                        }
+                      `}
+                    >
+                      {getTypeDisplayName(survey.type)}
+                    </span>
+                  </div>
 
-        {/* Mobile Card View */}
-        <div className="md:hidden space-y-4">
-          {surveys && surveys.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-              {t('surveys.noSurveys')}
-            </div>
-          ) : (
-            surveys?.map((survey) => (
-              <div key={survey.id} className="bg-white rounded-lg shadow p-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h3 className="font-medium text-gray-900">{survey.name}</h3>
-                    {survey.title && (
-                      <p className="text-sm text-gray-500 mt-1">{survey.title}</p>
+                  {/* Quick Analytics Preview */}
+                  <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Responses</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">
+                        {responseCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Questions</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">
+                        {survey.questions.length}
+                      </p>
+                    </div>
+                    {avgRating && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Rating</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">
+                            {avgRating}
+                          </p>
+                          <span className="text-yellow-500">★</span>
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                    {getTypeDisplayName(survey.type)}
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    {survey.questions.length} {survey.questions.length !== 1 ? t('surveys.questions').toLowerCase() : t('surveys.question')}
-                  </span>
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => navigate(`/admin/surveys/${survey.id}/analytics`)}
+                      className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                    >
+                      📊 Analytics
+                    </button>
+                    <button
+                      onClick={() => handleEdit(survey.id)}
+                      className="flex-1 px-3 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors text-sm font-medium"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(survey.id, survey.name)}
+                      className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50"
+                      disabled={deleteSurvey.isPending}
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
-
-                <div className="pt-2 border-t border-gray-200 space-y-2">
-                  <button
-                    onClick={() => navigate(`/admin/surveys/${survey.id}/analytics`)}
-                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors touch-target font-medium"
-                  >
-                    📊 İstatistikleri Gör
-                  </button>
-                  <button
-                    onClick={() => handleEdit(survey.id)}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors touch-target font-medium"
-                  >
-                    {t('surveys.editTemplate')}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(survey.id, survey.name)}
-                    className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors touch-target font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={deleteSurvey.isPending}
-                  >
-                    {deleteSurvey.isPending ? t('surveys.deleting') || 'Siliniyor...' : t('surveys.delete')}
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

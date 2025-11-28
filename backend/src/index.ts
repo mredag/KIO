@@ -3,6 +3,7 @@ import session from 'express-session';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import cron from 'node-cron';
 import { UPLOADS_DIR, BACKUPS_DIR, DATABASE_PATH, FRONTEND_DIST } from './config/paths.js';
 import { initializeDatabase } from './database/init.js';
 import { DatabaseService } from './database/DatabaseService.js';
@@ -15,8 +16,13 @@ import { QRCodeService } from './services/QRCodeService.js';
 import { kioskEventService } from './services/KioskEventService.js';
 import { LoggerService } from './services/LoggerService.js';
 import { LogRotationService } from './services/LogRotationService.js';
+import { CouponService } from './services/CouponService.js';
+import { EventLogService } from './services/EventLogService.js';
+import { RateLimitService } from './services/RateLimitService.js';
 import { createAdminRoutes } from './routes/adminRoutes.js';
 import { createKioskRoutes } from './routes/kioskRoutes.js';
+import { createAdminCouponRoutes } from './routes/adminCouponRoutes.js';
+import { createIntegrationCouponRoutes } from './routes/integrationCouponRoutes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import {
@@ -109,6 +115,13 @@ const qrCodeService = new QRCodeService();
 // Requirements: 32.1 - Log rotation
 const logRotationService = new LogRotationService(dbService, 30);
 
+// Initialize coupon service
+// Requirements: WhatsApp Coupon System
+const whatsappNumber = process.env.WHATSAPP_NUMBER || '';
+const couponService = new CouponService(db, whatsappNumber);
+const eventLogService = new EventLogService(db);
+const rateLimitService = new RateLimitService(db);
+
 // Start Google Sheets initialization and sync queue
 initializeGoogleSheets().then(() => {
   logger.info('Application initialized successfully');
@@ -121,6 +134,56 @@ initializeGoogleSheets().then(() => {
 
   // Schedule log rotation daily at 2 AM
   logRotationService.scheduleRotation();
+
+  // Schedule coupon system jobs
+  // Requirements: 22.3, 23.5, 24.3, 28.1, 28.2
+  
+  // Token cleanup: daily at 3:00 AM Istanbul time
+  cron.schedule('0 3 * * *', () => {
+    try {
+      const deletedCount = couponService.cleanupExpiredTokens();
+      logger.info('Token cleanup job completed', { deletedCount });
+    } catch (error: any) {
+      logger.error('Token cleanup job failed', {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }, {
+    timezone: 'Europe/Istanbul'
+  });
+
+  // Redemption expiration: daily at 3:00 AM Istanbul time
+  cron.schedule('0 3 * * *', () => {
+    try {
+      const expiredCount = couponService.expirePendingRedemptions();
+      logger.info('Redemption expiration job completed', { expiredCount });
+    } catch (error: any) {
+      logger.error('Redemption expiration job failed', {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }, {
+    timezone: 'Europe/Istanbul'
+  });
+
+  // Rate limit counter cleanup: daily at 12:01 AM Istanbul time
+  cron.schedule('1 0 * * *', () => {
+    try {
+      rateLimitService.resetExpiredCounters();
+      logger.info('Rate limit counter cleanup job completed');
+    } catch (error: any) {
+      logger.error('Rate limit counter cleanup job failed', {
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }, {
+    timezone: 'Europe/Istanbul'
+  });
+
+  logger.info('Coupon system scheduled jobs initialized');
 }).catch((error) => {
   logger.error('Failed to initialize application', {
     error: error.message,
@@ -138,6 +201,8 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Routes
 app.use('/api/admin', createAdminRoutes(dbService, authService, backupService, mediaService, googleSheetsService));
+app.use('/api/admin/coupons', createAdminCouponRoutes(dbService, couponService, eventLogService));
+app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 
 // Serve frontend static files in production - use centralized config
@@ -193,4 +258,4 @@ process.on('unhandledRejection', (reason: any) => {
   });
 });
 
-export { app, dbService, authService, mediaService, googleSheetsService, syncQueueService, backupService, qrCodeService, kioskEventService, logger, logRotationService, i18n };
+export { app, dbService, authService, mediaService, googleSheetsService, syncQueueService, backupService, qrCodeService, kioskEventService, logger, logRotationService, couponService, i18n };

@@ -1,9 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Bundle analyzer - generates stats.html in dist folder
+    visualizer({
+      filename: './dist/stats.html',
+      open: false,
+      gzipSize: true,
+      brotliSize: true,
+    }) as any,
+  ],
   server: {
     port: 3000,
     proxy: {
@@ -32,26 +42,50 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Manual chunk splitting for better caching
-        manualChunks: {
-          // Vendor chunks
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'query-vendor': ['@tanstack/react-query', '@tanstack/react-query-persist-client'],
-          'animation-vendor': ['motion'],
-          // Split kiosk and admin into separate chunks
-          'kiosk': [
-            './src/components/kiosk/KioskModeRouter.tsx',
-            './src/components/kiosk/DigitalMenuMode.tsx',
-            './src/components/kiosk/SurveyMode.tsx',
-            './src/components/kiosk/GoogleQRMode.tsx',
-            './src/components/kiosk/SlideshowMode.tsx',
-          ],
-          'admin': [
-            './src/pages/admin/DashboardPage.tsx',
-            './src/pages/admin/MassagesPage.tsx',
-            './src/pages/admin/KioskControlPage.tsx',
-            './src/pages/admin/SurveysPage.tsx',
-            './src/pages/admin/SettingsPage.tsx',
-          ],
+        manualChunks: (id) => {
+          // Vendor chunks - split by library
+          if (id.includes('node_modules')) {
+            // React core
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'react-vendor';
+            }
+            // React Query
+            if (id.includes('@tanstack/react-query')) {
+              return 'query-vendor';
+            }
+            // Charts library (Recharts is large)
+            if (id.includes('recharts') || id.includes('d3-')) {
+              return 'charts-vendor';
+            }
+            // i18n
+            if (id.includes('i18next') || id.includes('react-i18next')) {
+              return 'i18n-vendor';
+            }
+            // Other vendors
+            return 'vendor';
+          }
+          
+          // Split by feature area
+          if (id.includes('/src/pages/admin/')) {
+            // Admin pages
+            if (id.includes('Dashboard')) return 'admin-dashboard';
+            if (id.includes('Massage')) return 'admin-massages';
+            if (id.includes('Survey')) return 'admin-surveys';
+            if (id.includes('Coupon')) return 'admin-coupons';
+            if (id.includes('Settings') || id.includes('Backup') || id.includes('Logs')) {
+              return 'admin-system';
+            }
+            return 'admin-common';
+          }
+          
+          if (id.includes('/src/components/kiosk/')) {
+            return 'kiosk';
+          }
+          
+          // Shared components
+          if (id.includes('/src/components/admin/')) {
+            return 'admin-components';
+          }
         },
         // Optimize chunk file names
         chunkFileNames: 'assets/[name]-[hash].js',

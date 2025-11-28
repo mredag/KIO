@@ -16,7 +16,7 @@ export interface ApiError {
  */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof AxiosError) {
-    // API error response
+    // API error response with specific error message
     if (error.response?.data?.error) {
       return error.response.data.error;
     }
@@ -42,6 +42,10 @@ export function getErrorMessage(error: unknown): string {
 
     if (error.response?.status === 404) {
       return 'The requested resource was not found.';
+    }
+
+    if (error.response?.status === 429) {
+      return 'Too many requests. Please try again later.';
     }
 
     if (error.response?.status === 500) {
@@ -102,6 +106,29 @@ export function isAuthError(error: unknown): boolean {
     return error.response?.status === 401;
   }
   return false;
+}
+
+/**
+ * Check if error is a rate limit error
+ */
+export function isRateLimitError(error: unknown): boolean {
+  if (error instanceof AxiosError) {
+    return error.response?.status === 429;
+  }
+  return false;
+}
+
+/**
+ * Get retry-after time from rate limit error (in seconds)
+ */
+export function getRetryAfter(error: unknown): number | null {
+  if (error instanceof AxiosError && error.response?.status === 429) {
+    const retryAfter = error.response.headers['retry-after'];
+    if (retryAfter) {
+      return parseInt(retryAfter, 10);
+    }
+  }
+  return null;
 }
 
 /**

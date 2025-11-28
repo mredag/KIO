@@ -46,6 +46,11 @@ export class BackupService {
           survey_responses: this.db.getSurveyResponses(),
           kiosk_state: this.db.getKioskState(),
           system_settings: this.db.getSettings(),
+          coupon_tokens: this.db.getAllCouponTokens(),
+          coupon_wallets: this.db.getAllCouponWallets(),
+          coupon_redemptions: this.db.getAllCouponRedemptions(),
+          coupon_events: this.db.getAllCouponEvents(),
+          coupon_rate_limits: this.db.getAllCouponRateLimits(),
         },
       };
 
@@ -72,7 +77,7 @@ export class BackupService {
   }
 
   /**
-   * Schedule daily backups at 3 AM
+   * Schedule daily backups at 2 AM Istanbul time
    */
   scheduleDaily(): void {
     // Stop existing cron job if any
@@ -80,21 +85,24 @@ export class BackupService {
       this.cronJob.stop();
     }
 
-    // Schedule backup at 3:00 AM daily
+    // Schedule backup at 2:00 AM Istanbul time daily
     // Cron format: minute hour day month weekday
-    this.cronJob = cron.schedule('0 3 * * *', async () => {
+    // Note: node-cron uses system timezone, ensure TZ=Europe/Istanbul is set
+    this.cronJob = cron.schedule('0 2 * * *', async () => {
       try {
         await this.createBackup();
         await this.cleanOldBackups();
       } catch (error) {
         console.error('Scheduled backup failed:', error);
       }
+    }, {
+      timezone: 'Europe/Istanbul'
     });
 
     this.db.createLog({
       level: 'info',
       message: 'Daily backup schedule initialized',
-      details: { schedule: '3:00 AM daily' },
+      details: { schedule: '2:00 AM Istanbul time daily' },
     });
   }
 

@@ -66,6 +66,31 @@ export function initializeDatabase(dbPath: string): Database.Database {
     db.prepare("ALTER TABLE system_settings ADD COLUMN kiosk_theme TEXT DEFAULT 'classic'").run();
     console.log('Added kiosk_theme column to system_settings table');
   }
+
+  // Check if coupon tables exist (for existing installations)
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
+  const tableNames = tables.map(t => t.name);
+  
+  const couponTables = [
+    'coupon_tokens',
+    'coupon_wallets', 
+    'coupon_redemptions',
+    'coupon_events',
+    'coupon_rate_limits'
+  ];
+  
+  const missingCouponTables = couponTables.filter(table => !tableNames.includes(table));
+  
+  if (missingCouponTables.length > 0) {
+    console.log(`Creating missing coupon tables: ${missingCouponTables.join(', ')}`);
+    // Re-run schema to create missing tables (CREATE IF NOT EXISTS will skip existing ones)
+    for (const statement of statements) {
+      if (statement.includes('coupon_')) {
+        db.exec(statement);
+      }
+    }
+    console.log('Coupon tables created successfully');
+  }
   
   // Seed default data
   seedDatabase(db);

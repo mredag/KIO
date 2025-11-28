@@ -145,3 +145,107 @@ export interface SystemLogInput {
   message: string;
   details?: Record<string, any>;
 }
+
+// ==================== COUPON SYSTEM TYPES ====================
+
+// Database types (snake_case - as stored in SQLite)
+export interface CouponTokenDb {
+  token: string;
+  status: 'issued' | 'used' | 'expired';
+  issued_for: string | null;
+  kiosk_id: string | null;
+  phone: string | null;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CouponWalletDb {
+  phone: string;
+  coupon_count: number;
+  total_earned: number;
+  total_redeemed: number;
+  opted_in_marketing: number;
+  last_message_at: string | null;
+  updated_at: string;
+}
+
+export interface CouponRedemptionDb {
+  id: string;
+  phone: string;
+  coupons_used: number;
+  status: 'pending' | 'completed' | 'rejected';
+  note: string | null;
+  created_at: string;
+  notified_at: string | null;
+  completed_at: string | null;
+  rejected_at: string | null;
+}
+
+export interface CouponEventDb {
+  id: number;
+  phone: string | null;
+  event: string;
+  token: string | null;
+  details: string | null;
+  created_at: string;
+}
+
+export interface CouponRateLimitDb {
+  phone: string;
+  endpoint: string;
+  count: number;
+  reset_at: string;
+}
+
+// Application types (camelCase - for use in services/routes)
+export interface CouponToken {
+  token: string;
+  status: 'issued' | 'used' | 'expired';
+  issuedFor?: string;
+  kioskId?: string;
+  phone?: string;
+  expiresAt: Date;
+  usedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CouponWallet {
+  phone: string;
+  couponCount: number;
+  totalEarned: number;
+  totalRedeemed: number;
+  optedInMarketing: boolean;
+  lastMessageAt?: Date;
+  updatedAt: Date;
+}
+
+export interface CouponRedemption {
+  id: string;
+  phone: string;
+  couponsUsed: number;
+  status: 'pending' | 'completed' | 'rejected';
+  note?: string;
+  createdAt: Date;
+  notifiedAt?: Date;
+  completedAt?: Date;
+  rejectedAt?: Date;
+}
+
+export interface CouponEvent {
+  id: number;
+  phone?: string;
+  event: 'issued' | 'coupon_awarded' | 'redemption_attempt' | 'redemption_granted' | 'redemption_blocked';
+  token?: string;
+  details?: Record<string, any>;
+  createdAt: Date;
+}
+
+export interface CouponRateLimit {
+  phone: string;
+  endpoint: 'consume' | 'claim';
+  count: number;
+  resetAt: Date;
+}

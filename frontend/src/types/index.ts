@@ -95,6 +95,7 @@ export interface AuthState {
 export interface SystemStatus {
   todaySurveyCount: number;
   totalSurveyCount: number;
+  activeCoupons: number;
   currentKioskMode: string;
   activeSurveyId?: string | null;
   currentContent: string;
@@ -102,6 +103,15 @@ export interface SystemStatus {
   kioskOnline: boolean;
   sheetsLastSync: Date;
   pendingSyncCount: number;
+  surveyTrend: Array<{ date: string; value: number }>;
+  couponTrend: Array<{ date: string; value: number }>;
+  recentActivity: Array<{
+    id: string;
+    type: string;
+    message: string;
+    timestamp: string;
+    href?: string;
+  }>;
 }
 
 export interface SystemSettings {
@@ -125,4 +135,44 @@ export interface SystemLog {
   message: string;
   details: Record<string, any> | null;
   created_at: string;
+}
+
+// Coupon System types
+export interface CouponToken {
+  token: string;
+  status: 'issued' | 'used' | 'expired';
+  createdAt: Date;
+  expiresAt: Date;
+  usedAt: Date | null;
+}
+
+export interface CouponWallet {
+  phone: string;
+  couponCount: number;
+  totalEarned: number;
+  totalRedeemed: number;
+  optedInMarketing: boolean;
+  lastMessageAt: Date | null;
+  updatedAt: Date;
+}
+
+export interface CouponRedemption {
+  id: string;
+  phone: string;
+  couponsUsed: number;
+  status: 'pending' | 'completed' | 'rejected';
+  note: string | null;
+  createdAt: Date;
+  notifiedAt: Date | null;
+  completedAt: Date | null;
+  rejectedAt: Date | null;
+}
+
+export interface CouponEvent {
+  id: number;
+  phone: string | null;
+  event: 'issued' | 'coupon_awarded' | 'redemption_attempt' | 'redemption_granted' | 'redemption_blocked';
+  token: string | null;
+  details: Record<string, any> | null;
+  createdAt: Date;
 }

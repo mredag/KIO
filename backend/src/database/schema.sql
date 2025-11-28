@@ -81,6 +81,62 @@ CREATE TABLE IF NOT EXISTS system_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Coupon tokens table
+CREATE TABLE IF NOT EXISTS coupon_tokens (
+  token TEXT PRIMARY KEY,
+  status TEXT CHECK(status IN ('issued', 'used', 'expired')) DEFAULT 'issued',
+  issued_for TEXT,
+  kiosk_id TEXT,
+  phone TEXT,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Coupon wallets table
+CREATE TABLE IF NOT EXISTS coupon_wallets (
+  phone TEXT PRIMARY KEY,
+  coupon_count INTEGER DEFAULT 0,
+  total_earned INTEGER DEFAULT 0,
+  total_redeemed INTEGER DEFAULT 0,
+  opted_in_marketing INTEGER DEFAULT 0,
+  last_message_at DATETIME,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Coupon redemptions table
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id TEXT PRIMARY KEY,
+  phone TEXT NOT NULL,
+  coupons_used INTEGER DEFAULT 4,
+  status TEXT CHECK(status IN ('pending', 'completed', 'rejected')) DEFAULT 'pending',
+  note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  notified_at DATETIME,
+  completed_at DATETIME,
+  rejected_at DATETIME
+);
+
+-- Coupon events table
+CREATE TABLE IF NOT EXISTS coupon_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone TEXT,
+  event TEXT NOT NULL,
+  token TEXT,
+  details TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Coupon rate limits table
+CREATE TABLE IF NOT EXISTS coupon_rate_limits (
+  phone TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  count INTEGER DEFAULT 1,
+  reset_at DATETIME NOT NULL,
+  PRIMARY KEY (phone, endpoint)
+);
+
 -- Create indexes for performance optimization
 CREATE INDEX IF NOT EXISTS idx_massages_featured ON massages(is_featured);
 CREATE INDEX IF NOT EXISTS idx_massages_campaign ON massages(is_campaign);
@@ -88,3 +144,14 @@ CREATE INDEX IF NOT EXISTS idx_massages_sort ON massages(sort_order);
 CREATE INDEX IF NOT EXISTS idx_survey_responses_synced ON survey_responses(synced);
 CREATE INDEX IF NOT EXISTS idx_survey_responses_created ON survey_responses(created_at);
 CREATE INDEX IF NOT EXISTS idx_system_logs_created ON system_logs(created_at);
+
+-- Coupon table indexes
+CREATE INDEX IF NOT EXISTS idx_coupon_tokens_status ON coupon_tokens(status);
+CREATE INDEX IF NOT EXISTS idx_coupon_tokens_expires ON coupon_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_coupon_tokens_phone ON coupon_tokens(phone);
+CREATE INDEX IF NOT EXISTS idx_coupon_wallets_phone ON coupon_wallets(phone);
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_phone ON coupon_redemptions(phone);
+CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_status ON coupon_redemptions(status);
+CREATE INDEX IF NOT EXISTS idx_coupon_events_phone ON coupon_events(phone);
+CREATE INDEX IF NOT EXISTS idx_coupon_events_created ON coupon_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_coupon_rate_limits_reset ON coupon_rate_limits(reset_at);

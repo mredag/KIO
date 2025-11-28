@@ -1,252 +1,198 @@
 # n8n Workflows for WhatsApp Coupon System
 
-**Purpose:** This directory contains all n8n workflow definitions, deployment scripts, and documentation for the WhatsApp coupon automation system. It is intentionally separated from the core kiosk application to maintain clear boundaries.
+This directory contains n8n workflow definitions and documentation for the WhatsApp-based coupon loyalty system.
 
----
-
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 n8n-workflows/
-├── README.md                          # This file
-├── .gitignore                         # Exclude credentials and sensitive data
-├── workflows/                         # Exported workflow JSON files
-│   ├── coupon-capture.json           # Workflow A: Token consumption
-│   ├── claim-redemption.json         # Workflow B: Redemption claims
-│   ├── balance-check.json            # Workflow C: Balance queries
-│   └── opt-out.json                  # Workflow D: Marketing opt-out
-├── docs/                              # Workflow documentation
-│   ├── coupon-capture.md             # Workflow A documentation
-│   ├── claim-redemption.md           # Workflow B documentation
-│   ├── balance-check.md              # Workflow C documentation
-│   ├── opt-out.md                    # Workflow D documentation
-│   └── credentials-setup.md          # Credential configuration guide
-├── credentials/                       # Credential templates (NO SECRETS)
-│   └── credentials-template.json     # Template structure only
-├── deployment/                        # Deployment configurations
-│   ├── README.md                     # Deployment overview
-│   ├── DEPLOYMENT.md                 # Step-by-step deployment guide
-│   ├── BACKUP.md                     # Backup and restore procedures
-│   ├── n8n.service                   # systemd service file
-│   ├── nginx-n8n.conf                # nginx reverse proxy config
-│   └── deploy-n8n.sh                 # Automated deployment script
-├── scripts/                           # Utility scripts
-│   ├── backup.sh                     # Backup n8n workflows and database
-│   ├── deploy.sh                     # Import workflows to n8n
-│   └── test-webhooks.sh              # Test webhook endpoints
-└── backups/                           # Backup storage (gitignored)
-    ├── workflows-YYYYMMDD/           # Workflow JSON backups
-    └── database-YYYYMMDD.sqlite3     # n8n database backups
+├── workflows/          # Exported workflow JSON files
+├── docs/              # Workflow documentation
+├── credentials/       # Credential templates (no actual secrets)
+├── deployment/        # Deployment scripts
+├── .gitignore        # Excludes sensitive data
+└── README.md         # This file
 ```
 
----
+## Quick Start
 
-## 🚀 Quick Start
+### Prerequisites
 
-### 1. Install n8n on Raspberry Pi
+- Node.js 20.x or higher
+- n8n installed globally: `npm install -g n8n`
+- Backend API running on `http://localhost:3001`
+- WhatsApp Business API credentials
+
+### Local Development
+
+1. **Start n8n**:
+   ```bash
+   n8n
+   ```
+   Access UI at: http://localhost:5678
+
+2. **Import Workflows**:
+   - Open n8n UI
+   - Click "Import from File"
+   - Select workflow JSON from `workflows/` directory
+
+3. **Configure Credentials**:
+   - Follow instructions in `docs/credentials-setup.md`
+   - Add credentials in n8n UI (Settings → Credentials)
+
+4. **Test Workflows**:
+   - Use "Execute Workflow" button in n8n UI
+   - Test with sample WhatsApp webhook payloads
+   - Verify backend API integration
+
+### Production Deployment
+
+See `deployment/` directory for:
+- systemd service configuration
+- nginx reverse proxy setup
+- Deployment scripts
+- Backup procedures
+
+## Workflows
+
+> **📝 Turkish Message Templates**: All workflows use Turkish messages for customer communication. See `docs/turkish-message-templates.md` for complete message templates and implementation examples.
+
+### 1. Coupon Capture (`workflows/coupon-capture.json`)
+Processes WhatsApp messages with coupon tokens (format: "KUPON <TOKEN>").
+
+**Trigger**: WhatsApp webhook  
+**Endpoints**: POST `/api/integrations/coupons/consume`  
+**Documentation**: `docs/coupon-capture.md`
+
+### 2. Claim Redemption (`workflows/claim-redemption.json`)
+Handles redemption requests when customers have 4+ coupons.
+
+**Trigger**: WhatsApp webhook (message: "kupon kullan")  
+**Endpoints**: POST `/api/integrations/coupons/claim`  
+**Documentation**: `docs/claim-redemption.md`
+
+### 3. Balance Check (`workflows/balance-check.json`)
+Allows customers to check their coupon balance.
+
+**Trigger**: WhatsApp webhook (message: "durum")  
+**Endpoints**: GET `/api/integrations/coupons/wallet/:phone`  
+**Documentation**: `docs/balance-check.md`
+
+### 4. Opt-Out (`workflows/opt-out.json`)
+Handles marketing opt-out requests.
+
+**Trigger**: WhatsApp webhook (message: "iptal")  
+**Endpoints**: POST `/api/integrations/coupons/opt-out`  
+**Documentation**: `docs/opt-out.md`
+
+## Configuration
+
+### Environment Variables
+
+n8n requires these environment variables (set in systemd service or `.env`):
 
 ```bash
-# Install Node.js 20.x
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# Install n8n globally
-sudo npm install -g n8n
-
-# Create n8n user and directory
-sudo useradd -m -s /bin/bash n8n
-sudo mkdir -p /var/lib/n8n
-sudo chown n8n:n8n /var/lib/n8n
+# n8n Configuration
+N8N_PORT=5678
+N8N_BASIC_AUTH_ACTIVE=true
+N8N_BASIC_AUTH_USER=admin
+N8N_BASIC_AUTH_PASSWORD=<secure-password>
+WEBHOOK_URL=https://<your-domain>
+TZ=Europe/Istanbul
+GENERIC_TIMEZONE=Europe/Istanbul
+N8N_LOG_LEVEL=info
 ```
 
-### 2. Run n8n Locally (Development)
+### Credentials Required
 
-```bash
-# Start n8n
-n8n
+1. **Backend API Key**: For authenticating with backend API
+2. **WhatsApp Business API**: Access token, phone number ID, app secret
 
-# Access UI at http://localhost:5678
-```
+See `docs/credentials-setup.md` for detailed setup instructions.
 
-### 3. Import Workflows
-
-```bash
-# In n8n UI:
-# 1. Click "Import from File"
-# 2. Select workflow JSON from n8n-workflows/workflows/
-# 3. Configure credentials (see docs/credentials-setup.md)
-# 4. Activate workflow
-```
-
-### 4. Deploy to Production
-
-```bash
-# Run deployment script
-cd n8n-workflows/deployment
-sudo bash deploy-n8n.sh
-```
-
----
-
-## 🔐 Security Notes
-
-**CRITICAL:** This directory should NEVER contain actual credentials or secrets.
-
-- ✅ Workflow JSON files (exported from n8n)
-- ✅ Credential templates with placeholder values
-- ✅ Documentation and deployment scripts
-- ❌ Actual API keys, tokens, or passwords
-- ❌ WhatsApp Business API credentials
-- ❌ Backend API keys
-
-All credentials are stored in n8n's credential system and never committed to git.
-
----
-
-## 📋 Workflows Overview
-
-### Workflow A: Coupon Capture
-- **File:** `workflows/coupon-capture.json`
-- **Trigger:** WhatsApp webhook (message starts with "KUPON")
-- **Purpose:** Validate and consume coupon tokens
-- **Backend API:** `POST /api/integrations/coupons/consume`
-
-### Workflow B: Claim Redemption
-- **File:** `workflows/claim-redemption.json`
-- **Trigger:** WhatsApp webhook (message equals "kupon kullan")
-- **Purpose:** Process redemption claims (4 coupons → free massage)
-- **Backend API:** `POST /api/integrations/coupons/claim`
-
-### Workflow C: Balance Check
-- **File:** `workflows/balance-check.json`
-- **Trigger:** WhatsApp webhook (message equals "durum")
-- **Purpose:** Return customer's coupon balance
-- **Backend API:** `GET /api/integrations/coupons/wallet/:phone`
-
-### Workflow D: Opt-Out
-- **File:** `workflows/opt-out.json`
-- **Trigger:** WhatsApp webhook (message equals "iptal")
-- **Purpose:** Opt customer out of marketing messages
-- **Backend API:** `POST /api/integrations/coupons/opt-out`
-
----
-
-## 🔗 Integration with Backend
-
-n8n workflows communicate with the backend API at `http://localhost:3001/api/integrations/coupons/*`
-
-**Authentication:** All integration endpoints require API key authentication:
-```
-Authorization: Bearer <N8N_API_KEY>
-```
-
-The API key is stored in:
-- Backend: `.env` file as `N8N_API_KEY`
-- n8n: Credential system as "Backend API Key"
-
----
-
-## 🧪 Testing
+## Testing
 
 ### Local Testing
+
 ```bash
 # Test webhook with curl
 curl -X POST http://localhost:5678/webhook/whatsapp \
   -H "Content-Type: application/json" \
-  -d '{
-    "from": "905551234567",
-    "text": {
-      "body": "KUPON ABC123DEF456"
-    }
-  }'
+  -H "x-hub-signature-256: sha256=<signature>" \
+  -d @test-payload.json
+
+# Run test script
+./deployment/test-webhooks.sh
 ```
 
-### Test Checklist
-- [ ] Valid token consumption
-- [ ] Invalid token handling
-- [ ] Expired token handling
-- [ ] Duplicate message deduplication
-- [ ] Rate limiting (11th request)
-- [ ] Network error retry
-- [ ] Turkish message formatting
-- [ ] Staff notifications
+### Monitoring
 
----
+- **n8n UI**: View execution history at http://localhost:5678
+- **Backend Logs**: Check coupon-related events
+- **Database**: Query `coupon_events` table for audit trail
 
-## 📊 Monitoring
+## Security
 
-### Check n8n Execution Logs
-- In n8n UI: Executions tab → View execution details
-- Check for errors, retries, and execution times
+- ✅ Webhook signature verification (Meta Cloud API)
+- ✅ API key authentication for backend calls
+- ✅ HTTPS required for all external endpoints
+- ✅ PII masking in logs
+- ✅ No credentials in git repository
 
-### Check Backend Logs
+## Backup and Restore
+
 ```bash
-tail -f ../backend/logs/app.log | grep coupon
+# Backup workflows
+./deployment/backup.sh
+
+# Restore workflows
+# Import JSON files from backup directory in n8n UI
 ```
 
-### Check n8n Service Status
-```bash
-sudo systemctl status n8n
-```
+## Troubleshooting
 
----
+For comprehensive troubleshooting, see **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** which covers:
 
-## 🔄 Backup and Restore
+- Quick diagnostics checklist
+- Common issues by category (webhooks, API, deduplication, phone numbers, messages, notifications, performance)
+- Debugging techniques
+- Emergency procedures
+- Monitoring and alerts
+- Prevention best practices
 
-### Backup Workflows
-```bash
-cd n8n-workflows
-bash scripts/backup.sh
-```
+### Quick Fixes
 
-### Restore Workflows
-```bash
-# Import from backup directory
-# In n8n UI: Import from File → Select from backups/workflows-YYYYMMDD/
-```
+**Webhook not receiving messages**: Check n8n service status, verify webhook URL in Meta dashboard, test with ngrok
 
----
+**Backend API returns 401**: Verify API key matches between n8n credentials and backend .env
 
-## 📚 Documentation
+**Turkish characters broken**: Ensure Content-Type includes `charset=utf-8`
 
-- **Workflow Details:** See `docs/<workflow-name>.md` for each workflow
-- **Credentials Setup:** See `docs/credentials-setup.md`
-- **Deployment Guide:** See `deployment/DEPLOYMENT.md`
-- **Backup Procedures:** See `deployment/BACKUP.md`
-- **Steering Guide:** See `../.kiro/steering/n8n-development.md`
+**Rate limiting issues**: Check `coupon_rate_limits` table, verify Istanbul timezone configuration
 
----
+See individual workflow documentation in `docs/` for workflow-specific troubleshooting.
 
-## 🎯 Why Separate from Core Kiosk?
+## Development Guidelines
 
-1. **Clear Boundaries:** n8n is an external automation tool, not part of the kiosk codebase
-2. **Independent Deployment:** n8n can be deployed, updated, and scaled independently
-3. **Security Isolation:** Credentials and workflows are isolated from application code
-4. **Version Control:** Workflow JSON files are versioned separately from application code
-5. **Team Collaboration:** Different teams can work on workflows vs. application code
+- Test workflows locally before deploying
+- Export workflows after changes
+- Document all modifications
+- Follow patterns in `../.kiro/steering/n8n-development.md`
+- Keep credentials in n8n credential system only
 
----
+## Support
 
-## 🚨 Important Notes
+For detailed development patterns and best practices, see:
+- `docs/turkish-message-templates.md` - Turkish message templates ⭐
+- `../.kiro/steering/n8n-development.md` - Development guide
+- `../.kiro/specs/whatsapp-coupon-system/` - Full specification
+- `../docs/n8n-coupon-plan.md` - Implementation plan
 
-- n8n runs on port 5678 (separate from backend port 3001)
-- n8n has its own systemd service (separate from backend PM2)
-- n8n has its own nginx configuration (separate from kiosk nginx)
-- n8n has its own backup schedule (2:30 AM vs backend 2:00 AM)
-- n8n workflows are exported as JSON and version controlled
-- n8n credentials are NEVER committed to git
+## Status
 
----
+- ✅ Directory structure created
+- ⏳ Workflows in development
+- ⏳ Documentation in progress
+- ⏳ Deployment scripts pending
 
-## 🔗 Related Documentation
-
-- Backend API Routes: `../backend/src/routes/`
-- Coupon System Spec: `../.kiro/specs/whatsapp-coupon-system/`
-- Implementation Plan: `../docs/n8n-coupon-plan.md`
-- Deployment Guide: `../deployment/raspberry-pi/README.md`
-
----
-
-**Last Updated:** 2025-11-28  
-**Status:** ✅ Ready for implementation  
-**Maintainer:** See project README for contact information
+Last Updated: 2025-11-28

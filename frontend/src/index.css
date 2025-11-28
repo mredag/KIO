@@ -2,9 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme CSS Variables */
+:root {
+  /* Light mode colors (default) */
+  --color-background: 249 250 251; /* gray-50 */
+  --color-surface: 255 255 255; /* white */
+  --color-primary: 2 132 199; /* sky-600 */
+  --color-primary-hover: 3 105 161; /* sky-700 */
+  --color-text-primary: 17 24 39; /* gray-900 */
+  --color-text-secondary: 107 114 128; /* gray-500 */
+  --color-border: 229 231 235; /* gray-200 */
+  --color-success: 5 150 105; /* emerald-600 */
+  --color-warning: 217 119 6; /* amber-600 */
+  --color-error: 220 38 38; /* red-600 */
+  --color-info: 2 132 199; /* sky-600 */
+}
+
+:root.dark {
+  /* Dark mode colors */
+  --color-background: 17 24 39; /* gray-900 */
+  --color-surface: 31 41 55; /* gray-800 */
+  --color-primary: 56 189 248; /* sky-400 */
+  --color-primary-hover: 14 165 233; /* sky-500 */
+  --color-text-primary: 249 250 251; /* gray-50 */
+  --color-text-secondary: 156 163 175; /* gray-400 */
+  --color-border: 55 65 81; /* gray-700 */
+  --color-success: 52 211 153; /* emerald-400 */
+  --color-warning: 251 191 36; /* amber-400 */
+  --color-error: 248 113 113; /* red-400 */
+  --color-info: 56 189 248; /* sky-400 */
+}
+
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900;
+    background-color: rgb(var(--color-background));
+    color: rgb(var(--color-text-primary));
+    transition: background-color 200ms ease-in-out, color 200ms ease-in-out;
+  }
+
+  /* Dark mode body styles */
+  .dark body,
+  :root.dark body {
+    @apply bg-gray-900 text-gray-50;
   }
 
   /* Custom scrollbar styling for kiosk mode */

@@ -55,3 +55,11 @@ backups/
 /massages-export.json
 /settings-import.sql
 /surveys-import.sql
+
+# WhatsApp test files (contain tokens)
+test-whatsapp.js
+test-*.js
+verify-*.js
+check-*.js
+list-*.js
+WHATSAPP_SETUP_PROGRESS.md

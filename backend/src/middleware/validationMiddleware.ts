@@ -42,12 +42,31 @@ export const validateMassage: ValidationChain[] = [
     .withMessage('Massage name must be between 1 and 100 characters')
     .escape(),
   
-  body('short_description')
+  // Accept both camelCase (from frontend) and snake_case (legacy)
+  body('shortDescription')
+    .if(body('short_description').not().exists())
     .trim()
     .notEmpty()
     .withMessage('Short description is required')
     .isLength({ min: 1, max: 200 })
     .withMessage('Short description must be between 1 and 200 characters')
+    .escape(),
+  
+  body('short_description')
+    .if(body('shortDescription').not().exists())
+    .trim()
+    .notEmpty()
+    .withMessage('Short description is required')
+    .isLength({ min: 1, max: 200 })
+    .withMessage('Short description must be between 1 and 200 characters')
+    .escape(),
+  
+  // Accept both camelCase (from frontend) and snake_case (legacy)
+  body('longDescription')
+    .optional()
+    .trim()
+    .isLength({ max: 2000 })
+    .withMessage('Long description must not exceed 2000 characters')
     .escape(),
   
   body('long_description')
@@ -62,14 +81,38 @@ export const validateMassage: ValidationChain[] = [
     .trim()
     .escape(),
   
+  // Accept both camelCase and snake_case
+  body('mediaType')
+    .optional({ nullable: true, checkFalsy: true })
+    .isIn(['video', 'photo'])
+    .withMessage('Media type must be either "video" or "photo"'),
+  
   body('media_type')
     .optional({ nullable: true, checkFalsy: true })
     .isIn(['video', 'photo'])
     .withMessage('Media type must be either "video" or "photo"'),
   
+  // Accept both camelCase and snake_case
+  body('mediaUrl')
+    .optional()
+    .trim(),
+  
   body('media_url')
     .optional()
     .trim(),
+  
+  // Accept both camelCase and snake_case
+  body('purposeTags')
+    .optional()
+    .isArray()
+    .withMessage('Purpose tags must be an array'),
+  
+  body('purposeTags.*')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage('Purpose tag must be between 1 and 50 characters'),
   
   body('purpose_tags')
     .optional()
@@ -85,8 +128,8 @@ export const validateMassage: ValidationChain[] = [
   
   body('sessions')
     .optional()
-    .isArray()
-    .withMessage('Sessions must be an array'),
+    .isArray({ min: 1 })
+    .withMessage('Sessions must be a non-empty array'),
   
   body('sessions.*.name')
     .optional()
@@ -100,20 +143,44 @@ export const validateMassage: ValidationChain[] = [
     .isFloat({ min: 0 })
     .withMessage('Session price must be a positive number'),
   
+  // Accept both camelCase and snake_case
+  body('isFeatured')
+    .optional()
+    .isBoolean()
+    .withMessage('is_featured must be a boolean'),
+  
   body('is_featured')
     .optional()
     .isBoolean()
     .withMessage('is_featured must be a boolean'),
+  
+  // Accept both camelCase and snake_case
+  body('isCampaign')
+    .optional()
+    .isBoolean()
+    .withMessage('is_campaign must be a boolean'),
   
   body('is_campaign')
     .optional()
     .isBoolean()
     .withMessage('is_campaign must be a boolean'),
   
+  // Accept both camelCase and snake_case
+  body('layoutTemplate')
+    .optional()
+    .isIn(['price-list', 'info-tags', 'media-focus', 'immersive-showcase'])
+    .withMessage('layout_template must be one of price-list, info-tags, media-focus, or immersive-showcase'),
+  
   body('layout_template')
     .optional()
     .isIn(['price-list', 'info-tags', 'media-focus', 'immersive-showcase'])
     .withMessage('layout_template must be one of price-list, info-tags, media-focus, or immersive-showcase'),
+  
+  // Accept both camelCase and snake_case
+  body('sortOrder')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Sort order must be a non-negative integer'),
   
   body('sort_order')
     .optional()

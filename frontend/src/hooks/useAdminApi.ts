@@ -392,3 +392,201 @@ export function useDownloadBackup() {
     },
   });
 }
+
+// Coupon System
+
+// Issue new token
+export function useIssueToken() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      try {
+        const response = await api.post('/admin/coupons/issue');
+        return response.data;
+      } catch (error: any) {
+        // Handle specific coupon errors
+        if (error.response?.status === 500) {
+          throw new Error('Failed to generate unique token. Please try again.');
+        }
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'coupons', 'recent-tokens'] });
+    },
+  });
+}
+
+// Get recent tokens (last 10)
+export function useRecentTokens() {
+  return useQuery({
+    queryKey: ['admin', 'coupons', 'recent-tokens'],
+    queryFn: async () => {
+      const response = await api.get('/admin/coupons/recent-tokens');
+      return response.data.map((token: any) => ({
+        token: token.token,
+        status: token.status,
+        createdAt: new Date(token.created_at),
+        expiresAt: new Date(token.expires_at),
+        usedAt: token.used_at ? new Date(token.used_at) : null,
+      }));
+    },
+  });
+}
+
+// Get wallet by phone
+export function useCouponWallet(phone: string) {
+  return useQuery({
+    queryKey: ['admin', 'coupons', 'wallet', phone],
+    queryFn: async () => {
+      try {
+        const response = await api.get(`/admin/coupons/wallet/${phone}`);
+        return {
+          phone: response.data.phone,
+          couponCount: response.data.coupon_count,
+          totalEarned: response.data.total_earned,
+          totalRedeemed: response.data.total_redeemed,
+          optedInMarketing: response.data.opted_in_marketing === 1,
+          lastMessageAt: response.data.last_message_at ? new Date(response.data.last_message_at) : null,
+          updatedAt: new Date(response.data.updated_at),
+        };
+      } catch (error: any) {
+        // Handle 404 - wallet not found
+        if (error.response?.status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    enabled: !!phone && phone.length > 0,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404 (wallet not found)
+      if (error?.response?.status === 404) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+  });
+}
+
+// Get coupon events by phone
+export function useCouponEvents(phone: string) {
+  return useQuery({
+    queryKey: ['admin', 'coupons', 'events', phone],
+    queryFn: async () => {
+      try {
+        const response = await api.get(`/admin/coupons/events/${phone}`);
+        return response.data.map((event: any) => ({
+          id: event.id,
+          phone: event.phone,
+          event: event.event,
+          token: event.token,
+          details: event.details,
+          createdAt: new Date(event.created_at),
+        }));
+      } catch (error: any) {
+        // Handle 404 - no events found
+        if (error.response?.status === 404) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    enabled: !!phone && phone.length > 0,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404
+      if (error?.response?.status === 404) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+  });
+}
+
+// Get redemptions with optional filters
+export function useCouponRedemptions(filters?: { status?: string; limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: ['admin', 'coupons', 'redemptions', filters],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/admin/coupons/redemptions', {
+          params: filters,
+        });
+        return response.data.map((redemption: any) => ({
+          id: redemption.id,
+          phone: redemption.phone,
+          couponsUsed: redemption.coupons_used,
+          status: redemption.status,
+          note: redemption.note,
+          createdAt: new Date(redemption.created_at),
+          notifiedAt: redemption.notified_at ? new Date(redemption.notified_at) : null,
+          completedAt: redemption.completed_at ? new Date(redemption.completed_at) : null,
+          rejectedAt: redemption.rejected_at ? new Date(redemption.rejected_at) : null,
+        }));
+      } catch (error: any) {
+        // Handle errors gracefully
+        if (error.response?.status === 404) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    retry: 2,
+  });
+}
+
+// Complete redemption
+export function useCompleteRedemption() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (redemptionId: string) => {
+      try {
+        const response = await api.post(`/admin/coupons/redemptions/${redemptionId}/complete`);
+        return response.data;
+      } catch (error: any) {
+        // Handle specific errors
+        if (error.response?.status === 404) {
+          throw new Error('Redemption not found. It may have already been processed.');
+        }
+        if (error.response?.status === 400) {
+          throw new Error(error.response.data?.error || 'Invalid redemption request.');
+        }
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'coupons', 'redemptions'] });
+    },
+  });
+}
+
+// Reject redemption
+export function useRejectRedemption() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ redemptionId, note }: { redemptionId: string; note: string }) => {
+      try {
+        if (!note || note.trim().length === 0) {
+          throw new Error('A rejection note is required.');
+        }
+        const response = await api.post(`/admin/coupons/redemptions/${redemptionId}/reject`, { note });
+        return response.data;
+      } catch (error: any) {
+        // Handle specific errors
+        if (error.response?.status === 404) {
+          throw new Error('Redemption not found. It may have already been processed.');
+        }
+        if (error.response?.status === 400) {
+          throw new Error(error.response.data?.error || 'Invalid redemption request. A note is required.');
+        }
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'coupons', 'redemptions'] });
+    },
+  });
+}

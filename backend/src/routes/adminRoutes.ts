@@ -328,7 +328,7 @@ export function createAdminRoutes(
   /**
    * GET /api/admin/dashboard
    * Return system status and metrics
-   * Requirements: 13.1, 13.2, 13.3, 13.4, 13.5
+   * Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 2.1, 3.1, 3.2, 5.1
    */
   router.get('/dashboard', authMiddleware, (_req: Request, res: Response) => {
     try {
@@ -366,9 +366,91 @@ export function createAdminRoutes(
         ? syncedResponses[0].last_sync_attempt 
         : null;
 
+      // Generate survey trend data (last 7 days)
+      const surveyTrend: Array<{ date: string; value: number }> = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        const dateStr = date.toISOString();
+        
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextDateStr = nextDate.toISOString();
+        
+        const dayResponses = db.getSurveyResponses({ 
+          startDate: dateStr,
+          endDate: nextDateStr 
+        });
+        
+        surveyTrend.push({
+          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: dayResponses.length,
+        });
+      }
+
+      // Generate coupon trend data (this week) - mock data for now
+      // TODO: Replace with actual coupon data when coupon system is integrated
+      const couponTrend: Array<{ date: string; value: number }> = [];
+      const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      for (let i = 0; i < 7; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        couponTrend.push({
+          date: daysOfWeek[date.getDay()],
+          value: Math.floor(Math.random() * 10), // Mock data
+        });
+      }
+
+      // Get recent activity (last 10 events)
+      const recentActivity: Array<{
+        id: string;
+        type: string;
+        message: string;
+        timestamp: string;
+        href?: string;
+      }> = [];
+
+      // Add recent survey responses
+      const recentResponses = allResponses.slice(0, 5);
+      recentResponses.forEach((response: any) => {
+        const survey = db.getSurveyById(response.survey_id);
+        recentActivity.push({
+          id: `survey-${response.id}`,
+          type: 'survey',
+          message: `New survey response: ${survey?.name || 'Unknown Survey'}`,
+          timestamp: response.created_at,
+          href: `/admin/survey-responses`,
+        });
+      });
+
+      // Add kiosk mode changes from logs
+      const logs = db.getLogs({ limit: 20 });
+      logs.forEach((log: any) => {
+        if (log.message.includes('Kiosk mode changed')) {
+          recentActivity.push({
+            id: `kiosk-${log.id}`,
+            type: 'kiosk',
+            message: log.message,
+            timestamp: log.timestamp,
+            href: '/admin/kiosk-control',
+          });
+        }
+      });
+
+      // Sort by timestamp and limit to 10
+      recentActivity.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      const limitedActivity = recentActivity.slice(0, 10);
+
+      // Get active coupons count (mock for now)
+      const activeCoupons = 0; // TODO: Replace with actual coupon count
+
       res.json({
         todaySurveyCount: todayResponses.length,
         totalSurveyCount: allResponses.length,
+        activeCoupons,
         currentKioskMode: kioskState.mode,
         activeSurveyId: kioskState.active_survey_id,
         currentContent,
@@ -376,6 +458,9 @@ export function createAdminRoutes(
         kioskOnline,
         sheetsLastSync,
         pendingSyncCount: unsyncedResponses.length,
+        surveyTrend,
+        couponTrend,
+        recentActivity: limitedActivity,
       });
     } catch (error) {
       console.error('Dashboard error:', error);
@@ -446,19 +531,20 @@ export function createAdminRoutes(
   router.post('/massages', authMiddleware, validateMassage, handleValidationErrors, async (req: Request, res: Response) => {
     try {
       // Transform camelCase to snake_case for database
+      // Accept both camelCase (from frontend) and snake_case (from tests/legacy)
       const massageData = {
         name: req.body.name,
-        short_description: req.body.shortDescription,
-        long_description: req.body.longDescription,
+        short_description: req.body.shortDescription || req.body.short_description,
+        long_description: req.body.longDescription || req.body.long_description,
         duration: req.body.duration,
-        media_type: req.body.mediaType,
-        media_url: req.body.mediaUrl,
-        purpose_tags: req.body.purposeTags,
+        media_type: req.body.mediaType || req.body.media_type,
+        media_url: req.body.mediaUrl || req.body.media_url,
+        purpose_tags: req.body.purposeTags || req.body.purpose_tags,
         sessions: req.body.sessions,
-        is_featured: req.body.isFeatured,
-        is_campaign: req.body.isCampaign,
-        layout_template: req.body.layout_template || req.body.layoutTemplate,
-        sort_order: req.body.sortOrder,
+        is_featured: req.body.isFeatured !== undefined ? req.body.isFeatured : req.body.is_featured,
+        is_campaign: req.body.isCampaign !== undefined ? req.body.isCampaign : req.body.is_campaign,
+        layout_template: req.body.layoutTemplate || req.body.layout_template,
+        sort_order: req.body.sortOrder !== undefined ? req.body.sortOrder : req.body.sort_order,
       };
 
       const massage = db.createMassage(massageData);

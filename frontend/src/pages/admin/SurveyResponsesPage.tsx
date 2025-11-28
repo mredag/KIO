@@ -3,6 +3,17 @@ import AdminLayout from '../../layouts/AdminLayout';
 import { useSurveyResponses, useSurveyTemplates, useDeleteSurveyResponses, useDeleteAllSurveyResponses } from '../../hooks/useAdminApi';
 import { formatDateTime, formatDate } from '../../lib/dateFormatter';
 import { useTranslation } from 'react-i18next';
+import { DataTable, Column } from '../../components/admin/DataTable';
+
+interface ResponseRow {
+  id: string;
+  surveyId: string;
+  surveyTitle: string;
+  surveyType: string;
+  timestamp: Date | string;
+  answers: Record<string, any>;
+  synced: boolean;
+}
 
 export default function SurveyResponsesPage() {
   const { t } = useTranslation('admin');
@@ -12,6 +23,7 @@ export default function SurveyResponsesPage() {
   const [endDate, setEndDate] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<'all' | 'survey' | null>(null);
+  const [selectedResponse, setSelectedResponse] = useState<ResponseRow | null>(null);
 
   // Build filters object
   const filters: any = {};
@@ -100,9 +112,10 @@ export default function SurveyResponsesPage() {
     }
   };
 
-  const formatTimestamp = (date: Date | string) => {
-    return formatDateTime(date);
-  };
+  // Kept for future use
+  // const formatTimestamp = (date: Date | string) => {
+  //   return formatDateTime(date);
+  // };
 
   const formatAnswers = (answers: Record<string, any>, surveyId: string) => {
     const survey = surveys?.find((s) => s.id === surveyId);
@@ -116,6 +129,71 @@ export default function SurveyResponsesPage() {
       })
       .join(' | ');
   };
+
+  // Prepare data for DataTable
+  const tableData: ResponseRow[] = responses?.map((response) => {
+    const survey = surveys?.find((s) => s.id === response.surveyId);
+    return {
+      id: response.id,
+      surveyId: response.surveyId,
+      surveyTitle: survey ? survey.title : t('responses.unknownSurvey'),
+      surveyType: survey ? (survey.type === 'satisfaction' ? 'Memnuniyet' : 'Keşif') : '',
+      timestamp: response.timestamp,
+      answers: response.answers,
+      synced: response.synced,
+    };
+  }) || [];
+
+  const columns: Column<ResponseRow>[] = [
+    {
+      id: 'survey',
+      header: t('responses.surveyType'),
+      accessor: (row) => (
+        <div>
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-50">
+            {row.surveyTitle}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {row.surveyType}
+          </div>
+        </div>
+      ),
+      sortable: false,
+    },
+    {
+      id: 'timestamp',
+      header: t('responses.timestamp'),
+      accessor: (row) => formatDateTime(row.timestamp),
+      sortable: true,
+    },
+    {
+      id: 'answers',
+      header: t('responses.answers'),
+      accessor: (row) => (
+        <div className="max-w-md truncate text-sm text-gray-900 dark:text-gray-50">
+          {formatAnswers(row.answers, row.surveyId)}
+        </div>
+      ),
+      sortable: false,
+    },
+    {
+      id: 'synced',
+      header: t('responses.syncStatus'),
+      accessor: (row) => (
+        <span
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+            row.synced
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+          }`}
+        >
+          {row.synced ? t('responses.synced') : t('responses.pending')}
+        </span>
+      ),
+      sortable: true,
+      width: '120px',
+    },
+  ];
 
   if (isLoading) {
     return (
@@ -253,126 +331,118 @@ export default function SurveyResponsesPage() {
           )}
         </div>
 
-        {/* Results Count */}
-        <div className="text-sm text-gray-600">
-          {t('responses.showingCount', { count: responses?.length || 0 })}
-        </div>
+        {/* DataTable */}
+        <DataTable
+          data={tableData}
+          columns={columns}
+          searchable={false}
+          emptyMessage={t('responses.noResponses')}
+          isLoading={isLoading}
+          onRowClick={(row) => setSelectedResponse(row)}
+        />
 
-        {/* Desktop Table View */}
-        <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {t('responses.surveyType')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {t('responses.timestamp')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {t('responses.answers')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {t('responses.syncStatus')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {!responses || responses.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
-                      {t('responses.noResponses')}
-                    </td>
-                  </tr>
-                ) : (
-                  responses.map((response) => {
-                    const survey = surveys?.find((s) => s.id === response.surveyId);
-                    return (
-                      <tr key={response.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">
-                            {survey ? survey.title : t('responses.unknownSurvey')}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {survey ? (survey.type === 'satisfaction' ? 'Memnuniyet' : 'Keşif') : ''}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatTimestamp(response.timestamp)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-900 max-w-md truncate">
-                            {formatAnswers(response.answers, response.surveyId)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              response.synced
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}
-                          >
-                            {response.synced ? t('responses.synced') : t('responses.pending')}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Response Detail Modal */}
+        {selectedResponse && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50">
+                    {selectedResponse.surveyTitle}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    {formatDateTime(selectedResponse.timestamp)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedResponse(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
 
-        {/* Mobile Card View */}
-        <div className="md:hidden space-y-4">
-          {!responses || responses.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-              {t('responses.noResponses')}
-            </div>
-          ) : (
-            responses.map((response) => {
-              const survey = surveys?.find((s) => s.id === response.surveyId);
-              return (
-                <div key={response.id} className="bg-white rounded-lg shadow p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-medium text-gray-900">
-                        {survey ? survey.title : t('responses.unknownSurvey')}
-                      </h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {survey ? (survey.type === 'satisfaction' ? 'Memnuniyet' : 'Keşif') : ''}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        response.synced
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {response.synced ? t('responses.synced') : t('responses.pending')}
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  {/* Survey Info */}
+                  <div className="flex items-center gap-4">
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                      selectedResponse.surveyType === 'Memnuniyet'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                        : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    }`}>
+                      {selectedResponse.surveyType}
+                    </span>
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                      selectedResponse.synced
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                    }`}>
+                      {selectedResponse.synced ? '✓ Synced' : '⏳ Pending'}
                     </span>
                   </div>
 
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">{t('responses.timestampLabel')}</span>{' '}
-                    {formatTimestamp(response.timestamp)}
-                  </div>
-
-                  <div className="text-sm text-gray-900">
-                    <span className="font-medium text-gray-600">{t('responses.answersLabel')}</span>
-                    <div className="mt-1 text-sm break-words">
-                      {formatAnswers(response.answers, response.surveyId)}
+                  {/* Answers */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 uppercase tracking-wide">
+                      Responses
+                    </h4>
+                    <div className="space-y-4">
+                      {Object.entries(selectedResponse.answers).map(([questionId, answer], index) => {
+                        const survey = surveys?.find((s) => s.id === selectedResponse.surveyId);
+                        const question = survey?.questions.find((q) => q.id === questionId);
+                        
+                        return (
+                          <div key={questionId} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+                            <div className="flex items-start gap-3 mb-2">
+                              <span className="flex-shrink-0 w-6 h-6 bg-sky-100 dark:bg-sky-900 text-sky-600 dark:text-sky-400 rounded-full flex items-center justify-center text-xs font-semibold">
+                                {index + 1}
+                              </span>
+                              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {question?.text || questionId}
+                              </p>
+                            </div>
+                            <div className="ml-9">
+                              {question?.type === 'rating' ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-2xl font-bold text-gray-900 dark:text-gray-50">
+                                    {answer}
+                                  </span>
+                                  <span className="text-yellow-500">★</span>
+                                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                                    / 5
+                                  </span>
+                                </div>
+                              ) : (
+                                <p className="text-gray-900 dark:text-gray-50 font-medium">
+                                  {answer}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setSelectedResponse(null)}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (

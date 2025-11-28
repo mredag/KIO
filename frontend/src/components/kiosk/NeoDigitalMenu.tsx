@@ -13,6 +13,7 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
   const [sliderIndex, setSliderIndex] = useState(0);
   const [heroFade, setHeroFade] = useState(1);
   const [showPricing, setShowPricing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const featuredOnly = useMemo(() => massages.filter((m) => m.isFeatured), [massages]);
   const sliderList = useMemo(
     () => (featuredOnly.length > 0 ? featuredOnly : massages),
@@ -22,6 +23,7 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
   const dragScrollLeft = useRef(0);
+  const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (massages.length > 0) {
@@ -36,8 +38,9 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
   );
 
   // Auto-advance through featured massages (fallback to full list)
+  // Pauses when user interacts
   useEffect(() => {
-    if (sliderList.length < 2) return;
+    if (sliderList.length < 2 || isPaused) return;
     let idx = sliderList.findIndex((m) => m.id === selected?.id);
     if (idx === -1) idx = 0;
     const interval = setInterval(() => {
@@ -46,7 +49,7 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
       setSliderIndex(idx);
     }, 8000);
     return () => clearInterval(interval);
-  }, [sliderList, selected?.id]);
+  }, [sliderList, selected?.id, isPaused]);
 
   useEffect(() => {
     if (!selected) return;
@@ -77,6 +80,30 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
   const handleDragEnd = () => {
     isDragging.current = false;
   };
+
+  // Pause auto-advance when user interacts
+  const handleUserInteraction = () => {
+    setIsPaused(true);
+    
+    // Clear existing timeout
+    if (pauseTimeoutRef.current) {
+      clearTimeout(pauseTimeoutRef.current);
+    }
+    
+    // Resume auto-advance after 60 seconds of inactivity
+    pauseTimeoutRef.current = setTimeout(() => {
+      setIsPaused(false);
+    }, 60000);
+  };
+
+  // Cleanup pause timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (pauseTimeoutRef.current) {
+        clearTimeout(pauseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!selected) {
     return (
@@ -209,7 +236,10 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
             {selected.sessions.length > 0 && (
               <div className="flex justify-end">
                 <button
-                  onClick={() => setShowPricing((v) => !v)}
+                  onClick={() => {
+                    setShowPricing((v) => !v);
+                    handleUserInteraction();
+                  }}
                   className="px-4 py-2 rounded-full bg-white/10 border border-white/20 text-xs uppercase tracking-[0.16em] text-white hover:bg-white/20 transition-colors"
                 >
                   {showPricing ? t('menu.hidePricing') : t('menu.showPricing')}
@@ -255,6 +285,7 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
                   onClick={() => {
                     setSelected(massage);
                     setSliderIndex(idx);
+                    handleUserInteraction();
                   }}
                   className={`min-w-[200px] max-w-[220px] text-left rounded-2xl border ${
                     isSelected

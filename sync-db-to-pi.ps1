@@ -32,9 +32,12 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Stopping Pi backend..." -ForegroundColor Yellow
 ssh ${PiUser}@${PiHost} "pm2 stop kiosk-backend"
 
-# Copy database
+# Copy database to correct location (backend uses backend/data/kiosk.db)
 Write-Host "Copying database to Pi..." -ForegroundColor Yellow
 scp data/kiosk.db ${PiUser}@${PiHost}:~/spa-kiosk/backend/data/kiosk.db
+
+# Also remove WAL files to prevent corruption
+ssh ${PiUser}@${PiHost} "rm -f ~/spa-kiosk/backend/data/kiosk.db-wal ~/spa-kiosk/backend/data/kiosk.db-shm"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to copy database" -ForegroundColor Red

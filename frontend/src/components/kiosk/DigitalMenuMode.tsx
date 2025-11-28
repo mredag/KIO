@@ -20,6 +20,7 @@ export default function DigitalMenuMode() {
   const [selectedMassage, setSelectedMassage] = useState<Massage | null>(null);
   const [isSlideshow, setIsSlideshow] = useState(false);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastInteractionRef = useRef<number>(Date.now());
 
   // Sort massages by sortOrder (Requirement 4.7) with memoization to reduce recalculations
   const sortedMassages = useMemo(
@@ -41,6 +42,9 @@ export default function DigitalMenuMode() {
 
   // Reset inactivity timer (Requirement 3.1, 3.4)
   const resetInactivityTimer = useCallback(() => {
+    // Update last interaction timestamp
+    lastInteractionRef.current = Date.now();
+
     // Clear existing timer
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
@@ -142,7 +146,11 @@ export default function DigitalMenuMode() {
       <MassageList
         massages={sortedMassages}
         selectedMassageId={selectedMassage?.id || null}
-        onSelectMassage={setSelectedMassage}
+        onSelectMassage={(massage) => {
+          setSelectedMassage(massage);
+          // Reset timer when user selects a massage (they're reading)
+          resetInactivityTimer();
+        }}
       />
 
       {/* Right panel - Massage details (4/5 width) (Requirement 2.3) */}

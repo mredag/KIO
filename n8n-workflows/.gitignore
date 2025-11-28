@@ -1,0 +1,45 @@
+# n8n Workflows - Git Ignore
+
+# CRITICAL: Never commit credentials or secrets
+credentials/*.json
+!credentials/credentials-template.json
+
+# Backup files (contain workflow data and potentially sensitive info)
+backups/
+
+# n8n database (if copied locally)
+*.sqlite3
+*.db
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node modules (if any scripts use npm)
+node_modules/
+
+# Deployment artifacts
+deployment/*.key
+deployment/*.pem
+deployment/*.crt

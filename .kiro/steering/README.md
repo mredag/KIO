@@ -46,6 +46,7 @@ Only 2 additional files for specific scenarios:
 | Any error | ULTIMATE_GUIDE.md → Decision Tree |
 | UI testing needed | ui-ux-testing.md |
 | Deploying to Pi | deployment-raspberry-pi.md |
+| n8n workflows | n8n-development.md |
 
 ---
 
@@ -56,10 +57,11 @@ Only 2 additional files for specific scenarios:
 ├── ULTIMATE_GUIDE.md          ⭐ START HERE (95% of tasks)
 ├── README.md                  📖 This file
 ├── ui-ux-testing.md          🎨 Puppeteer testing (when needed)
-└── deployment-raspberry-pi.md 🚀 Pi deployment (when needed)
+├── deployment-raspberry-pi.md 🚀 Pi deployment (when needed)
+└── n8n-development.md        🤖 n8n workflow development (WhatsApp coupon system)
 ```
 
-**That's it!** Just 4 files total. Everything else is consolidated into ULTIMATE_GUIDE.md.
+**That's it!** Just 5 files total. Everything else is consolidated into ULTIMATE_GUIDE.md.
 
 ---
 

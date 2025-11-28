@@ -1,24 +1,24 @@
-# n8n WhatsApp coupon automation
+# n8n WhatsApp Coupon Automation - Implementation Plan
 
 Plan to add the WhatsApp + n8n coupon flow to the kiosk system with minimal backend changes and clear operations steps.
 
-## Goals (your request + upgrades)
+## Goals
 - Reception issues coupons after each massage; kiosk shows a QR that opens WhatsApp to n8n with the coupon code.
-- Customers send the coupon; when they reach 4, they can send “kupon kullan” to claim a free massage.
+- Customers send the coupon; when they reach 4, they can send "kupon kullan" to claim a free massage.
 - Notify reception/admin when a customer qualifies or redeems.
 - Simplify ops: single kiosk QR with dynamic token text; no reprints.
-- Extend with engagement features (referrals, off-peak boosters, opt-in marketing) and keep everything auditable and rate limited.
+- Keep everything auditable, rate limited, and secure.
 
-## Data model (SQLite)
+## Data Model (SQLite)
 New tables alongside existing schema:
 
 ```sql
 CREATE TABLE IF NOT EXISTS coupon_tokens (
   token TEXT PRIMARY KEY,
   status TEXT CHECK(status IN ('issued','used','expired')) DEFAULT 'issued',
-  issued_for TEXT,              -- massage/session or campaign id
-  kiosk_id TEXT,                -- which kiosk issued it
-  phone TEXT,                   -- filled when used
+  issued_for TEXT,
+  kiosk_id TEXT,
+  phone TEXT,
   expires_at DATETIME,
   used_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS coupon_tokens (
 );
 
 CREATE TABLE IF NOT EXISTS coupon_wallets (
-  phone TEXT PRIMARY KEY,       -- E.164 normalized
+  phone TEXT PRIMARY KEY,
   coupon_count INTEGER DEFAULT 0,
   total_earned INTEGER DEFAULT 0,
   total_redeemed INTEGER DEFAULT 0,
@@ -43,72 +43,150 @@ CREATE TABLE IF NOT EXISTS coupon_redemptions (
   note TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   notified_at DATETIME,
-  completed_at DATETIME
+  completed_at DATETIME,
+  rejected_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS coupon_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   phone TEXT,
-  event TEXT,                   -- issued | coupon_awarded | redemption_attempt | redemption_granted | redemption_blocked
+  event TEXT,
   token TEXT,
-  details TEXT,                 -- JSON blob
+  details TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coupon_rate_limits (
+  phone TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  count INTEGER DEFAULT 1,
+  reset_at DATETIME NOT NULL,
+  PRIMARY KEY (phone, endpoint)
 );
 
 CREATE INDEX IF NOT EXISTS idx_coupon_wallets_phone ON coupon_wallets(phone);
 CREATE INDEX IF NOT EXISTS idx_coupon_tokens_status ON coupon_tokens(status);
 CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_phone ON coupon_redemptions(phone);
+CREATE INDEX IF NOT EXISTS idx_coupon_rate_limits_reset ON coupon_rate_limits(reset_at);
 ```
 
-## Backend endpoints (minimal surface)
-- `POST /api/admin/coupons/issue` (auth): create a single-use `token`, return `{ token, waUrl, waText }`. Kiosk can render one static QR: `https://wa.me/<WA_NUMBER>?text=KUPON%20<TOKEN>`; kiosk just swaps the token text.
-- `POST /api/integrations/coupons/consume` (n8n → backend): body `{ phone, token, rawMessage }`. Validates token (unused, not expired), increments wallet, marks token used, logs an event, returns `{ ok, balance, remainingToFree }`.
-- `POST /api/integrations/coupons/claim` (n8n → backend): body `{ phone }`. If `coupon_count >= 4`, subtract 4, create `coupon_redemptions` row with `status='pending'`, respond `{ ok: true, redemptionId }`. If not enough, respond `{ ok: false, balance, needed }`.
-- `POST /api/admin/coupons/redeem/:id/complete` (auth): staff marks the free session as delivered; updates redemption status.
-- `GET /api/admin/coupons/wallet/:phone` (auth): quick lookup for support/merging numbers.
-- Optional: SSE or polling endpoint to surface `coupon_redemptions` status inside the admin panel.
+## Backend Endpoints
 
-## Message format and QR
-- Issue QR text: `https://wa.me/<WA_NUMBER>?text=KUPON%20<TOKEN>` (token uppercase). Keep one printed/static QR; kiosk injects the current token text so you never reprint.
-- Claim QR text: `https://wa.me/<WA_NUMBER>?text=kupon%20kullan`.
-- Commands (matches your flow, adds small QoL):
-  - `KUPON <TOKEN>` → awards 1 coupon.
-  - `kupon kullan` → attempts redemption (needs 4).
-  - `durum` → returns balance and next reward.
-  - `iptal` → opts out of marketing.
+### Admin Endpoints (Session Auth Required)
+- `POST /api/admin/coupons/issue` - Create token, return `{ token, waUrl, waText }`
+- `GET /api/admin/coupons/wallet/:phone` - Lookup wallet by phone
+- `GET /api/admin/coupons/redemptions` - List redemptions with filtering
+- `POST /api/admin/coupons/redemptions/:id/complete` - Mark complete
+- `POST /api/admin/coupons/redemptions/:id/reject` - Reject with note, refund coupons
+- `GET /api/admin/coupons/events/:phone` - Get event history
 
-## n8n workflows
-- **Workflow A: Coupon capture** (your QR → WhatsApp idea)
-  1) Trigger: WhatsApp inbound webhook. Filter message starting with `KUPON`.
-  2) Normalize phone to E.164, parse token.
-  3) HTTP POST to `/api/integrations/coupons/consume`.
-  4) If success: reply with `You now have X/4 coupons` and remind to send `kupon kullan` at 4/4.
-  5) If failure (invalid/used/expired): reply politely and ask them to show receipt at desk.
-  6) Log to `coupon_events` via same endpoint or a second HTTP node.
+### Integration Endpoints (API Key Auth Required)
+- `POST /api/integrations/coupons/consume` - Validate token, increment wallet
+- `POST /api/integrations/coupons/claim` - Create redemption if 4+ coupons
+- `GET /api/integrations/coupons/wallet/:phone` - Get balance
+- `POST /api/integrations/coupons/opt-out` - Set opted_in_marketing=0
 
-- **Workflow B: Claim free session** (your “kupon kullan” command)
-  1) Trigger: WhatsApp inbound where body equals `kupon kullan` (case-insensitive, trim).
-  2) HTTP POST to `/api/integrations/coupons/claim`.
-  3) If `ok`: reply confirmation + redemption id. Notify staff group on WhatsApp and optionally POST to admin backend for on-screen alert.
-  4) If insufficient coupons: reply with balance and an upsell (optional).
+### Authentication & Security
+- Admin: session auth (existing middleware)
+- Integration: `Authorization: Bearer <API_KEY>` header
+- API key in `.env` as `N8N_API_KEY`
+- HTTPS only in production
+- Rate limits: 10/day consume, 5/day claim, reset midnight Istanbul
+- Return 429 with Retry-After when exceeded
+- PII masking in logs (last 4 digits phone, first/last 4 chars token)
+- Webhook signature verification
 
-- **Workflow C: Balance/opt-in**
-  - Keyword `durum`: GET wallet from backend, reply with `X/4` and next reward.
-  - Keyword `iptal`: set `opted_in_marketing=0` in wallet table.
+## Token Specifications
+- Format: 12 uppercase alphanumeric chars
+- Generation: Cryptographically secure random
+- Collision: Retry up to 3 times
+- Expiration: 24 hours
+- Single-use: Status 'issued' → 'used'
+- Cleanup: Daily 3AM, delete expired (7d) and used (90d)
 
-- **Workflow D: Engagement upgrades** (my suggested improvements)
-  - Off-peak booster: scheduled “double coupons” during slow hours, throttled per day.
-  - Referrals: keyword `referans <phone>` to grant both parties +1 after first use.
-  - Post-visit follow-up: 24h later ask for quick rating; good → upsell, bad → alert staff.
+## Redemption Lifecycle
+- pending: Created on "kupon kullan" with 4+ coupons
+- completed: Staff marks complete after service
+- rejected: Staff rejects with note, refunds 4 coupons
+- Auto-expire: 30 days, refund coupons
+- Idempotent: Duplicate claims return existing ID
 
-## Raspberry Pi n8n install (systemd)
+
+## Turkish Message Templates
+
+### Customer Messages
+- **Coupon awarded**: "✅ Kuponunuz eklendi! Toplam: X/4 kupon. 4 kupona ulaştığınızda 'kupon kullan' yazarak ücretsiz masajınızı alabilirsiniz."
+- **Balance check**: "📊 Kupon durumunuz: X/4 kupon toplandı. Y kupon daha toplamanız gerekiyor."
+- **Redemption success**: "🎉 Tebrikler! 4 kuponunuz kullanıldı. Redemption ID: <ID>. Resepsiyona bu kodu göstererek ücretsiz masajınızı alabilirsiniz."
+- **Invalid token**: "❌ Bu kupon geçersiz veya kullanılmış. Lütfen resepsiyonla iletişime geçin."
+- **Expired token**: "❌ Bu kuponun süresi dolmuş. Lütfen resepsiyonla iletişime geçin."
+- **Insufficient coupons**: "📊 Henüz yeterli kuponunuz yok. Mevcut: X/4 kupon. Y kupon daha toplamanız gerekiyor."
+- **Rate limit**: "⏳ Çok fazla istek gönderdiniz. Lütfen daha sonra tekrar deneyin."
+- **Opt-out**: "✅ Pazarlama mesajlarından çıkarıldınız. Kupon sistemi normal şekilde çalışmaya devam edecek."
+
+### Staff Notifications
+- **New redemption**: "🔔 Yeni kupon kullanımı! Müşteri: <PHONE_MASKED> | Redemption ID: <ID> | Tarih: <TIMESTAMP>"
+- **Completed**: "✅ Kupon kullanımı tamamlandı. Redemption ID: <ID> | Tamamlayan: <ADMIN_USERNAME>"
+- **Rejected**: "❌ Kupon kullanımı reddedildi. Redemption ID: <ID> | Sebep: <NOTE>"
+- **Abuse**: "⚠️ Şüpheli aktivite tespit edildi. Telefon: <PHONE_MASKED> | Detay: <DETAILS>"
+- **Daily summary**: "📈 Günlük özet: <COUNT> kupon verildi, <COUNT> kullanım yapıldı."
+
+## n8n Workflows (MVP)
+
+### Workflow A: Coupon Capture
+1. Trigger: WhatsApp webhook, verify Meta signature
+2. Filter: Message starts with `KUPON`
+3. Deduplicate: Cache phone+token for 60s
+4. Normalize: E.164 phone, parse 12-char token
+5. POST `/api/integrations/coupons/consume` with API key
+6. Retry: 3x with exponential backoff
+7. Success: Reply with Turkish template
+8. Errors: 401/403 (auth), 429 (rate limit), 400 (invalid), 500 (generic)
+9. Backend logs `coupon_awarded` event
+
+### Workflow B: Claim Redemption
+1. Trigger: WhatsApp webhook, verify signature
+2. Filter: Message equals `kupon kullan`
+3. Deduplicate: Cache phone for 5min
+4. Normalize: E.164 phone
+5. POST `/api/integrations/coupons/claim` with API key
+6. Retry: 3x with backoff
+7. Success: Reply customer + notify staff group
+8. Insufficient: Reply with balance
+9. Backend logs `redemption_attempt` and `redemption_granted`/`redemption_blocked`
+
+### Workflow C: Balance Check
+1. Trigger: WhatsApp webhook
+2. Filter: Message equals `durum`
+3. GET `/api/integrations/coupons/wallet/:phone`
+4. Reply with balance or "no coupons yet"
+
+### Workflow D: Opt-Out
+1. Trigger: WhatsApp webhook
+2. Filter: Message equals `iptal`
+3. POST `/api/integrations/coupons/opt-out`
+4. Reply with confirmation
+
+### Idempotency
+- n8n: In-memory cache (60s tokens, 5min claims)
+- Backend: Token status check, pending redemption check
+- All endpoints return same result for duplicates
+
+### Event Logging
+- `issued`: Token created
+- `coupon_awarded`: Token consumed (phone, token, balance)
+- `redemption_attempt`: Customer sends "kupon kullan"
+- `redemption_granted`: Redemption created
+- `redemption_blocked`: Failed (reason: insufficient, rate_limit, etc.)
+
+## Raspberry Pi n8n Install
+
 ```bash
 sudo apt update && sudo apt install -y build-essential
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 sudo npm install -g n8n
 
-# n8n service user
 sudo useradd -m -s /bin/bash n8n
 sudo mkdir -p /var/lib/n8n
 sudo chown n8n:n8n /var/lib/n8n
@@ -146,47 +224,62 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now n8n
 ```
 
-Expose via nginx/Caddy with HTTPS so WhatsApp webhooks succeed.
+Expose via nginx/Caddy with HTTPS.
 
-## WhatsApp provider (Meta Cloud API default)
-- Keep a single business number.
-- Set webhook to `https://<domain>/webhook` (n8n URL), subscribe to `messages`.
-- Store secrets in n8n credentials; do not put tokens in the repo.
-- Rate limit outbound sends; respect 24-hour window rules.
+## WhatsApp Setup
+- Single business number
+- Webhook: `https://<domain>/webhook` (n8n)
+- Subscribe to `messages` events
+- Store secrets in n8n credentials
+- Verify webhook signatures
 
-## Security & anti-abuse
-- Tokens are single-use with short expiry (e.g., 24h). Tie each token to kiosk id and optional massage id.
-- Normalize phone numbers and log every event (`coupon_events`) for audits.
-- Rate limit per phone/day on the backend endpoints (reuse existing middleware pattern).
-- Validate keywords strictly; drop unexpected attachments/locations.
-- Opt-out respected; store flag in `coupon_wallets`.
+## Non-Functional Requirements
 
-## Implementation checklist
-- [ ] Add the four tables above to `schema.sql` + typings in `database/types.ts`.
-- [ ] Add DB helpers in `DatabaseService` (issue token, consume token, get wallet, create redemption, mark redemption complete).
-- [ ] Add admin + integration routes (see endpoints section) with auth/rate limiting similar to existing routes.
-- [ ] Add a small admin UI page: issue token (copy button for WhatsApp text/QR), view wallet by phone, list pending redemptions.
-- [ ] Build the two n8n workflows (coupon capture, claim), add staff notification step, and test with a sandbox WhatsApp number.
-- [ ] Document message templates (TR + EN) and keep them in i18n files for consistency.
+### Performance
+- 99.5% uptime (9 AM - 10 PM Istanbul)
+- n8n replies within 5 seconds
+- Backend API within 500ms
+- Handle 100 req/min
 
-## Raspberry Pi OS compatibility (full stack + n8n)
-- Target: Raspberry Pi OS Bookworm (arm64 or armhf). Use Node.js 20.x for parity with the project.
-- Prereqs for builds (better-sqlite3 needs native build):
-  ```bash
-  sudo apt update
-  sudo apt install -y build-essential python3 sqlite3 libsqlite3-dev pkg-config
-  ```
-- Install Node 20 (arm build):
-  ```bash
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt install -y nodejs
-  ```
-- Install repo deps (root workspace):
-  ```bash
-  npm install
-  ```
-- Run locally on Pi:
-  - Dev: `npm run dev` (concurrent backend + frontend).
-  - Prod: `npm run build`, then `npm run start:prod` (backend); `npm run preview --workspace=frontend` for a prod-like frontend.
-- n8n on Pi: instructions above (systemd) work on Raspberry Pi OS; binaries are arm-compatible. Use HTTPS ingress (nginx/Caddy) for WhatsApp webhooks.
-- Performance tips on Pi: keep `EXECUTIONS_PROCESS=main` for low memory; enable swap if RAM-constrained; use `pm2` or systemd to keep backend/frontend/n8n alive; avoid heavy cron overlap during peak hours.
+### Monitoring
+- Alert: n8n service down
+- Alert: 5 consecutive backend errors
+- Alert: Database > 1 GB
+- Alert: TLS expires within 30 days
+- Alert: Rate limit rejections > 50/hour
+
+### Backup
+- Daily 2:00 AM Istanbul
+- SQLite database + n8n workflows
+- Retain 30 days
+- Store in `/var/backups/coupon-system/`
+
+### Timezone
+- All jobs: Europe/Istanbul
+- Rate limits reset: midnight Istanbul
+- Auto DST adjustment
+- Store UTC, display Istanbul
+
+## Implementation Checklist
+- [ ] Add 5 tables to `schema.sql` + types
+- [ ] Add DB helpers in `DatabaseService`
+- [ ] Add admin routes (session auth)
+- [ ] Add integration routes (API key auth)
+- [ ] Implement rate limiting middleware
+- [ ] Add token cleanup cron (3 AM)
+- [ ] Add redemption expiration cron (3 AM)
+- [ ] Add admin UI page (issue, wallet, redemptions)
+- [ ] Build 4 n8n workflows
+- [ ] Configure WhatsApp webhook
+- [ ] Set up n8n systemd service
+- [ ] Configure nginx/Caddy HTTPS
+- [ ] Add Turkish i18n templates
+- [ ] Set up monitoring/alerting
+- [ ] Configure backups
+- [ ] Test with sandbox number
+
+## Phase 2 (Future)
+- Off-peak double coupons
+- Referral system
+- Post-visit follow-up
+- Birthday rewards, VIP tiers

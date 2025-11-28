@@ -30,6 +30,11 @@ export const securityHeaders = helmet({
     },
   },
   
+  // Disable COOP for HTTP (only works with HTTPS)
+  crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: false,
+  originAgentCluster: false,
+  
   // X-DNS-Prefetch-Control: Controls browser DNS prefetching
   dnsPrefetchControl: { allow: false },
   

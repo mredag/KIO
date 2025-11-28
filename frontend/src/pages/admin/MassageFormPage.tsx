@@ -54,7 +54,7 @@ interface FormData {
   sessions: Session[];
   isFeatured: boolean;
   isCampaign: boolean;
-  layoutTemplate: 'price-list' | 'info-tags' | 'media-focus';
+  layoutTemplate: 'price-list' | 'info-tags' | 'media-focus' | 'immersive-showcase';
   sortOrder: number;
 }
 

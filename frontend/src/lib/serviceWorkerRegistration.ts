@@ -137,10 +137,14 @@ export async function clearCaches() {
         }
       };
       
-      navigator.serviceWorker.controller.postMessage(
-        { type: 'CLEAR_CACHE' },
-        [messageChannel.port2]
-      );
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage(
+          { type: 'CLEAR_CACHE' },
+          [messageChannel.port2]
+        );
+      } else {
+        reject(new Error('No service worker controller available'));
+      }
     });
   }
   

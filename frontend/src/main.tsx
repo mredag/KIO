@@ -7,16 +7,19 @@ import { queryClient, persister } from './lib/queryClient';
 import './i18n/config'; // Initialize i18n
 import * as serviceWorkerRegistration from './lib/serviceWorkerRegistration';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
-      <PersistQueryClientProvider
-        client={queryClient}
-        persistOptions={{ persister }}
-      >
-        <App />
-      </PersistQueryClientProvider>
+      <ToastProvider>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{ persister }}
+        >
+          <App />
+        </PersistQueryClientProvider>
+      </ToastProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

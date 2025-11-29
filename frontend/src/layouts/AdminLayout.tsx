@@ -1,7 +1,6 @@
 import { ReactNode, useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { ToastProvider } from '../contexts/ToastContext';
 import ToastContainer from '../components/ui/Toast';
 import Sidebar from '../components/admin/Sidebar';
 import Header from '../components/admin/Header';
@@ -70,7 +69,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   return (
-    <ToastProvider>
+    <>
       {/* Skip to content link for keyboard navigation */}
       <a
         href="#main-content"
@@ -116,6 +115,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Search modal */}
         <SearchModal isOpen={searchModalOpen} onClose={handleSearchClose} />
       </div>
-    </ToastProvider>
+    </>
   );
 }

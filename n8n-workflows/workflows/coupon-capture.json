@@ -12,7 +12,10 @@
       "name": "WhatsApp Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300],
+      "position": [
+        250,
+        300
+      ],
       "webhookId": "whatsapp-coupon-webhook"
     },
     {
@@ -23,7 +26,10 @@
       "name": "Verify Signature",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [
+        450,
+        300
+      ]
     },
     {
       "parameters": {
@@ -41,7 +47,10 @@
       "name": "Filter KUPON Messages",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [650, 300]
+      "position": [
+        650,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,7 +60,10 @@
       "name": "Parse Phone & Token",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [850, 200]
+      "position": [
+        850,
+        200
+      ]
     },
     {
       "parameters": {
@@ -61,7 +73,10 @@
       "name": "Check Deduplication",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1050, 200]
+      "position": [
+        1050,
+        200
+      ]
     },
     {
       "parameters": {
@@ -78,7 +93,10 @@
       "name": "Is Duplicate?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1250, 200]
+      "position": [
+        1250,
+        200
+      ]
     },
     {
       "parameters": {
@@ -110,7 +128,10 @@
       "name": "Consume Token API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1450, 100],
+      "position": [
+        1450,
+        100
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "backend-api-key",
@@ -126,7 +147,10 @@
       "name": "Update Cache",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1650, 100]
+      "position": [
+        1650,
+        100
+      ]
     },
     {
       "parameters": {
@@ -201,7 +225,10 @@
       "name": "Response Handler",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 1,
-      "position": [1850, 100]
+      "position": [
+        1850,
+        100
+      ]
     },
     {
       "parameters": {
@@ -211,7 +238,10 @@
       "name": "Format Success Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 0]
+      "position": [
+        2050,
+        0
+      ]
     },
     {
       "parameters": {
@@ -221,7 +251,10 @@
       "name": "Format Invalid Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 100]
+      "position": [
+        2050,
+        100
+      ]
     },
     {
       "parameters": {
@@ -231,7 +264,10 @@
       "name": "Format Expired Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 200]
+      "position": [
+        2050,
+        200
+      ]
     },
     {
       "parameters": {
@@ -241,7 +277,10 @@
       "name": "Format Rate Limit Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 300]
+      "position": [
+        2050,
+        300
+      ]
     },
     {
       "parameters": {
@@ -251,7 +290,10 @@
       "name": "Format Error Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 400]
+      "position": [
+        2050,
+        400
+      ]
     },
     {
       "parameters": {
@@ -284,7 +326,10 @@
       "name": "Send WhatsApp Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [2250, 200],
+      "position": [
+        2250,
+        200
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "whatsapp-api",
@@ -302,7 +347,10 @@
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [2450, 200]
+      "position": [
+        2450,
+        200
+      ]
     }
   ],
   "connections": {
@@ -504,5 +552,8 @@
   "settings": {},
   "staticData": {
     "cache": {}
-  }
+  },
+  "active": false,
+  "versionId": "44643f45-7c62-43a0-b0e4-b099231420db",
+  "pinData": {}
 }

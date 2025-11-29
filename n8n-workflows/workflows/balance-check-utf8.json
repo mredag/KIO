@@ -1,10 +1,10 @@
-{
-  "name": "WhatsApp Opt-Out",
+﻿{
+  "name": "WhatsApp Balance Check",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "whatsapp-optout",
+        "path": "whatsapp-balance",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -12,11 +12,8 @@
       "name": "WhatsApp Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [
-        250,
-        300
-      ],
-      "webhookId": "whatsapp-optout-webhook"
+      "position": [250, 300],
+      "webhookId": "whatsapp-balance-webhook"
     },
     {
       "parameters": {
@@ -26,10 +23,7 @@
       "name": "Verify Signature",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [
-        450,
-        300
-      ]
+      "position": [450, 300]
     },
     {
       "parameters": {
@@ -38,19 +32,16 @@
             {
               "value1": "={{$json.entry[0].changes[0].value.messages[0].text.body.toLowerCase()}}",
               "operation": "equals",
-              "value2": "iptal"
+              "value2": "durum"
             }
           ]
         }
       },
-      "id": "filter-iptal",
-      "name": "Filter 'iptal'",
+      "id": "filter-durum",
+      "name": "Filter 'durum'",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [
-        650,
-        300
-      ]
+      "position": [650, 300]
     },
     {
       "parameters": {
@@ -60,25 +51,13 @@
       "name": "Parse Phone",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [
-        850,
-        300
-      ]
+      "position": [850, 300]
     },
     {
       "parameters": {
-        "url": "http://localhost:3001/api/integrations/coupons/opt-out",
+        "url": "http://localhost:3001/api/integrations/coupons/wallet/={{$json.phone}}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "phone",
-              "value": "={{$json.phone}}"
-            }
-          ]
-        },
         "options": {
           "retry": {
             "enabled": true,
@@ -87,14 +66,11 @@
           }
         }
       },
-      "id": "opt-out-api",
-      "name": "Opt-Out API",
+      "id": "get-wallet-api",
+      "name": "Get Wallet API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [
-        1050,
-        300
-      ],
+      "position": [1050, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "backend-api-key",
@@ -104,16 +80,41 @@
     },
     {
       "parameters": {
-        "functionCode": "// Format opt-out confirmation message\nconst phone = $json.phone;\n\nreturn {\n  phone: phone,\n  message: '✅ Pazarlama bildirimleri kapatıldı. Kupon kazanımı ve kullanımı normal şekilde devam edecek. Tekrar bildirimleri açmak isterseniz lütfen resepsiyonla iletişime geçin.'\n};"
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$statusCode}}",
+              "value2": 200
+            }
+          ]
+        }
       },
-      "id": "format-confirmation",
-      "name": "Format Confirmation",
+      "id": "wallet-exists",
+      "name": "Wallet Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format balance message for existing wallet\nconst balance = $json.couponCount || 0;\nconst remainingToFree = 4 - balance;\nconst phone = $json.phone;\n\nlet message;\nif (balance >= 4) {\n  message = `📊 Kupon durumunuz: ${balance}/4 kupon toplandı. 'kupon kullan' yazarak ücretsiz masajınızı alabilirsiniz!`;\n} else if (balance > 0) {\n  message = `📊 Kupon durumunuz: ${balance}/4 kupon toplandı. ${remainingToFree} kupon daha toplamanız gerekiyor.`;\n} else {\n  message = `📊 Henüz kuponunuz yok. Her masaj sonrası verilen QR kodu okutarak kupon toplayabilirsiniz. 4 kupon topladığınızda ücretsiz masaj kazanırsınız!`;\n}\n\nreturn {\n  phone: phone,\n  message: message\n};"
+      },
+      "id": "format-balance",
+      "name": "Format Balance Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [
-        1250,
-        300
-      ]
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format message for non-existent wallet\nconst phone = $json.phone;\n\nreturn {\n  phone: phone,
+  message: '📊 Henüz kuponunuz yok. Her masaj sonrası verilen QR kodu okutarak kupon toplayabilirsiniz. 4 kupon topladığınızda ücretsiz masaj kazanırsınız!'\n};"
+      },
+      "id": "format-no-wallet",
+      "name": "Format No Wallet Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1450, 400]
     },
     {
       "parameters": {
@@ -146,10 +147,7 @@
       "name": "Send WhatsApp Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [
-        1450,
-        300
-      ],
+      "position": [1650, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "whatsapp-api",
@@ -167,10 +165,7 @@
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        1650,
-        300
-      ]
+      "position": [1850, 300]
     }
   ],
   "connections": {
@@ -189,14 +184,14 @@
       "main": [
         [
           {
-            "node": "Filter 'iptal'",
+            "node": "Filter 'durum'",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Filter 'iptal'": {
+    "Filter 'durum'": {
       "main": [
         [
           {
@@ -211,25 +206,54 @@
       "main": [
         [
           {
-            "node": "Opt-Out API",
+            "node": "Get Wallet API",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Opt-Out API": {
+    "Get Wallet API": {
       "main": [
         [
           {
-            "node": "Format Confirmation",
+            "node": "Wallet Exists?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Format Confirmation": {
+    "Wallet Exists?": {
+      "main": [
+        [
+          {
+            "node": "Format Balance Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format No Wallet Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Balance Message": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format No Wallet Message": {
       "main": [
         [
           {
@@ -253,8 +277,5 @@
     }
   },
   "settings": {},
-  "staticData": {},
-  "active": false,
-  "versionId": "f7bb05a6-eaee-4eda-9353-55dbeb41e532",
-  "pinData": {}
+  "staticData": {}
 }

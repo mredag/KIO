@@ -12,7 +12,10 @@
       "name": "WhatsApp Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300],
+      "position": [
+        250,
+        300
+      ],
       "webhookId": "whatsapp-claim-webhook"
     },
     {
@@ -23,7 +26,10 @@
       "name": "Verify Signature",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [
+        450,
+        300
+      ]
     },
     {
       "parameters": {
@@ -41,7 +47,10 @@
       "name": "Filter 'kupon kullan'",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [650, 300]
+      "position": [
+        650,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,7 +60,10 @@
       "name": "Parse Phone",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [850, 300]
+      "position": [
+        850,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,7 +73,10 @@
       "name": "Check Deduplication",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1050, 300]
+      "position": [
+        1050,
+        300
+      ]
     },
     {
       "parameters": {
@@ -78,7 +93,10 @@
       "name": "Is Duplicate?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1250, 300]
+      "position": [
+        1250,
+        300
+      ]
     },
     {
       "parameters": {
@@ -106,7 +124,10 @@
       "name": "Claim Redemption API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1450, 200],
+      "position": [
+        1450,
+        200
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "backend-api-key",
@@ -122,7 +143,10 @@
       "name": "Update Cache",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1650, 200]
+      "position": [
+        1650,
+        200
+      ]
     },
     {
       "parameters": {
@@ -139,7 +163,10 @@
       "name": "Claim Success?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1850, 200]
+      "position": [
+        1850,
+        200
+      ]
     },
     {
       "parameters": {
@@ -149,7 +176,10 @@
       "name": "Format Success (Customer)",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 100]
+      "position": [
+        2050,
+        100
+      ]
     },
     {
       "parameters": {
@@ -159,7 +189,10 @@
       "name": "Format Insufficient",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 300]
+      "position": [
+        2050,
+        300
+      ]
     },
     {
       "parameters": {
@@ -192,7 +225,10 @@
       "name": "Send Customer Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [2250, 200],
+      "position": [
+        2250,
+        200
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "whatsapp-api",
@@ -208,7 +244,10 @@
       "name": "Format Staff Notification",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [2050, 0]
+      "position": [
+        2050,
+        0
+      ]
     },
     {
       "parameters": {
@@ -241,7 +280,10 @@
       "name": "Send Staff Notification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [2250, 0],
+      "position": [
+        2250,
+        0
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "whatsapp-api",
@@ -259,7 +301,10 @@
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [2450, 200]
+      "position": [
+        2450,
+        200
+      ]
     }
   ],
   "connections": {
@@ -440,5 +485,8 @@
   "settings": {},
   "staticData": {
     "cache": {}
-  }
+  },
+  "active": false,
+  "versionId": "ffb951ce-9d45-4f75-a04f-356743582f11",
+  "pinData": {}
 }

@@ -4,13 +4,118 @@
 
 ---
 
+## 🔴 CRITICAL: Pi Connection Required
+
+**n8n runs on the Raspberry Pi, NOT locally.** When working with n8n:
+
+1. **ALWAYS connect via SSH** to execute n8n commands
+2. **Use n8n CLI** for workflow management (not Puppeteer/browser automation)
+3. **Copy files via SCP** before importing
+
+### Pi Connection Details
+```
+Host: 192.168.1.5
+User: eform-kio
+SSH:  ssh eform-kio@192.168.1.5
+```
+
+### n8n Access
+```
+URL:      http://192.168.1.5:5678
+Email:    admin@spa-kiosk.local
+Password: Admin123!
+```
+
+### Quick Commands (run via SSH)
+```bash
+# Check n8n status
+ssh eform-kio@192.168.1.5 "systemctl status n8n --no-pager"
+
+# Import workflows
+scp n8n-workflows/workflows/*.json eform-kio@192.168.1.5:~/n8n-workflows/
+ssh eform-kio@192.168.1.5 "n8n import:workflow --separate --input=/home/eform-kio/n8n-workflows/"
+
+# Export workflows
+ssh eform-kio@192.168.1.5 "n8n export:workflow --all"
+
+# Activate all workflows
+ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=true"
+
+# Restart n8n
+ssh eform-kio@192.168.1.5 "sudo systemctl restart n8n"
+```
+
+---
+
 ## 🎯 Core Principles
 
 1. **Workflows are code** - Version control workflow JSON exports
-2. **Test locally first** - Use n8n UI for development, export for deployment
-3. **Idempotency matters** - Design workflows to handle retries safely
-4. **Security first** - Never hardcode credentials, use n8n credential system
-5. **Monitor everything** - Log all workflow executions and errors
+2. **Execute on Pi** - All n8n operations happen on the Raspberry Pi via SSH
+3. **Use CLI over UI** - Prefer n8n CLI commands for automation
+4. **Idempotency matters** - Design workflows to handle retries safely
+5. **Security first** - Never hardcode credentials, use n8n credential system
+
+---
+
+## 📋 n8n CLI Reference
+
+### Workflow Commands (run on Pi via SSH)
+```bash
+# List all workflows
+n8n export:workflow --all
+
+# Import single workflow
+n8n import:workflow --input=/path/to/workflow.json
+
+# Import multiple workflows
+n8n import:workflow --separate --input=/path/to/workflows/
+
+# Activate workflow
+n8n update:workflow --id=<WORKFLOW_ID> --active=true
+
+# Deactivate workflow
+n8n update:workflow --id=<WORKFLOW_ID> --active=false
+
+# Activate all workflows
+n8n update:workflow --all --active=true
+
+# Execute workflow manually
+n8n execute --id=<WORKFLOW_ID>
+```
+
+### Credential Commands
+```bash
+# Export credentials (encrypted)
+n8n export:credentials --all
+
+# Export credentials (decrypted - CAREFUL!)
+n8n export:credentials --all --decrypted --output=creds.json
+
+# Import credentials
+n8n import:credentials --input=credentials.json
+```
+
+### Backup Commands
+```bash
+# Full backup
+n8n export:workflow --backup --output=backups/workflows/
+n8n export:credentials --backup --output=backups/credentials/
+```
+
+### Workflow JSON Requirements
+When creating workflow JSON files, include these fields:
+```json
+{
+  "name": "Workflow Name",
+  "active": false,
+  "versionId": "<uuid>",
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "nodes": [...],
+  "connections": {...}
+}
+```
 
 ---
 
@@ -548,7 +653,28 @@ HTTP Request Node:
 
 ---
 
-**Last Updated:** 2025-11-28  
-**Status:** ✅ Ready for implementation  
+## 📊 Current Workflow Status
+
+| Workflow | ID | Status |
+|----------|-----|--------|
+| WhatsApp Balance Check | Z7hznAe9tf5TzyGC | inactive |
+| WhatsApp Claim Redemption | Ncgg7lbKWFUd00GT | inactive |
+| WhatsApp Coupon Capture | MM0rlnDn2xOZQSbA | inactive |
+| WhatsApp Opt-Out | qiCdgSvgQVnz5C3Z | inactive |
+
+### Activate All Workflows
+```bash
+ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=true"
+```
+
+### Credentials Still Needed
+Before activating workflows, create these credentials in n8n UI:
+1. **Backend API Key** (Header Auth): `Authorization: Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=`
+2. **WhatsApp Business API** (Header Auth): `Authorization: Bearer <whatsapp-token>`
+
+---
+
+**Last Updated:** 2025-11-29  
+**Status:** ✅ Workflows imported, credentials pending  
 **Applies to:** WhatsApp Coupon System feature
 

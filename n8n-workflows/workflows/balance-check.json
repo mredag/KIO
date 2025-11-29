@@ -12,7 +12,10 @@
       "name": "WhatsApp Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300],
+      "position": [
+        250,
+        300
+      ],
       "webhookId": "whatsapp-balance-webhook"
     },
     {
@@ -23,7 +26,10 @@
       "name": "Verify Signature",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [
+        450,
+        300
+      ]
     },
     {
       "parameters": {
@@ -41,7 +47,10 @@
       "name": "Filter 'durum'",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [650, 300]
+      "position": [
+        650,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,7 +60,10 @@
       "name": "Parse Phone",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [850, 300]
+      "position": [
+        850,
+        300
+      ]
     },
     {
       "parameters": {
@@ -70,7 +82,10 @@
       "name": "Get Wallet API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1050, 300],
+      "position": [
+        1050,
+        300
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "backend-api-key",
@@ -93,7 +108,10 @@
       "name": "Wallet Exists?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1250, 300]
+      "position": [
+        1250,
+        300
+      ]
     },
     {
       "parameters": {
@@ -103,18 +121,23 @@
       "name": "Format Balance Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1450, 200]
+      "position": [
+        1450,
+        200
+      ]
     },
     {
       "parameters": {
-        "functionCode": "// Format message for non-existent wallet\nconst phone = $json.phone;\n\nreturn {\n  phone: phone,
-  message: '📊 Henüz kuponunuz yok. Her masaj sonrası verilen QR kodu okutarak kupon toplayabilirsiniz. 4 kupon topladığınızda ücretsiz masaj kazanırsınız!'\n};"
+        "functionCode": "// Format message for non-existent wallet\nconst phone = $json.phone;\n\nreturn {\n  phone: phone,\n  message: '📊 Henüz kuponunuz yok. Her masaj sonrası verilen QR kodu okutarak kupon toplayabilirsiniz. 4 kupon topladığınızda ücretsiz masaj kazanırsınız!'\n};"
       },
       "id": "format-no-wallet",
       "name": "Format No Wallet Message",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1450, 400]
+      "position": [
+        1450,
+        400
+      ]
     },
     {
       "parameters": {
@@ -147,7 +170,10 @@
       "name": "Send WhatsApp Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1650, 300],
+      "position": [
+        1650,
+        300
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "whatsapp-api",
@@ -165,7 +191,10 @@
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1850, 300]
+      "position": [
+        1850,
+        300
+      ]
     }
   ],
   "connections": {
@@ -277,5 +306,8 @@
     }
   },
   "settings": {},
-  "staticData": {}
+  "staticData": {},
+  "active": false,
+  "versionId": "859f627f-b83a-4318-a6f3-ac643f18a6b1",
+  "pinData": {}
 }

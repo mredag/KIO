@@ -46,7 +46,13 @@ Only 2 additional files for specific scenarios:
 | Any error | ULTIMATE_GUIDE.md → Decision Tree |
 | UI testing needed | ui-ux-testing.md |
 | Deploying to Pi | deployment-raspberry-pi.md |
-| n8n workflows | n8n-development.md |
+| n8n workflows | n8n-development.md (**connect to Pi via SSH!**) |
+
+## 🔴 n8n Note
+**n8n runs on the Raspberry Pi (192.168.1.5), not locally!**
+- Always use SSH: `ssh eform-kio@192.168.1.5`
+- Use n8n CLI commands, not browser automation
+- See `n8n-development.md` for full details
 
 ---
 
@@ -111,7 +117,7 @@ These steering files have solved:
 
 ---
 
-**Last Updated:** 2025-11-28  
+**Last Updated:** 2025-11-29  
 **Status:** ✅ Streamlined and optimized  
-**Total Files:** 4 (1 ultimate + 2 specialized + 1 readme)  
+**Total Files:** 5 (1 ultimate + 3 specialized + 1 readme)  
 **Coverage:** All critical patterns consolidated

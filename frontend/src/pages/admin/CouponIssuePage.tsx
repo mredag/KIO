@@ -19,7 +19,7 @@ export default function CouponIssuePage() {
 
   const handleIssueToken = async () => {
     try {
-      const result = await issueToken.mutateAsync();
+      const result = await issueToken.mutateAsync({});
       setCurrentToken(result.token);
       setWaUrl(result.waUrl);
       

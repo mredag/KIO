@@ -400,9 +400,12 @@ export function useIssueToken() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: { kioskId?: string; issuedFor?: string }) => {
       try {
-        const response = await api.post('/admin/coupons/issue');
+        const response = await api.post('/admin/coupons/issue', {
+          kioskId: params?.kioskId || 'admin-panel',
+          issuedFor: params?.issuedFor,
+        });
         return response.data;
       } catch (error: any) {
         // Handle specific coupon errors

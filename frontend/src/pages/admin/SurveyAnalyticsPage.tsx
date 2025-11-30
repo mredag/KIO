@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
 import { useSurveyAnalytics, useSurveyTemplates, useDeleteSurveyResponses } from '../../hooks/useAdminApi';
 import { formatDate } from '../../lib/dateFormatter';
@@ -7,6 +8,7 @@ import { KPICard } from '../../components/admin/KPICard';
 import { LazyLineChart } from '../../components/admin/LazyCharts';
 
 export default function SurveyAnalyticsPage() {
+  const { t } = useTranslation('admin');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState<string>('');
@@ -80,7 +82,7 @@ export default function SurveyAnalyticsPage() {
               onClick={() => navigate('/admin/surveys')}
               className="text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 mb-2 flex items-center gap-1 font-medium"
             >
-              ← Back to Surveys
+              ← {t('analytics.backToSurveys')}
             </button>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50">{analytics.survey.title}</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -104,7 +106,7 @@ export default function SurveyAnalyticsPage() {
                 onClick={() => setShowDeleteConfirm(true)}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
-                🗑️ Delete Responses
+                🗑️ {t('analytics.deleteResponses')}
               </button>
             )}
           </div>
@@ -112,11 +114,11 @@ export default function SurveyAnalyticsPage() {
 
         {/* Date Filters */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">Date Filter</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">{t('analytics.dateFilter')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label htmlFor="start-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Start Date
+                {t('analytics.startDate')}
               </label>
               <input
                 type="date"
@@ -128,7 +130,7 @@ export default function SurveyAnalyticsPage() {
             </div>
             <div>
               <label htmlFor="end-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                End Date
+                {t('analytics.endDate')}
               </label>
               <input
                 type="date"
@@ -154,19 +156,19 @@ export default function SurveyAnalyticsPage() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <KPICard
-            title="Total Responses"
+            title={t('analytics.totalResponses')}
             value={analytics.totalResponses}
             icon="📊"
             status="normal"
           />
           <KPICard
-            title="Questions"
+            title={t('analytics.questions')}
             value={analytics.questions.length}
             icon="❓"
             status="normal"
           />
           <KPICard
-            title="Completion Rate"
+            title={t('analytics.completionRate')}
             value={`${completionRate}%`}
             icon="✓"
             status={parseFloat(completionRate) >= 80 ? 'success' : parseFloat(completionRate) >= 50 ? 'normal' : 'warning'}
@@ -177,15 +179,15 @@ export default function SurveyAnalyticsPage() {
         {analytics.timeline && analytics.timeline.length > 0 && (
           <LazyLineChart
             data={trendChartData}
-            title="Response Trend Over Time"
+            title={t('analytics.responseTrend')}
             color="#0284c7"
-            emptyMessage="No response data available"
+            emptyMessage={t('analytics.noResponseData')}
           />
         )}
 
         {/* Question Breakdown */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">Question Breakdown</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">{t('analytics.questionBreakdown')}</h3>
           <div className="space-y-6">
             {analytics.questions.map((question: any, index: number) => (
               <div key={question.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
@@ -199,13 +201,13 @@ export default function SurveyAnalyticsPage() {
                     </div>
                     <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400 ml-11">
                       <span>
-                        Type: <span className="font-medium">{question.type === 'rating' ? 'Rating' : 'Single Choice'}</span>
+                        {t('analytics.type')}: <span className="font-medium">{question.type === 'rating' ? t('analytics.rating') : t('analytics.singleChoice')}</span>
                       </span>
                       <span>
-                        Responses: <span className="font-medium">{question.totalAnswers}</span>
+                        {t('analytics.responses')}: <span className="font-medium">{question.totalAnswers}</span>
                       </span>
                       <span>
-                        Rate: <span className="font-medium">{question.responseRate}%</span>
+                        {t('analytics.rate')}: <span className="font-medium">{question.responseRate}%</span>
                       </span>
                     </div>
                   </div>
@@ -216,24 +218,24 @@ export default function SurveyAnalyticsPage() {
                   <div className="space-y-4 ml-11">
                     <div className="grid grid-cols-3 gap-4">
                       <div className="bg-sky-50 dark:bg-sky-900 rounded-lg p-4">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">Average</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{t('analytics.average')}</div>
                         <div className="text-2xl font-bold text-sky-600 dark:text-sky-400">{question.statistics.average}</div>
                       </div>
                       <div className="bg-emerald-50 dark:bg-emerald-900 rounded-lg p-4">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">Min</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{t('analytics.min')}</div>
                         <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{question.statistics.min}</div>
                       </div>
                       <div className="bg-purple-50 dark:bg-purple-900 rounded-lg p-4">
-                        <div className="text-sm text-gray-600 dark:text-gray-400">Max</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{t('analytics.max')}</div>
                         <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{question.statistics.max}</div>
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Rating Distribution</h4>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('analytics.ratingDistribution')}</h4>
                       {question.statistics.distribution.map((item: any) => (
                         <div key={item.value} className="flex items-center gap-3">
-                          <div className="text-sm text-gray-600 dark:text-gray-400 w-16">Rating {item.value}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400 w-16">{t('analytics.ratingValue', { value: item.value })}</div>
                           <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-8 relative overflow-hidden">
                             <div
                               className="bg-gradient-to-r from-sky-400 to-sky-600 h-full rounded-full flex items-center justify-end pr-3 text-white text-sm font-medium transition-all"
@@ -312,24 +314,23 @@ export default function SurveyAnalyticsPage() {
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">Delete Responses?</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">{t('analytics.deleteConfirmTitle')}</h3>
               <p className="text-gray-700 dark:text-gray-300 mb-6">
-                Are you sure you want to delete <strong>{analytics.totalResponses}</strong> responses from this survey? 
-                This action cannot be undone.
+                {t('analytics.deleteConfirmMessage', { count: analytics.totalResponses })}
               </p>
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                 >
-                  Cancel
+                  {t('analytics.cancel')}
                 </button>
                 <button
                   onClick={handleDeleteResponses}
                   disabled={deleteMutation.isPending}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
-                  {deleteMutation.isPending ? 'Deleting...' : 'Yes, Delete'}
+                  {deleteMutation.isPending ? t('analytics.deleting') : t('analytics.yesDelete')}
                 </button>
               </div>
             </div>

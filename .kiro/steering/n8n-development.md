@@ -107,15 +107,153 @@ When creating workflow JSON files, include these fields:
 ```json
 {
   "name": "Workflow Name",
-  "active": false,
-  "versionId": "<uuid>",
-  "settings": {},
-  "staticData": null,
-  "pinData": {},
+  "versionId": "unique-version-id",
+  "active": true,
+  "settings": { "executionOrder": "v1" },
   "nodes": [...],
   "connections": {...}
 }
 ```
+
+---
+
+## 🔴 CRITICAL: Workflow Creation Best Practices
+
+### 1. Required Fields
+Every workflow JSON MUST have:
+- `name` - Workflow name
+- `versionId` - Unique string (required for import!)
+- `nodes` - Array of node definitions
+- `connections` - Object defining node connections
+- `settings` - At minimum `{ "executionOrder": "v1" }`
+
+### 2. Node Structure
+```json
+{
+  "parameters": { ... },
+  "id": "unique-node-id",
+  "name": "Node Display Name",
+  "type": "n8n-nodes-base.webhook",
+  "typeVersion": 2,
+  "position": [250, 400]
+}
+```
+
+### 3. ⚠️ CRITICAL: Expression Syntax in JSON Body
+
+**NEVER use `JSON.stringify()` with single quotes in expressions!**
+
+```
+❌ WRONG - causes "invalid syntax" error:
+"jsonBody": "={{ JSON.stringify({messaging_product:'whatsapp',to:$json.phone}) }}"
+
+✅ CORRECT - use template syntax directly:
+"jsonBody": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{ $json.phone }}\",\"text\":{\"body\":\"{{ $json.message }}\"}}"
+```
+
+### 4. ⚠️ CRITICAL: WhatsApp Webhook Payload Types
+
+Meta sends TWO types of webhooks - handle both!
+
+```javascript
+// In Parse/Code node:
+const value = body?.entry?.[0]?.changes?.[0]?.value;
+
+// 1. STATUS UPDATES (delivery receipts) - IGNORE these
+if (value?.statuses) {
+  return [{ json: { route: 'ignore', reason: 'status_update' } }];
+}
+
+// 2. ACTUAL MESSAGES - process these
+const messages = value?.messages;
+if (!messages || !messages[0]) {
+  return [{ json: { route: 'ignore', reason: 'no_messages' } }];
+}
+```
+
+### 5. ⚠️ CRITICAL: Use Switch Node Instead of Chained IF Nodes
+
+**IF nodes can have unexpected behavior. Use Switch node for routing:**
+
+```json
+{
+  "parameters": {
+    "rules": {
+      "values": [
+        { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "balance", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "balance" },
+        { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "coupon", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "coupon" }
+      ]
+    },
+    "options": { "fallbackOutput": "extra" }
+  },
+  "type": "n8n-nodes-base.switch",
+  "typeVersion": 3
+}
+```
+
+### 6. ⚠️ CRITICAL: Credential References
+
+**Don't use credential IDs in workflow JSON - they won't match on import!**
+
+Instead, use inline headers (for non-sensitive APIs):
+```json
+{
+  "authentication": "none",
+  "sendHeaders": true,
+  "headerParameters": {
+    "parameters": [
+      { "name": "Authorization", "value": "Bearer YOUR_TOKEN" }
+    ]
+  }
+}
+```
+
+### 7. Connection Format
+```json
+"connections": {
+  "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+  "Parse": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
+  "Router": { "main": [
+    [{ "node": "Handler1", "type": "main", "index": 0 }],
+    [{ "node": "Handler2", "type": "main", "index": 0 }],
+    [{ "node": "Fallback", "type": "main", "index": 0 }]
+  ]}
+}
+```
+
+### 8. Deployment Process
+```bash
+# 1. Copy workflow to Pi
+scp workflow.json eform-kio@192.168.1.5:~/workflow.json
+
+# 2. Deactivate all workflows
+ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=false 2>/dev/null"
+
+# 3. Import workflow
+ssh eform-kio@192.168.1.5 "n8n import:workflow --input=~/workflow.json 2>/dev/null"
+
+# 4. Get new workflow ID
+ssh eform-kio@192.168.1.5 "n8n list:workflow 2>/dev/null | grep 'Workflow Name'"
+
+# 5. Activate workflow
+ssh eform-kio@192.168.1.5 "n8n update:workflow --id=<ID> --active=true 2>/dev/null"
+
+# 6. MUST restart n8n for changes to take effect!
+ssh eform-kio@192.168.1.5 "sudo systemctl restart n8n"
+
+# 7. Wait for startup (10 seconds)
+sleep 10
+```
+
+### 9. Working Workflow Template
+Reference: `n8n-workflows/workflows-v2/whatsapp-final.json`
+
+This is the tested, working WhatsApp coupon workflow with:
+- Proper webhook handling
+- Status update filtering
+- Switch-based routing
+- Correct JSON body syntax
+- Turkish messages
 
 ---
 
@@ -357,6 +495,16 @@ return { message: messages[$json.messageType] };
 
 ## 🔐 Credentials Management
 
+### ⚠️ CRITICAL: Bearer Token Format
+
+**ALWAYS include "Bearer " prefix when using Header Auth credentials!**
+
+Common mistake:
+- ❌ WRONG: `EAASoZBpRZBYVgBQI9tq...` (missing Bearer prefix)
+- ✅ CORRECT: `Bearer EAASoZBpRZBYVgBQI9tq...` (with Bearer and space)
+
+The Authorization header format is: `Authorization: Bearer <token>`
+
 ### Backend API Key
 ```
 Credential Type: Header Auth
@@ -364,11 +512,26 @@ Name: Backend API Key
 Header Name: Authorization
 Header Value: Bearer <API_KEY>
 
+⚠️ MUST include "Bearer " prefix with space!
+
 Usage in HTTP Request Node:
 - Authentication: Backend API Key
 ```
 
-### WhatsApp Business API
+### WhatsApp Business API (Header Auth Method)
+```
+Credential Type: Header Auth
+Name: WhatsApp Business API
+Header Name: Authorization
+Header Value: Bearer <ACCESS_TOKEN>
+
+⚠️ MUST include "Bearer " prefix with space!
+
+Usage in HTTP Request Node:
+- Authentication: WhatsApp Business API
+```
+
+### WhatsApp Business API (Generic Credential Type - Alternative)
 ```
 Credential Type: Generic Credential Type
 Name: WhatsApp Business API
@@ -383,7 +546,10 @@ Usage:
 - Secret: {{$credentials.whatsappSecret}}
 ```
 
-**CRITICAL**: Never commit credentials to git. Store in n8n credential system only.
+**CRITICAL**: 
+- Never commit credentials to git. Store in n8n credential system only.
+- Always include "Bearer " prefix for Header Auth credentials
+- Test credentials immediately after creating/updating
 
 ---
 
@@ -422,6 +588,69 @@ tail -f backend/logs/app.log | grep coupon
 ```
 
 ---
+
+## 🚨 Common Pitfalls & Solutions
+
+### Issue 1: Missing "Bearer " Prefix ⚠️ MOST COMMON
+**Symptom:** 401 Unauthorized or "Invalid token" errors  
+**Cause:** Forgot to include "Bearer " prefix in Header Auth credential  
+**Solution:** 
+```
+❌ WRONG: EAASoZBpRZBYVgBQI9tq...
+✅ CORRECT: Bearer EAASoZBpRZBYVgBQI9tq...
+```
+**Note:** There must be a space after "Bearer"!
+
+### Issue 2: Wrong Credential Type
+**Symptom:** Credential not found or authentication fails  
+**Cause:** Using wrong credential type for the node  
+**Solution:** 
+- For HTTP Request nodes: Use "Header Auth" credential type
+- For WhatsApp nodes: Use "WhatsApp OAuth API" credential type
+- Match credential name exactly in workflow JSON
+
+### Issue 3: Credential Name Mismatch
+**Symptom:** "Credential not found" error  
+**Cause:** Credential name in workflow doesn't match n8n credential name  
+**Solution:** 
+- Check workflow JSON for credential ID/name
+- Ensure n8n credential has exact same name
+- Case-sensitive matching
+
+### Issue 4: Token Expiration
+**Symptom:** Worked before, now getting 401 errors  
+**Cause:** Access token expired (temporary tokens expire in 24 hours)  
+**Solution:** 
+- Use System User tokens (never expire)
+- Regenerate token in Meta Developer Console
+- Update n8n credential with new token (including "Bearer " prefix!)
+
+### Issue 5: Phone Number Format
+**Symptom:** "Invalid parameter" error from WhatsApp API  
+**Cause:** Wrong phone number format  
+**Solution:** 
+- Use format: `905551234567` (no + or spaces)
+- Remove all non-digits before sending
+- For Turkey: prefix with 90, remove leading 0
+
+### Issue 6: Workflow Not Triggering
+**Symptom:** Webhook receives messages but workflow doesn't execute  
+**Cause:** Workflow not activated or wrong webhook URL  
+**Solution:** 
+- Check workflow is active: `n8n list:workflow`
+- Activate: `n8n update:workflow --id=<ID> --active=true`
+- Restart n8n: `sudo systemctl restart n8n`
+- Verify webhook URL in Meta Developer Console
+
+### Issue 7: n8n Changes Not Applied
+**Symptom:** Updated workflow/credential but still using old values  
+**Cause:** n8n needs restart to apply changes  
+**Solution:** 
+```bash
+sudo systemctl restart n8n
+# Wait 5-10 seconds for n8n to fully start
+systemctl status n8n
+```
 
 ## 📊 Monitoring and Debugging
 
@@ -653,28 +882,234 @@ HTTP Request Node:
 
 ---
 
-## 📊 Current Workflow Status
+## 🏗️ Final Working Workflow Architecture
 
-| Workflow | ID | Status |
-|----------|-----|--------|
-| WhatsApp Balance Check | Z7hznAe9tf5TzyGC | inactive |
-| WhatsApp Claim Redemption | Ncgg7lbKWFUd00GT | inactive |
-| WhatsApp Coupon Capture | MM0rlnDn2xOZQSbA | inactive |
-| WhatsApp Opt-Out | qiCdgSvgQVnz5C3Z | inactive |
+The tested, production-ready workflow (`whatsapp-final.json`) uses this architecture:
 
-### Activate All Workflows
-```bash
-ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=true"
+```
+┌─────────────┐     ┌─────────┐     ┌──────────┐
+│   Webhook   │────▶│  Parse  │────▶│  Router  │
+│  (POST)     │     │  (Code) │     │ (Switch) │
+└─────────────┘     └─────────┘     └────┬─────┘
+                                         │
+        ┌────────────────────────────────┼────────────────────────────────┐
+        │              │                 │                │               │
+        ▼              ▼                 ▼                ▼               ▼
+   ┌─────────┐   ┌───────────┐   ┌───────────┐   ┌──────────┐   ┌─────────┐
+   │ Verify  │   │API Coupon │   │API Balance│   │API Claim │   │  Help/  │
+   │Response │   │  (HTTP)   │   │  (HTTP)   │   │  (HTTP)  │   │ OptOut  │
+   └────┬────┘   └─────┬─────┘   └─────┬─────┘   └────┬─────┘   └────┬────┘
+        │              │               │              │              │
+        │              ▼               ▼              ▼              │
+        │        ┌───────────┐   ┌───────────┐   ┌───────────┐      │
+        │        │Fmt Coupon │   │Fmt Balance│   │ Fmt Claim │      │
+        │        │  (Code)   │   │  (Code)   │   │  (Code)   │      │
+        │        └─────┬─────┘   └─────┬─────┘   └─────┬─────┘      │
+        │              │               │              │              │
+        │              └───────────────┼──────────────┴──────────────┘
+        │                              │
+        │                              ▼
+        │                        ┌───────────┐
+        │                        │  Send WA  │
+        │                        │  (HTTP)   │
+        │                        └─────┬─────┘
+        │                              │
+        ▼                              ▼
+   ┌─────────┐                   ┌───────────┐
+   │Challenge│                   │    OK     │
+   │Response │                   │ Response  │
+   └─────────┘                   └───────────┘
 ```
 
-### Credentials Still Needed
-Before activating workflows, create these credentials in n8n UI:
-1. **Backend API Key** (Header Auth): `Authorization: Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=`
-2. **WhatsApp Business API** (Header Auth): `Authorization: Bearer <whatsapp-token>`
+### Node Details
+
+| Node | Type | Purpose |
+|------|------|---------|
+| Webhook | webhook | Receives WhatsApp webhooks (POST /webhook/whatsapp) |
+| Parse | code | Parses payload, filters status updates, extracts command |
+| Router | switch | Routes to correct handler based on command |
+| API Coupon | httpRequest | POST /api/integrations/coupons/consume |
+| API Balance | httpRequest | GET /api/integrations/coupons/wallet/{phone} |
+| API Claim | httpRequest | POST /api/integrations/coupons/claim |
+| Fmt * | code | Formats Turkish response messages |
+| Send WA | httpRequest | Sends WhatsApp reply via Graph API |
+
+### Supported Commands
+
+| Command | Route | Description |
+|---------|-------|-------------|
+| `KUPON <CODE>` | coupon | Consume a coupon token |
+| `DURUM` / `BAKIYE` | balance | Check coupon balance |
+| `KUPON KULLAN` / `KULLAN` | claim | Redeem 4 coupons for free massage |
+| `YARDIM` / `HELP` / `?` | help | Show available commands |
+| `IPTAL` / `DUR` / `STOP` | optout | Opt out of notifications |
 
 ---
 
-**Last Updated:** 2025-11-29  
-**Status:** ✅ Workflows imported, credentials pending  
+## 🔧 Quick Troubleshooting Reference
+
+### Symptom → Solution Table
+
+| Symptom | Likely Cause | Quick Fix |
+|---------|--------------|-----------|
+| Workflow always goes to "ignore" | Status updates not filtered | Add `if (value?.statuses) return ignore` in Parse node |
+| "invalid syntax" in HTTP node | Wrong JSON expression syntax | Use template syntax: `"={\"key\":\"{{ $json.val }}\"}"` |
+| 401 Unauthorized | Missing "Bearer " prefix | Add `Bearer ` (with space) before token |
+| Credential not found | Credential ID mismatch | Use inline headers instead of credential references |
+| Workflow not triggering | Not activated or needs restart | `n8n update:workflow --id=X --active=true` then `sudo systemctl restart n8n` |
+| Changes not applied | n8n caches workflows | `sudo systemctl restart n8n` and wait 10 seconds |
+| Wrong route selected | IF node issues | Replace IF nodes with Switch node |
+| Phone format error | Wrong format for WhatsApp | Use `905551234567` (no + or spaces) |
+
+### Emergency Reset Commands
+
+```bash
+# Full workflow reset on Pi
+ssh eform-kio@192.168.1.5 << 'EOF'
+# Stop n8n
+sudo systemctl stop n8n
+
+# Clear workflow cache (optional - removes all workflows!)
+# rm -rf ~/.n8n/database.sqlite3
+
+# Restart n8n
+sudo systemctl start n8n
+
+# Wait for startup
+sleep 10
+
+# Check status
+systemctl status n8n --no-pager
+EOF
+```
+
+### Test Webhook Manually
+
+```bash
+# Test from local machine (replace with actual ngrok URL in production)
+curl -X POST http://192.168.1.5:5678/webhook/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entry": [{
+      "changes": [{
+        "value": {
+          "messages": [{
+            "from": "905551234567",
+            "text": { "body": "DURUM" }
+          }]
+        }
+      }]
+    }]
+  }'
+```
+
+---
+
+## 📊 Current Workflow Status
+
+### Production Workflow
+| Workflow | File | Status |
+|----------|------|--------|
+| WhatsApp Kupon Final | `n8n-workflows/workflows-v2/whatsapp-final.json` | ✅ Tested & Working |
+
+### Legacy Workflows (Deprecated)
+| Workflow | ID | Status |
+|----------|-----|--------|
+| WhatsApp Balance Check | Z7hznAe9tf5TzyGC | ❌ Deprecated |
+| WhatsApp Claim Redemption | Ncgg7lbKWFUd00GT | ❌ Deprecated |
+| WhatsApp Coupon Capture | MM0rlnDn2xOZQSbA | ❌ Deprecated |
+| WhatsApp Opt-Out | qiCdgSvgQVnz5C3Z | ❌ Deprecated |
+
+### Deploy Final Workflow
+
+```bash
+# 1. Copy to Pi
+scp n8n-workflows/workflows-v2/whatsapp-final.json eform-kio@192.168.1.5:~/whatsapp-final.json
+
+# 2. Deactivate old workflows
+ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=false 2>/dev/null"
+
+# 3. Import new workflow
+ssh eform-kio@192.168.1.5 "n8n import:workflow --input=~/whatsapp-final.json 2>/dev/null"
+
+# 4. Activate
+ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=true 2>/dev/null"
+
+# 5. Restart n8n (REQUIRED!)
+ssh eform-kio@192.168.1.5 "sudo systemctl restart n8n"
+
+# 6. Wait and verify
+sleep 10
+ssh eform-kio@192.168.1.5 "systemctl status n8n --no-pager | head -5"
+```
+
+---
+
+## 🔑 Environment Variables Reference
+
+### Backend (.env)
+```env
+# Required for n8n integration
+N8N_API_KEY=dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=
+
+# WhatsApp Configuration
+WHATSAPP_PHONE_NUMBER_ID=471153662739049
+WHATSAPP_ACCESS_TOKEN=<your-token>
+WHATSAPP_VERIFY_TOKEN=spa-kiosk-verify-token
+WHATSAPP_APP_SECRET=<your-app-secret>
+```
+
+### n8n Service (/etc/systemd/system/n8n.service)
+```ini
+Environment=N8N_PORT=5678
+Environment=WEBHOOK_URL=https://your-domain.com
+Environment=TZ=Europe/Istanbul
+Environment=GENERIC_TIMEZONE=Europe/Istanbul
+```
+
+---
+
+## 📁 File Structure Reference
+
+```
+n8n-workflows/
+├── workflows-v2/
+│   ├── whatsapp-final.json      ✅ Production workflow
+│   ├── whatsapp-debug.json      🔧 Debug version
+│   └── *.json                   📦 Legacy/test workflows
+├── docs/
+│   ├── TROUBLESHOOTING.md       📖 Detailed troubleshooting
+│   ├── MESSAGE_FILTERING.md     📖 Webhook filtering guide
+│   └── turkish-message-templates.md  📖 Turkish messages
+├── deployment/
+│   ├── DEPLOYMENT.md            📖 Deployment guide
+│   └── BACKUP.md                📖 Backup procedures
+└── README.md                    📖 Overview
+```
+
+---
+
+## ✅ Final Checklist
+
+### Before Going Live
+- [ ] `whatsapp-final.json` deployed to Pi
+- [ ] Workflow activated and n8n restarted
+- [ ] WhatsApp webhook URL configured in Meta dashboard
+- [ ] Backend API running on Pi (port 3001)
+- [ ] Test all commands: KUPON, DURUM, KULLAN, YARDIM, IPTAL
+- [ ] Verify Turkish messages display correctly
+- [ ] Check n8n execution logs for errors
+
+### Monitoring
+- [ ] n8n UI accessible at http://192.168.1.5:5678
+- [ ] Check Executions tab for workflow runs
+- [ ] Monitor backend logs: `tail -f ~/spa-kiosk/backend/logs/*.log`
+- [ ] Set up alerts for failed executions (optional)
+
+---
+
+**Last Updated:** 2025-11-30  
+**Status:** ✅ Production-ready workflow documented  
+**Working Workflow:** `n8n-workflows/workflows-v2/whatsapp-final.json`  
 **Applies to:** WhatsApp Coupon System feature
 

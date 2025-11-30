@@ -23,7 +23,7 @@ export const securityHeaders = helmet({
       connectSrc: ["'self'"], // API calls to same origin
       fontSrc: ["'self'", 'data:'],
       objectSrc: ["'none'"],
-      frameSrc: ["'none'"],
+      frameSrc: ["'self'"], // Allow iframes from same origin
       baseUri: ["'self'"],
       formAction: ["'self'"],
       upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,

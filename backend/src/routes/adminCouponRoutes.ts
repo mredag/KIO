@@ -206,11 +206,11 @@ export function createAdminCouponRoutes(
       // Get redemptions
       const redemptions = db.getRedemptions(filters);
 
-      // Transform to camelCase and mask phone numbers
+      // Transform to camelCase
       const transformedRedemptions = redemptions.map((r: any) => ({
         id: r.id,
         phone: r.phone,
-        phoneMasked: '****' + r.phone.slice(-4), // Mask phone for display
+        phoneMasked: r.phone, // Show full phone number
         couponsUsed: r.coupons_used,
         status: r.status,
         note: r.note,
@@ -382,10 +382,10 @@ export function createAdminCouponRoutes(
       const transformedEvents = events.map((e: any) => ({
         id: e.id,
         phone: e.phone,
-        phoneMasked: e.phone ? '****' + e.phone.slice(-4) : null,
+        phoneMasked: e.phone, // Show full phone number
         event: e.event,
         token: e.token,
-        tokenMasked: e.token ? e.token.substring(0, 4) + '****' + e.token.substring(8) : null,
+        tokenMasked: e.token, // Show full token
         details: e.details,
         createdAt: e.createdAt.toISOString(),
       }));

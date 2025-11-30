@@ -35,10 +35,16 @@
   },
   "login": {
     "title": "Yönetim Paneli Girişi",
+    "subtitle": "Yönetim paneline erişmek için giriş yapın",
     "username": "Kullanıcı Adı",
+    "usernamePlaceholder": "Kullanıcı adınızı girin",
     "password": "Şifre",
+    "passwordPlaceholder": "Şifrenizi girin",
+    "rememberMe": "Beni hatırla",
     "button": "Giriş Yap",
-    "error": "Geçersiz kullanıcı adı veya şifre"
+    "signingIn": "Giriş yapılıyor...",
+    "error": "Geçersiz kullanıcı adı veya şifre",
+    "version": "Sürüm"
   },
   "dashboard": {
     "title": "Ana Sayfa",

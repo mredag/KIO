@@ -12,12 +12,24 @@ export default function CouponWalletLookupPage() {
   const [phone, setPhone] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
 
+  // Translate event names
+  const getEventName = (eventType: string): string => {
+    const eventTranslations: Record<string, string> = {
+      'coupon_awarded': 'Kupon Kazanıldı',
+      'redemption_granted': 'Kullanım Onaylandı',
+      'redemption_blocked': 'Kullanım Engellendi',
+      'redemption_attempt': 'Kullanım Denemesi',
+      'balance_checked': 'Bakiye Sorgulandı',
+      'opt_out': 'Bildirimlerden Çıkıldı',
+    };
+    return eventTranslations[eventType] || eventType.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+  };
+
   const { data: wallet, isLoading: walletLoading, error: walletError } = useCouponWallet(searchPhone);
   const { data: events, isLoading: eventsLoading, error: eventsError } = useCouponEvents(searchPhone);
 
   const handleSearch = () => {
-    // Basic E.164 validation
-    const trimmedPhone = phone.trim();
+    let trimmedPhone = phone.trim();
     if (!trimmedPhone) {
       addToast({
         type: 'error',
@@ -27,8 +39,10 @@ export default function CouponWalletLookupPage() {
       return;
     }
 
-    // Check if it starts with + and has digits
-    if (!trimmedPhone.startsWith('+') || !/^\+\d+$/.test(trimmedPhone)) {
+    // Remove all non-digit characters
+    const digitsOnly = trimmedPhone.replace(/\D/g, '');
+    
+    if (!digitsOnly) {
       addToast({
         type: 'error',
         title: t('admin:coupons.invalidPhone'),
@@ -38,7 +52,32 @@ export default function CouponWalletLookupPage() {
       return;
     }
 
-    setSearchPhone(trimmedPhone);
+    // Normalize Turkish phone numbers
+    let normalized = digitsOnly;
+    
+    // If starts with 0, remove it (Turkish local format)
+    if (normalized.startsWith('0')) {
+      normalized = normalized.substring(1);
+    }
+    
+    // If it's 10 digits (Turkish number without country code), add +90
+    if (normalized.length === 10) {
+      normalized = '+90' + normalized;
+    }
+    // If it's 12 digits starting with 90, add +
+    else if (normalized.length === 12 && normalized.startsWith('90')) {
+      normalized = '+' + normalized;
+    }
+    // If already has +, keep it
+    else if (trimmedPhone.startsWith('+')) {
+      normalized = '+' + digitsOnly;
+    }
+    // Otherwise, assume it needs +90
+    else {
+      normalized = '+90' + normalized;
+    }
+
+    setSearchPhone(normalized);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -72,11 +111,11 @@ export default function CouponWalletLookupPage() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="+905551234567"
+                placeholder="5551234567 veya 05551234567"
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100 text-lg font-mono"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {t('admin:coupons.phoneNumberHelp')}
+                Türk telefon numarası girebilirsiniz (örn: 5551234567, 05551234567, +905551234567)
               </p>
             </div>
             <div className="flex items-end">
@@ -259,7 +298,7 @@ export default function CouponWalletLookupPage() {
                           <div className="flex items-start justify-between">
                             <div>
                               <p className="font-medium text-gray-900 dark:text-gray-100">
-                                {event.event.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                {getEventName(event.event)}
                               </p>
                               {event.token && (
                                 <p className="text-sm font-mono text-gray-600 dark:text-gray-400 mt-1">

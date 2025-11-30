@@ -447,12 +447,12 @@ export function useCouponWallet(phone: string) {
         const response = await api.get(`/admin/coupons/wallet/${phone}`);
         return {
           phone: response.data.phone,
-          couponCount: response.data.coupon_count,
-          totalEarned: response.data.total_earned,
-          totalRedeemed: response.data.total_redeemed,
-          optedInMarketing: response.data.opted_in_marketing === 1,
-          lastMessageAt: response.data.last_message_at ? new Date(response.data.last_message_at) : null,
-          updatedAt: new Date(response.data.updated_at),
+          couponCount: response.data.couponCount,
+          totalEarned: response.data.totalEarned,
+          totalRedeemed: response.data.totalRedeemed,
+          optedInMarketing: response.data.optedInMarketing,
+          lastMessageAt: response.data.lastMessageAt ? new Date(response.data.lastMessageAt) : null,
+          updatedAt: new Date(response.data.updatedAt),
         };
       } catch (error: any) {
         // Handle 404 - wallet not found
@@ -483,10 +483,12 @@ export function useCouponEvents(phone: string) {
         return response.data.map((event: any) => ({
           id: event.id,
           phone: event.phone,
+          phoneMasked: event.phoneMasked,
           event: event.event,
           token: event.token,
+          tokenMasked: event.tokenMasked,
           details: event.details,
-          createdAt: new Date(event.created_at),
+          createdAt: new Date(event.createdAt),
         }));
       } catch (error: any) {
         // Handle 404 - no events found
@@ -519,13 +521,14 @@ export function useCouponRedemptions(filters?: { status?: string; limit?: number
         return response.data.map((redemption: any) => ({
           id: redemption.id,
           phone: redemption.phone,
-          couponsUsed: redemption.coupons_used,
+          phoneMasked: redemption.phoneMasked,
+          couponsUsed: redemption.couponsUsed,
           status: redemption.status,
           note: redemption.note,
-          createdAt: new Date(redemption.created_at),
-          notifiedAt: redemption.notified_at ? new Date(redemption.notified_at) : null,
-          completedAt: redemption.completed_at ? new Date(redemption.completed_at) : null,
-          rejectedAt: redemption.rejected_at ? new Date(redemption.rejected_at) : null,
+          createdAt: new Date(redemption.createdAt),
+          notifiedAt: redemption.notifiedAt ? new Date(redemption.notifiedAt) : null,
+          completedAt: redemption.completedAt ? new Date(redemption.completedAt) : null,
+          rejectedAt: redemption.rejectedAt ? new Date(redemption.rejectedAt) : null,
         }));
       } catch (error: any) {
         // Handle errors gracefully

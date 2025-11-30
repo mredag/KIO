@@ -255,7 +255,7 @@ export default function SurveyAnalyticsPage() {
                   <div className="space-y-4 ml-11">
                     {question.statistics.mostSelected && (
                       <div className="bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4">
-                        <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">Most Selected</div>
+                        <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">{t('analytics.mostSelected')}</div>
                         <div className="text-lg font-bold text-emerald-900 dark:text-emerald-100 mt-1">
                           {question.statistics.mostSelected}
                         </div>
@@ -263,7 +263,7 @@ export default function SurveyAnalyticsPage() {
                     )}
 
                     <div className="space-y-2">
-                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Option Distribution</h4>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('analytics.optionDistribution')}</h4>
                       {question.statistics.distribution.map((item: any, idx: number) => {
                         const colors = [
                           'from-sky-400 to-sky-600',

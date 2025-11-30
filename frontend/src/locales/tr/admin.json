@@ -523,6 +523,8 @@
     "max": "Maks",
     "ratingDistribution": "Değerlendirme Dağılımı",
     "ratingValue": "Değerlendirme {{value}}",
+    "mostSelected": "En Çok Seçilen",
+    "optionDistribution": "Seçenek Dağılımı",
     "deleteConfirmTitle": "Yanıtları Sil?",
     "deleteConfirmMessage": "Bu anketten <strong>{{count}}</strong> yanıtı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
     "cancel": "İptal",

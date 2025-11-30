@@ -105,7 +105,7 @@ export function createAdminCouponRoutes(
    * Response:
    * - tokens: Array of recent token objects
    */
-  router.get('/recent-tokens', authMiddleware, (req: Request, res: Response) => {
+  router.get('/recent-tokens', authMiddleware, (_req: Request, res: Response) => {
     try {
       // Get recent tokens from database
       const tokens = db.getRecentTokens(10);

@@ -10,7 +10,7 @@
 
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
-import { CouponToken, CouponWallet, CouponRedemption } from '../database/types.js';
+import { CouponToken, CouponWallet } from '../database/types.js';
 import { TokenGenerator } from './TokenGenerator.js';
 import { PhoneNormalizer } from './PhoneNormalizer.js';
 import { EventLogService } from './EventLogService.js';

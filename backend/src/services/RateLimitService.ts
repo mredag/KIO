@@ -238,7 +238,7 @@ export class RateLimitService {
   resetExpiredCounters(): void {
     const now = new Date().toISOString();
     
-    const result = this.db
+    this.db
       .prepare(
         `DELETE FROM coupon_rate_limits
          WHERE reset_at <= ?`
@@ -302,25 +302,12 @@ export class RateLimitService {
 
     // Create tomorrow's date at midnight in Istanbul
     // We create it as a local date first, then adjust for timezone
-    const tomorrowIstanbulStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${(day + 1).toString().padStart(2, '0')}T00:00:00`;
-    
     // Parse this as if it were in Istanbul timezone
     // To do this, we need to find what UTC time corresponds to midnight Istanbul
     // We'll use the fact that we can format a date in Istanbul timezone and compare
     
     // Create a date object for tomorrow at noon UTC (arbitrary time)
     const testDate = new Date(Date.UTC(year, month, day + 1, 12, 0, 0));
-    
-    // Format it in Istanbul timezone
-    const testInIstanbul = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Europe/Istanbul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(testDate);
     
     // Extract hour from Istanbul time
     const testParts = new Intl.DateTimeFormat('en-US', {

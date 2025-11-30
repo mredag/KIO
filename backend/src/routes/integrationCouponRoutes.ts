@@ -54,7 +54,7 @@ export function createIntegrationCouponRoutes(
    *   - database: { status: 'up' | 'down', message?: string }
    *   - n8nWebhook: { status: 'up' | 'down' | 'not_configured', message?: string }
    */
-  router.get('/health', async (req: Request, res: Response) => {
+  router.get('/health', async (_req: Request, res: Response) => {
     const healthCheck = {
       status: 'healthy' as 'healthy' | 'degraded' | 'unhealthy',
       timestamp: new Date().toISOString(),

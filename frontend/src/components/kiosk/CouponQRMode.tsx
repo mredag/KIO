@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useKioskStore } from '../../stores/kioskStore';
 import QRCode from 'qrcode';
+import api from '../../lib/api';
 
 const COUNTDOWN_SECONDS = 60; // 60 seconds countdown
 
@@ -13,13 +14,27 @@ export default function CouponQRMode() {
   const couponQrUrl = useKioskStore((state) => state.couponQrUrl);
   const couponToken = useKioskStore((state) => state.couponToken);
   const setMode = useKioskStore((state) => state.setMode);
+  const setCouponData = useKioskStore((state) => state.setCouponData);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
+  const hasReturnedRef = useRef(false);
 
-  // Return to digital-menu mode
-  const returnToMenu = useCallback(() => {
+  // Return to digital-menu mode - also notify backend
+  const returnToMenu = useCallback(async () => {
+    if (hasReturnedRef.current) return;
+    hasReturnedRef.current = true;
+    
+    // Clear local coupon data first
+    setCouponData(null, null);
     setMode('digital-menu');
-  }, [setMode]);
+    
+    // Notify backend to change mode (fire and forget)
+    try {
+      await api.put('/kiosk/mode-timeout');
+    } catch (error) {
+      console.error('Failed to notify backend of mode timeout:', error);
+    }
+  }, [setMode, setCouponData]);
 
   // Countdown timer
   useEffect(() => {

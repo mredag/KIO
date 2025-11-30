@@ -76,6 +76,37 @@ export function createKioskRoutes(
   });
 
   /**
+   * PUT /api/kiosk/mode-timeout
+   * Called by kiosk when coupon QR display times out
+   * Resets mode to digital-menu and clears coupon data
+   */
+  router.put('/mode-timeout', (_req: Request, res: Response) => {
+    try {
+      // Get current state to check if we're in coupon-qr mode
+      const currentState = db.getKioskState();
+      
+      if (currentState.mode === 'coupon-qr') {
+        // Reset to digital-menu and clear coupon data
+        db.updateKioskState({
+          mode: 'digital-menu',
+          coupon_qr_url: null,
+          coupon_token: null,
+        });
+        
+        // Broadcast mode change to all connected kiosks
+        kioskEventService.broadcastModeChange('digital-menu', null);
+        
+        console.log('[Kiosk] Coupon QR mode timed out, returning to digital-menu');
+      }
+      
+      res.json({ success: true, mode: 'digital-menu' });
+    } catch (error) {
+      console.error('Error handling mode timeout:', error);
+      res.status(500).json({ error: 'Failed to handle mode timeout' });
+    }
+  });
+
+  /**
    * GET /api/kiosk/state
    * Fetch current kiosk mode and configuration
    * Requirements: 1.2 - Return current mode state within 3 seconds

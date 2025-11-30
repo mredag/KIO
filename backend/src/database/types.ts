@@ -91,14 +91,16 @@ export interface SurveyResponseInput {
 
 export interface KioskState {
   id: number;
-  mode: 'digital-menu' | 'survey' | 'google-qr';
+  mode: 'digital-menu' | 'survey' | 'google-qr' | 'coupon-qr' | 'slideshow';
   active_survey_id: string | null;
+  coupon_qr_url: string | null;
+  coupon_token: string | null;
   last_heartbeat: string;
   updated_at: string;
 }
 
 export interface KioskStateUpdate {
-  mode?: 'digital-menu' | 'survey' | 'google-qr' | 'coupon-qr';
+  mode?: 'digital-menu' | 'survey' | 'google-qr' | 'coupon-qr' | 'slideshow';
   active_survey_id?: string | null;
   coupon_qr_url?: string | null;
   coupon_token?: string | null;

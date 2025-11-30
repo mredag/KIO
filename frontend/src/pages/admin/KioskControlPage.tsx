@@ -78,14 +78,14 @@ export default function KioskControlPage() {
       await refetchDashboard();
       addToast({
         type: 'success',
-        title: 'Kiosk status refreshed',
+        title: t('kioskControl.refreshSuccess'),
         duration: 2000,
       });
     } catch (error) {
       console.error('Failed to refresh kiosk:', error);
       addToast({
         type: 'error',
-        title: 'Failed to refresh kiosk status',
+        title: t('kioskControl.refreshError'),
         duration: 3000,
       });
     } finally {
@@ -94,18 +94,18 @@ export default function KioskControlPage() {
   };
 
   const getUptime = () => {
-    if (!dashboard?.kioskLastSeen) return 'Unknown';
+    if (!dashboard?.kioskLastSeen) return t('kioskControl.unknown');
     const lastSeen = new Date(dashboard.kioskLastSeen);
     const now = new Date();
     const diffMs = now.getTime() - lastSeen.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minutes ago`;
+    if (diffMins < 1) return t('kioskControl.justNow');
+    if (diffMins < 60) return t('kioskControl.minutesAgo', { count: diffMins });
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffHours < 24) return t('kioskControl.hoursAgo', { count: diffHours });
     const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} days ago`;
+    return t('kioskControl.daysAgo', { count: diffDays });
   };
 
   if (dashboardLoading || surveysLoading) {
@@ -194,7 +194,7 @@ export default function KioskControlPage() {
                     onClick={handleRefreshKiosk}
                     disabled={isRefreshing}
                     className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
-                    title="Refresh kiosk status"
+                    title={t('kioskControl.refreshTitle')}
                   >
                     <svg
                       className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`}
@@ -214,7 +214,7 @@ export default function KioskControlPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Status</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('kioskControl.status')}</p>
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-3 h-3 rounded-full ${
@@ -236,20 +236,20 @@ export default function KioskControlPage() {
                   </div>
 
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Current Mode</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('kioskControl.currentMode')}</p>
                     <p className="font-semibold text-gray-900 dark:text-gray-100">
                       {getModeDisplayName(dashboard.currentKioskMode)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Last Seen</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('kioskControl.lastSeen')}</p>
                     <p className="font-medium text-gray-900 dark:text-gray-100">{getUptime()}</p>
                   </div>
 
                   {dashboard.currentContent && (
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Content</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{t('kioskControl.content')}</p>
                       <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
                         {dashboard.currentContent}
                       </p>
@@ -262,7 +262,7 @@ export default function KioskControlPage() {
             {/* Visual Mode Selector Cards */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Select Kiosk Mode
+                {t('kioskControl.selectMode')}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {(['digital-menu', 'survey', 'google-qr'] as KioskMode[]).map((mode) => (
@@ -349,7 +349,7 @@ export default function KioskControlPage() {
                     {t('kioskControl.updating')}
                   </span>
                 ) : (
-                  'Apply Changes'
+                  t('kioskControl.applyChanges')
                 )}
               </button>
             </div>
@@ -359,18 +359,18 @@ export default function KioskControlPage() {
           <div className="lg:col-span-1">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700 sticky top-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Live Preview
+                {t('kioskControl.livePreview')}
               </h3>
               <div className="aspect-[9/16] bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
                 <iframe
-                  src="/"
+                  src={`${window.location.origin}/`}
                   title="Kiosk Preview"
                   className="w-full h-full"
                   sandbox="allow-scripts allow-same-origin"
                 />
               </div>
               <p className="mt-3 text-xs text-gray-600 dark:text-gray-400 text-center">
-                Preview of current kiosk display
+                {t('kioskControl.previewDescription')}
               </p>
             </div>
           </div>

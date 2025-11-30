@@ -1,0 +1,290 @@
+{
+  "name": "WhatsApp Kupon Hybrid v2",
+  "versionId": "hybrid-v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "whatsapp-hybrid"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Webhook verification\nif (input.query?.['hub.mode'] === 'subscribe' && input.query?.['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\n// Parse payload\nconst value = (input.body || input)?.entry?.[0]?.changes?.[0]?.value;\nif (value?.statuses) return [{ json: { route: 'ignore' } }];\n\nconst msg = value?.messages?.[0];\nif (!msg?.text?.body) return [{ json: { route: 'ignore' } }];\n\nconst text = msg.text.body.trim();\nconst textLower = text.toLowerCase();\nconst phone = msg.from;\n\n// Quick keyword detection (fast path)\nlet intent = null, token = null;\n\n// Exact matches first\nif (['kupon kullan', 'kullan', 'claim', 'redeem'].includes(textLower)) {\n  intent = 'claim';\n} else if (['durum', 'bakiye', 'balance'].includes(textLower)) {\n  intent = 'balance';\n} else if (['iptal', 'dur', 'stop'].includes(textLower)) {\n  intent = 'optout';\n} else if (['yardim', 'yardım', 'help', '?'].includes(textLower)) {\n  intent = 'help';\n} else {\n  // Check for coupon pattern\n  const match = text.match(/^kupon\\s+([A-Za-z0-9]{8,})$/i);\n  if (match) {\n    intent = 'coupon';\n    token = match[1].toUpperCase();\n  }\n}\n\nreturn [{ json: { route: intent ? 'action' : 'ai', intent, phone, token, text } }];"
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "verify" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "action", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "action" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "ai", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "ai" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "main-router",
+      "name": "Main Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [600, 400]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" },
+      "id": "resp-verify",
+      "name": "Verify",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 150]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ignore",
+      "name": "Ignore",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 650]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
+            { "name": "X-Title", "value": "SPA Kiosk" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"system\",\"content\":\"Müşteri mesajını analiz et. Sadece şu kategorilerden birini döndür: balance, coupon, claim, help, optout, other. Kupon kodu varsa: coupon|KOD şeklinde döndür.\"},{\"role\":\"user\",\"content\":\"{{ $json.text }}\"}],\"temperature\":0.1,\"max_tokens\":30}",
+        "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "ai-classify",
+      "name": "AI Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "openrouter",
+          "name": "OpenRouter API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst orig = $('Parse').first().json;\nconst ai = input?.choices?.[0]?.message?.content?.trim().toLowerCase() || '';\n\nlet intent = 'other', token = null;\n\n// Parse AI response\nif (ai.includes('|')) {\n  const [i, t] = ai.split('|');\n  intent = i.trim();\n  token = t?.trim().toUpperCase();\n} else if (['balance', 'coupon', 'claim', 'help', 'optout', 'other'].includes(ai)) {\n  intent = ai;\n}\n\n// Fallback token extraction if AI said coupon but no token\nif (intent === 'coupon' && !token) {\n  const match = orig.text.match(/([A-Za-z0-9]{8,})/i);\n  if (match) token = match[1].toUpperCase();\n}\n\nreturn [{ json: { ...orig, intent, token } }];"
+      },
+      "id": "parse-ai",
+      "name": "Parse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 500]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "balance", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "balance" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "coupon", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "coupon" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "claim", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "claim" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "help", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "help" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "optout", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "optout" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "intent-router",
+      "name": "Intent Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3001/api/integrations/coupons/wallet/{{ encodeURIComponent($json.phone) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-balance",
+      "name": "API Balance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 200],
+      "credentials": { "httpHeaderAuth": { "id": "backend-api", "name": "Backend API" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/consume",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"phone\":\"{{ $('Intent Router').first().json.phone }}\",\"token\":\"{{ $('Intent Router').first().json.token }}\"}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-coupon",
+      "name": "API Coupon",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 300],
+      "credentials": { "httpHeaderAuth": { "id": "backend-api", "name": "Backend API" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/claim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"phone\":\"{{ $('Intent Router').first().json.phone }}\"}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-claim",
+      "name": "API Claim",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 400],
+      "credentials": { "httpHeaderAuth": { "id": "backend-api", "name": "Backend API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst phone = $('Intent Router').first().json.phone;\nlet msg = r.error ? '📊 Henüz kuponunuz yok.' : `📊 Bakiye: ${r.couponCount || 0}/4 kupon`;\nif (!r.error && r.couponCount >= 4) msg += '\\n🎉 Ücretsiz masaj hakkınız var! \"KUPON KULLAN\" yazın.';\nreturn [{ json: { phone, message: msg } }];"
+      },
+      "id": "fmt-balance",
+      "name": "Fmt Balance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst phone = $('Intent Router').first().json.phone;\nlet msg;\nif (r.error) {\n  const code = r.error.code || '';\n  if (code === 'ALREADY_USED') msg = `❌ Bu kupon zaten kullanılmış.`;\n  else if (code === 'INVALID_TOKEN') msg = '❌ Geçersiz kupon kodu.';\n  else if (code === 'EXPIRED_TOKEN') msg = '❌ Kuponun süresi dolmuş.';\n  else msg = '❌ ' + (r.error.message || 'Hata oluştu.');\n} else {\n  msg = `✅ Kupon eklendi! Bakiye: ${r.balance || 0}/4`;\n  if (r.balance >= 4) msg += '\\n🎉 Ücretsiz masaj hakkınız var!';\n}\nreturn [{ json: { phone, message: msg } }];"
+      },
+      "id": "fmt-coupon",
+      "name": "Fmt Coupon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst phone = $('Intent Router').first().json.phone;\nlet msg = r.error \n  ? `❌ Yeterli kupon yok. Mevcut: ${r.error.balance || 0}/4` \n  : `🎉 Tebrikler! Ücretsiz masaj hakkınız kullanıldı.\\nID: ${r.redemptionId}\\nResepsiyona gösterin.`;\nreturn [{ json: { phone, message: msg } }];"
+      },
+      "id": "fmt-claim",
+      "name": "Fmt Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $('Intent Router').first().json.phone;\nreturn [{ json: { phone, message: '🎫 Kupon Sistemi\\n\\n📌 Her masaj = 1 kupon\\n📌 4 kupon = 1 ücretsiz masaj\\n\\n📱 Komutlar:\\n• DURUM - Bakiye sorgula\\n• KUPON <KOD> - Kupon ekle\\n• KUPON KULLAN - Hediye al\\n• IPTAL - Bildirimleri kapat' } }];"
+      },
+      "id": "fmt-help",
+      "name": "Fmt Help",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $('Intent Router').first().json.phone;\nreturn [{ json: { phone, message: '✅ Bildirimler kapatıldı. Tekrar açmak için YARDIM yazın.' } }];"
+      },
+      "id": "fmt-optout",
+      "name": "Fmt OptOut",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $('Intent Router').first().json.phone;\nreturn [{ json: { phone, message: 'Merhaba! 🎫 Kupon sistemi için YARDIM yazabilirsiniz.' } }];"
+      },
+      "id": "fmt-other",
+      "name": "Fmt Other",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 700]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{ $json.phone }}\",\"text\":{\"body\":\"{{ $json.message }}\"}}"
+      },
+      "id": "send-wa",
+      "name": "Send WA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1900, 400],
+      "credentials": { "httpHeaderAuth": { "id": "whatsapp-api", "name": "WhatsApp API" } }
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ok",
+      "name": "OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2100, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Main Router", "type": "main", "index": 0 }]] },
+    "Main Router": { "main": [
+      [{ "node": "Verify", "type": "main", "index": 0 }],
+      [{ "node": "Intent Router", "type": "main", "index": 0 }],
+      [{ "node": "AI Classify", "type": "main", "index": 0 }],
+      [{ "node": "Ignore", "type": "main", "index": 0 }]
+    ]},
+    "AI Classify": { "main": [[{ "node": "Parse AI", "type": "main", "index": 0 }]] },
+    "Parse AI": { "main": [[{ "node": "Intent Router", "type": "main", "index": 0 }]] },
+    "Intent Router": { "main": [
+      [{ "node": "API Balance", "type": "main", "index": 0 }],
+      [{ "node": "API Coupon", "type": "main", "index": 0 }],
+      [{ "node": "API Claim", "type": "main", "index": 0 }],
+      [{ "node": "Fmt Help", "type": "main", "index": 0 }],
+      [{ "node": "Fmt OptOut", "type": "main", "index": 0 }],
+      [{ "node": "Fmt Other", "type": "main", "index": 0 }]
+    ]},
+    "API Balance": { "main": [[{ "node": "Fmt Balance", "type": "main", "index": 0 }]] },
+    "API Coupon": { "main": [[{ "node": "Fmt Coupon", "type": "main", "index": 0 }]] },
+    "API Claim": { "main": [[{ "node": "Fmt Claim", "type": "main", "index": 0 }]] },
+    "Fmt Balance": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Fmt Coupon": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Fmt Claim": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Fmt Help": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Fmt OptOut": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Fmt Other": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Send WA": { "main": [[{ "node": "OK", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}

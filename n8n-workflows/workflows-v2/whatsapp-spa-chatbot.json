@@ -1,0 +1,257 @@
+{
+  "name": "WhatsApp SPA Chatbot",
+  "versionId": "spa-chatbot-v4",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "whatsapp"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Webhook verification\nif (input.query?.['hub.mode'] === 'subscribe' && input.query?.['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\n// Parse payload\nconst value = (input.body || input)?.entry?.[0]?.changes?.[0]?.value;\nif (value?.statuses) return [{ json: { route: 'ignore' } }];\n\nconst msg = value?.messages?.[0];\nif (!msg?.text?.body) return [{ json: { route: 'ignore' } }];\n\nreturn [{ \n  json: { \n    route: 'chat',\n    phone: msg.from,\n    text: msg.text.body.trim(),\n    sessionId: msg.from // Use phone as session ID for memory\n  } \n}];"
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "verify" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "chat", "operator": { "type": "string", "operation": "equals" } }] }, "outputKey": "chat" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "router",
+      "name": "Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [600, 400]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" },
+      "id": "resp-verify",
+      "name": "Verify",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ignore",
+      "name": "Ignore",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 600]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "Sen bir SPA merkezi asistanısın. Müşterilere Türkçe yardım ediyorsun.\n\nErişebildiğin araçlar:\n1. kupon_ekle - Kupon kodu eklemek için (8+ karakterli kod gerekli)\n2. bakiye_sorgula - Kupon bakiyesini öğrenmek için\n3. kupon_kullan - 4 kupon karşılığı ücretsiz masaj almak için\n4. masaj_listesi - Mevcut masaj türlerini ve fiyatlarını görmek için\n\nKurallar:\n- Kullanıcının sorusuna göre uygun aracı seç\n- Kupon kodu içeren mesajlarda kupon_ekle aracını kullan\n- Bakiye/durum sorularında bakiye_sorgula kullan\n- 'Kupon kullan' gibi isteklerde kupon_kullan aracını kullan\n- Masaj soruları için masaj_listesi kullan\n- Yanıtları kısa ve öz tut\n- Emoji kullan 🎫💆‍♀️✅❌\n- Her zaman Türkçe yanıt ver"
+        },
+        "promptType": "define"
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "llm-gemini",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [650, 600],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8vCTje6QjWsq6I98",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionKey": "={{ $('Parse').first().json.sessionId }}",
+        "sessionIdType": "customKey",
+        "contextWindowLength": 10
+      },
+      "id": "memory",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [750, 600]
+    },
+    {
+      "parameters": {
+        "name": "kupon_ekle",
+        "description": "Müşterinin kupon kodunu sisteme ekler. Kupon kodu 8 veya daha fazla karakter olmalıdır. Başarılı olursa yeni bakiyeyi döndürür.",
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/consume",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"phone\":\"{{ $('Parse').first().json.phone }}\",\"token\":\"{{ $fromAI('token', 'Kupon kodu (8+ karakter)', 'string') }}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            { "name": "token", "description": "Kupon kodu (8+ karakter)", "type": "string" }
+          ]
+        }
+      },
+      "id": "tool-kupon-ekle",
+      "name": "Kupon Ekle Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [950, 700],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "bakiye_sorgula",
+        "description": "Müşterinin kupon bakiyesini sorgular. Kaç kupon topladığını ve ücretsiz masaj hakkı olup olmadığını gösterir.",
+        "method": "GET",
+        "url": "=http://localhost:3001/api/integrations/coupons/wallet/{{ $('Parse').first().json.phone }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "tool-bakiye",
+      "name": "Bakiye Sorgula Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1100, 700],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "kupon_kullan",
+        "description": "4 kupon karşılığında ücretsiz masaj hakkı kullanır. Müşterinin en az 4 kuponu olmalıdır.",
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/claim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"phone\":\"{{ $('Parse').first().json.phone }}\"}"
+      },
+      "id": "tool-kupon-kullan",
+      "name": "Kupon Kullan Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1250, 700],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "masaj_listesi",
+        "description": "SPA'daki mevcut masaj türlerini, açıklamalarını ve fiyatlarını listeler.",
+        "method": "GET",
+        "url": "http://localhost:3001/api/kiosk/menu",
+        "authentication": "none"
+      },
+      "id": "tool-masaj",
+      "name": "Masaj Listesi Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1400, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst phone = $('Parse').first().json.phone;\nconst aiOutput = input.output || input.text || 'Bir hata oluştu. Lütfen tekrar deneyin.';\n\n// Truncate if too long for WhatsApp\nlet message = aiOutput;\nif (message.length > 1000) {\n  message = message.substring(0, 997) + '...';\n}\n\nreturn [{ json: { phone, message } }];"
+      },
+      "id": "format",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{ $json.phone }}\",\"text\":{\"body\":\"{{ $json.message }}\"}}"
+      },
+      "id": "send-wa",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CigixqRw14bgeG1D",
+          "name": "WhatsApp Business API"
+        }
+      }
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ok",
+      "name": "OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
+    "Router": { 
+      "main": [
+        [{ "node": "Verify", "type": "main", "index": 0 }],
+        [{ "node": "AI Agent", "type": "main", "index": 0 }],
+        [{ "node": "Ignore", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "Kupon Ekle Tool": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "Bakiye Sorgula Tool": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "Kupon Kullan Tool": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "Masaj Listesi Tool": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Send WhatsApp": { "main": [[{ "node": "OK", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" }
+}

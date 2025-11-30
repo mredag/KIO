@@ -31,6 +31,7 @@ export const SurveyResponsesPage = lazy(() => import('../pages/admin/SurveyRespo
 export const CouponIssuePage = lazy(() => import('../pages/admin/CouponIssuePage'));
 export const CouponRedemptionsPage = lazy(() => import('../pages/admin/CouponRedemptionsPage'));
 export const CouponWalletLookupPage = lazy(() => import('../pages/admin/CouponWalletLookupPage'));
+export const CouponSettingsPage = lazy(() => import('../pages/admin/CouponSettingsPage'));
 
 // Admin - System
 export const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));

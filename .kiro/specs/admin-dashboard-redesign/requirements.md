@@ -180,3 +180,39 @@ This document specifies the requirements for a comprehensive redesign of the SPA
 2. WHEN navigating between admin pages THEN the transition SHALL complete within 300ms
 3. WHEN rendering charts THEN the system SHALL use lazy loading to defer non-visible charts
 4. WHEN the page is idle THEN the system SHALL prefetch likely next pages in the background
+
+### Requirement 15: Kiosk Theme System
+
+**User Story:** As an administrator, I want to configure visual themes for kiosk screens (Google QR, Coupon QR), so that I can customize the kiosk appearance to match the spa's branding without modifying code.
+
+#### Acceptance Criteria
+
+1. WHEN an administrator selects a kiosk theme THEN the system SHALL apply the theme to all kiosk screens including Google QR and Coupon QR modes
+2. WHEN the kiosk theme changes THEN the system SHALL persist the preference to the database
+3. WHEN the kiosk loads THEN the system SHALL apply the previously saved theme preference
+4. WHEN displaying themed kiosk screens THEN the system SHALL use CSS variables for colors, gradients, and styling
+5. WHEN a new theme is applied THEN the transition SHALL be smooth without page refresh
+
+### Requirement 16: Google QR Mode Theming
+
+**User Story:** As an administrator, I want the Google Review QR screen to support multiple visual themes, so that I can match the spa's branding and create a cohesive customer experience.
+
+#### Acceptance Criteria
+
+1. WHEN the Google QR mode loads THEN the system SHALL apply the current kiosk theme's background gradient, text colors, and button styles
+2. WHEN the theme is 'classic' THEN the Google QR screen SHALL display with blue-purple gradient background
+3. WHEN the theme is 'neo' THEN the Google QR screen SHALL display with modern dark theme and accent colors
+4. WHEN the theme is 'immersive' THEN the Google QR screen SHALL display with full-screen visual effects and animations
+5. WHEN displaying the close button THEN the system SHALL style it according to the current theme
+
+### Requirement 17: Coupon QR Mode Theming
+
+**User Story:** As an administrator, I want the Coupon QR screen to support multiple visual themes, so that promotional displays match the spa's branding.
+
+#### Acceptance Criteria
+
+1. WHEN the Coupon QR mode loads THEN the system SHALL apply the current kiosk theme's background gradient, text colors, and progress bar styles
+2. WHEN the theme is 'classic' THEN the Coupon QR screen SHALL display with emerald-teal gradient background
+3. WHEN the theme is 'neo' THEN the Coupon QR screen SHALL display with modern dark theme and neon accent colors
+4. WHEN the theme is 'immersive' THEN the Coupon QR screen SHALL display with animated background and enhanced visual effects
+5. WHEN displaying the countdown timer THEN the system SHALL style it according to the current theme

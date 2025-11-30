@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useKioskStore } from '../../stores/kioskStore';
+import { useKioskTheme } from '../../lib/kioskTheme';
 import QRCode from 'qrcode';
 import api from '../../lib/api';
 
@@ -9,6 +10,7 @@ const COUNTDOWN_SECONDS = 60; // 60 seconds countdown
  * Coupon QR Mode Component
  * Displays a coupon QR code on the kiosk screen for customers to scan
  * Auto-returns to digital-menu after countdown
+ * Requirements: 17.1, 17.2, 17.3, 17.4, 17.5
  */
 export default function CouponQRMode() {
   const couponQrUrl = useKioskStore((state) => state.couponQrUrl);
@@ -18,6 +20,10 @@ export default function CouponQRMode() {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const hasReturnedRef = useRef(false);
+  
+  // Get theme classes with couponQr variant (Requirements: 17.1-17.5)
+  const { getThemeClasses, theme } = useKioskTheme();
+  const classes = getThemeClasses('couponQr');
 
   // Return to digital-menu mode - also notify backend
   const returnToMenu = useCallback(async () => {
@@ -69,10 +75,15 @@ export default function CouponQRMode() {
     }
   }, [couponQrUrl]);
 
+  // Loading state
   if (!couponQrUrl || !qrCodeUrl) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
-        <div className="text-white text-2xl">Yükleniyor...</div>
+      <div className={`h-full w-full flex items-center justify-center ${classes.container}`}>
+        {classes.overlay && <div className={`absolute inset-0 ${classes.overlay}`} />}
+        <div className="text-center relative z-10">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className={`text-2xl ${classes.title}`}>Yükleniyor...</p>
+        </div>
       </div>
     );
   }
@@ -82,30 +93,34 @@ export default function CouponQRMode() {
   const seconds = countdown % 60;
   const countdownDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
+  // Main display (Requirements: 17.1-17.5)
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-emerald-900 via-teal-900 to-cyan-900 p-8 relative">
-      {/* Countdown Timer - Top Right */}
-      <div className="absolute top-6 right-6 bg-black/40 px-6 py-3 rounded-2xl">
+    <div className={`h-full w-full flex flex-col items-center justify-center ${classes.container} p-8`}>
+      {/* Theme overlay for neo/immersive themes */}
+      {classes.overlay && <div className={`absolute inset-0 ${classes.overlay}`} />}
+      
+      {/* Countdown Timer - Top Right (Requirement 17.5) */}
+      <div className="absolute top-6 right-6 bg-black/40 px-6 py-3 rounded-2xl z-10">
         <div className="text-center">
-          <p className="text-sm text-emerald-300 mb-1">Kalan Süre</p>
-          <p className={`text-3xl font-mono font-bold ${countdown <= 10 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+          <p className={`text-sm ${classes.accent} mb-1`}>Kalan Süre</p>
+          <p className={`text-3xl font-mono font-bold ${countdown <= 10 ? 'text-red-400 animate-pulse' : classes.title}`}>
             {countdownDisplay}
           </p>
         </div>
       </div>
 
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-5xl font-bold text-white mb-4">
+      {/* Header (Requirement 17.1) */}
+      <div className="text-center mb-8 relative z-10">
+        <h1 className={`text-5xl font-bold ${classes.title} mb-4`}>
           🎁 Kupon Kazanın!
         </h1>
-        <p className="text-2xl text-emerald-200">
+        <p className={`text-2xl ${classes.accent}`}>
           WhatsApp ile QR kodu tarayın
         </p>
       </div>
 
-      {/* QR Code */}
-      <div className="bg-white p-8 rounded-3xl shadow-2xl mb-8">
+      {/* QR Code (Requirement 17.1) */}
+      <div className={`${classes.qrContainer} mb-8 relative z-10 ${theme.animations.glowEffect ? 'animate-pulse-subtle' : ''}`}>
         <img 
           src={qrCodeUrl} 
           alt="Coupon QR Code" 
@@ -115,24 +130,24 @@ export default function CouponQRMode() {
 
       {/* Token Display */}
       {couponToken && (
-        <div className="text-center">
-          <p className="text-xl text-emerald-200 mb-2">Kupon Kodu:</p>
-          <p className="text-4xl font-mono font-bold text-white tracking-widest bg-black/30 px-8 py-4 rounded-xl">
+        <div className="text-center relative z-10">
+          <p className={`text-xl ${classes.accent} mb-2`}>Kupon Kodu:</p>
+          <p className={`text-4xl font-mono font-bold ${classes.title} tracking-widest bg-black/30 px-8 py-4 rounded-xl`}>
             {couponToken}
           </p>
         </div>
       )}
 
       {/* Instructions */}
-      <div className="mt-8 text-center text-emerald-100 text-lg max-w-lg">
+      <div className={`mt-8 text-center ${classes.subtitle} text-lg max-w-lg relative z-10`}>
         <p>QR kodu tarayarak WhatsApp'ta kuponunuzu aktifleştirin.</p>
-        <p className="mt-2 text-emerald-300">4 kupon = 1 ücretsiz masaj!</p>
+        <p className={`mt-2 ${classes.accent}`}>4 kupon = 1 ücretsiz masaj!</p>
       </div>
 
-      {/* Progress Bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-2 bg-black/30">
+      {/* Progress Bar (Requirements: 17.1, 17.5) */}
+      <div className={`absolute bottom-0 left-0 right-0 h-2 ${classes.progressTrack}`}>
         <div 
-          className="h-full bg-emerald-400 transition-all duration-1000 ease-linear"
+          className={`h-full ${classes.progressFill}`}
           style={{ width: `${(countdown / COUNTDOWN_SECONDS) * 100}%` }}
         />
       </div>

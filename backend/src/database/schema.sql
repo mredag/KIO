@@ -157,3 +157,13 @@ CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_status ON coupon_redemptions(s
 CREATE INDEX IF NOT EXISTS idx_coupon_events_phone ON coupon_events(phone);
 CREATE INDEX IF NOT EXISTS idx_coupon_events_created ON coupon_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_coupon_rate_limits_reset ON coupon_rate_limits(reset_at);
+
+
+-- WhatsApp message deduplication table
+CREATE TABLE IF NOT EXISTS whatsapp_processed_messages (
+  message_id TEXT PRIMARY KEY,
+  phone TEXT,
+  processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_processed ON whatsapp_processed_messages(processed_at);

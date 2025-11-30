@@ -426,7 +426,7 @@ export function useIssueToken() {
   });
 }
 
-// Get recent tokens (last 10)
+// Get recent tokens (last 10) - auto-refreshes every 5 seconds
 export function useRecentTokens() {
   return useQuery({
     queryKey: ['admin', 'coupons', 'recent-tokens'],
@@ -440,6 +440,7 @@ export function useRecentTokens() {
         usedAt: token.used_at ? new Date(token.used_at) : null,
       }));
     },
+    refetchInterval: 5000, // Auto-refresh every 5 seconds
   });
 }
 

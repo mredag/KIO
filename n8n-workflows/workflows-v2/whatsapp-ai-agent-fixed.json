@@ -1,0 +1,367 @@
+{
+  "name": "WhatsApp Kupon AI Agent v4 - Dynamic Policy",
+  "versionId": "ai-agent-v4-policy",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "whatsapp-ai-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse WhatsApp webhook payload\nconst input = $input.first().json;\n\nconsole.log('=== PARSE INPUT ===');\nconsole.log(JSON.stringify(input, null, 2));\n\n// Webhook verification (GET request challenge from Meta)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  console.log('ROUTE: verify (webhook challenge)');\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\n// Parse message payload - handle both direct body and nested body\nconst body = input.body || input;\n\nconsole.log('=== BODY ===');\nconsole.log(JSON.stringify(body, null, 2));\n\n// Check if this is a WhatsApp webhook\nif (body.object !== 'whatsapp_business_account') {\n  console.log('ROUTE: ignore (not whatsapp)');\n  return [{ json: { route: 'ignore', reason: 'not_whatsapp' } }];\n}\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\n\nconsole.log('=== VALUE ===');\nconsole.log(JSON.stringify(value, null, 2));\n\nif (!value) {\n  console.log('ROUTE: ignore (no value)');\n  return [{ json: { route: 'ignore', reason: 'no_value' } }];\n}\n\n// Ignore status updates (delivery receipts) - these have 'statuses' but no 'messages'\nif (value.statuses && !value.messages) {\n  console.log('ROUTE: ignore (status update)');\n  return [{ json: { route: 'ignore', reason: 'status_update' } }];\n}\n\n// Check for messages array\nconst messages = value.messages;\nif (!messages || !Array.isArray(messages) || messages.length === 0) {\n  console.log('ROUTE: ignore (no messages)');\n  return [{ json: { route: 'ignore', reason: 'no_messages' } }];\n}\n\nconst msg = messages[0];\nconsole.log('=== MESSAGE ===');\nconsole.log(JSON.stringify(msg, null, 2));\n\n// Only process text messages\nif (msg.type !== 'text' || !msg.text || !msg.text.body) {\n  console.log('ROUTE: ignore (not text message)');\n  return [{ json: { route: 'ignore', reason: 'not_text', type: msg.type } }];\n}\n\nconst phone = msg.from;\nconst text = msg.text.body.trim();\nconst messageId = msg.id;\n\nconsole.log('ROUTE: process');\nconsole.log('Phone:', phone);\nconsole.log('Text:', text);\n\nreturn [{ \n  json: { \n    route: 'process',\n    phone: phone,\n    text: text,\n    messageId: messageId\n  } \n}];"
+      },
+      "id": "parse",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  { 
+                    "id": "verify-condition",
+                    "leftValue": "={{ $json.route }}", 
+                    "rightValue": "verify", 
+                    "operator": { "type": "string", "operation": "equals" } 
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Verify"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  { 
+                    "id": "process-condition",
+                    "leftValue": "={{ $json.route }}", 
+                    "rightValue": "process", 
+                    "operator": { "type": "string", "operation": "equals" } 
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Process"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  { 
+                    "id": "ignore-condition",
+                    "leftValue": "={{ $json.route }}", 
+                    "rightValue": "ignore", 
+                    "operator": { "type": "string", "operation": "equals" } 
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ignore"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "router",
+      "name": "Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [600, 400]
+    },
+    {
+      "parameters": { 
+        "respondWith": "text", 
+        "responseBody": "={{ $json.challenge }}" 
+      },
+      "id": "resp-verify",
+      "name": "Verify Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": { 
+        "respondWith": "text", 
+        "responseBody": "OK" 
+      },
+      "id": "resp-ignore",
+      "name": "Ignore Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 600]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Müşteri telefon numarası: ' + $json.phone + '\\n\\nMüşteri mesajı: ' + $json.text }}",
+        "options": {
+          "systemMessage": "Sen bir spa kupon sistemi asistanısın. Türkçe yanıt ver.\n\nMüşteri mesajını analiz et ve uygun aracı (tool) kullan. Müşteri telefon numarası mesajda verilecek - bu numarayı araçlara parametre olarak geç.\n\n1. Kupon kodu gönderiyorsa (örn: 'KUPON ABC123' veya sadece 8+ karakterli kod) → kupon_ekle aracını kullan (phone ve token parametreleri gerekli)\n2. Bakiye soruyorsa (örn: 'durum', 'bakiye', 'kaç kuponum var', 'bakiyem nedir') → bakiye_sorgula aracını kullan (phone parametresi gerekli)\n3. Kupon kullanmak istiyorsa (örn: 'kupon kullan', 'kullan', 'hediye masaj') → kupon_kullan aracını kullan (phone parametresi gerekli)\n4. Masaj listesi istiyorsa (örn: 'masajlar', 'fiyatlar', 'menü') → masaj_listesi aracını kullan\n5. Kupon kurallarını soruyorsa (örn: 'kaç kupon lazım', 'nasıl çalışıyor') → kupon_politikasi aracını kullan\n6. Yardım istiyorsa → kupon_politikasi ile kuralları al ve açıkla\n7. İptal istiyorsa → Bildirim kapatma mesajı döndür\n\nÖNEMLİ: \n- Telefon numarasını mesajdan al ve araçlara parametre olarak geç!\n- Kupon eşik değerlerini (kaç kupon = ödül) HARDCODE ETME! Her zaman kupon_politikasi aracından al.\n\nHata durumları:\n- INSUFFICIENT_COUPONS: API'den gelen 'balance', 'needed', 'threshold' ve 'availableRewards' bilgilerini kullan.\n- INVALID_TOKEN: Kupon kodu geçersiz veya kullanılmış.\n- WALLET_NOT_FOUND: Müşterinin henüz kuponu yok.\n\nYanıtlarında emoji kullan ve kısa tut."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "models/gemini-2.0-flash", "mode": "list", "cachedResultName": "models/gemini-2.0-flash" },
+        "options": { "temperature": 0.3 }
+      },
+      "id": "gemini-model",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [650, 550],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8vCTje6QjWsq6I98",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.phone }}",
+        "contextWindowLength": 5
+      },
+      "id": "chat-memory",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [750, 550]
+    },
+    {
+      "parameters": {
+        "name": "kupon_ekle",
+        "description": "Müşterinin kupon kodunu sisteme ekler. Kupon kodu 8+ karakter olmalı. Telefon numarası ve kupon kodu gerekli.",
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/consume",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"phone\":\"{phone}\",\"token\":\"{token}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            { "name": "phone", "description": "Müşteri telefon numarası (örn: 905551234567)", "type": "string" },
+            { "name": "token", "description": "Kupon kodu (8+ karakter)", "type": "string" }
+          ]
+        }
+      },
+      "id": "tool-kupon-ekle",
+      "name": "Kupon Ekle Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [650, 700]
+    },
+    {
+      "parameters": {
+        "name": "bakiye_sorgula",
+        "description": "Müşterinin kupon bakiyesini sorgular. Bakiye, durum, kaç kuponum var gibi sorularda kullan. Telefon numarası gerekli.",
+        "method": "GET",
+        "url": "http://localhost:3001/api/integrations/coupons/wallet/{phone}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            { "name": "phone", "description": "Müşteri telefon numarası (örn: 905551234567)", "type": "string" }
+          ]
+        }
+      },
+      "id": "tool-bakiye-sorgula",
+      "name": "Bakiye Sorgula Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [800, 700]
+    },
+    {
+      "parameters": {
+        "name": "kupon_kullan",
+        "description": "Kupon karşılığında ücretsiz masaj hakkı kullanır. Yeterli kupon yoksa hata döner. Telefon numarası gerekli.",
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/claim",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"phone\":\"{phone}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            { "name": "phone", "description": "Müşteri telefon numarası (örn: 905551234567)", "type": "string" }
+          ]
+        }
+      },
+      "id": "tool-kupon-kullan",
+      "name": "Kupon Kullan Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [950, 700]
+    },
+    {
+      "parameters": {
+        "name": "kupon_politikasi",
+        "description": "Kupon sisteminin kurallarını ve ödül seçeneklerini getirir. Kaç kupon gerektiğini, hangi ödüllerin mevcut olduğunu öğrenmek için kullan.",
+        "method": "GET",
+        "url": "http://localhost:3001/api/integrations/coupons/policy",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }
+          ]
+        }
+      },
+      "id": "tool-kupon-politikasi",
+      "name": "Kupon Politikası Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1100, 700]
+    },
+    {
+      "parameters": {
+        "name": "masaj_listesi",
+        "description": "Spa'daki masaj türlerini ve fiyatlarını listeler.",
+        "method": "GET",
+        "url": "http://localhost:3001/api/kiosk/menu",
+        "authentication": "none"
+      },
+      "id": "tool-masaj-listesi",
+      "name": "Masaj Listesi Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1250, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format AI response for WhatsApp\nconst input = $input.first().json;\n\n// Get phone from Parse node\nlet phone;\ntry {\n  phone = $('Parse').first().json.phone;\n} catch (e) {\n  console.log('Could not get phone from Parse node:', e.message);\n  phone = 'unknown';\n}\n\n// Get AI output\nconst aiOutput = input.output || input.text || 'Bir hata oluştu. Lütfen tekrar deneyin.';\n\nconsole.log('=== FORMAT RESPONSE ===');\nconsole.log('Phone:', phone);\nconsole.log('AI Output:', aiOutput);\n\nreturn [{ \n  json: { \n    phone: phone,\n    message: aiOutput\n  } \n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{ $json.phone }}\",\"text\":{\"body\":\"{{ $json.message }}\"}}"
+      },
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CigixqRw14bgeG1D",
+          "name": "WhatsApp Business API"
+        }
+      }
+    },
+    {
+      "parameters": { 
+        "respondWith": "text", 
+        "responseBody": "OK" 
+      },
+      "id": "resp-ok",
+      "name": "OK Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": { 
+      "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] 
+    },
+    "Parse": { 
+      "main": [[{ "node": "Router", "type": "main", "index": 0 }]] 
+    },
+    "Router": { 
+      "main": [
+        [{ "node": "Verify Response", "type": "main", "index": 0 }],
+        [{ "node": "AI Agent", "type": "main", "index": 0 }],
+        [{ "node": "Ignore Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini Model": { 
+      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] 
+    },
+    "Chat Memory": { 
+      "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] 
+    },
+    "Kupon Ekle Tool": { 
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] 
+    },
+    "Bakiye Sorgula Tool": { 
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] 
+    },
+    "Kupon Kullan Tool": { 
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] 
+    },
+    "Kupon Politikası Tool": { 
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] 
+    },
+    "Masaj Listesi Tool": { 
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] 
+    },
+    "AI Agent": { 
+      "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] 
+    },
+    "Format Response": { 
+      "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] 
+    },
+    "Send WhatsApp": { 
+      "main": [[{ "node": "OK Response", "type": "main", "index": 0 }]] 
+    }
+  },
+  "active": false,
+  "settings": { 
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

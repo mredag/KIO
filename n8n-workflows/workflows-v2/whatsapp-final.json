@@ -1,6 +1,6 @@
 {
   "name": "WhatsApp Kupon Final",
-  "versionId": "final-v4-turkish-fix",
+  "versionId": "final-v5-json-syntax-fix",
   "nodes": [
     {
       "parameters": {
@@ -63,7 +63,7 @@
         "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({phone:$json.phone,token:$json.token}) }}",
+        "jsonBody": "={\"phone\":\"{{ $json.phone }}\",\"token\":\"{{ $json.token }}\"}",
         "options": { "response": { "response": { "neverError": true } } }
       },
       "id": "api-coupon",
@@ -116,7 +116,7 @@
         "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({phone:$json.phone}) }}",
+        "jsonBody": "={\"phone\":\"{{ $json.phone }}\"}",
         "options": { "response": { "response": { "neverError": true } } }
       },
       "id": "api-claim",
@@ -127,7 +127,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r=$input.first().json,p=$('Parse').first().json.phone;\nlet msg=r.error?`❌ Yeterli kupon yok. Mevcut: ${r.error.balance||0}/4`:`🎉 Tebrikler! ID: ${r.redemptionId}`;\nreturn [{json:{phone:p,message:msg}}];"
+        "jsCode": "const r=$input.first().json,p=$('Parse').first().json.phone;\nconst err=r.error;\nlet msg;\nif(err){\n  const bal=err.balance||0;\n  const needed=err.needed||(4-bal);\n  const threshold=err.threshold||4;\n  msg='Yeterli kupon yok. Mevcut: '+bal+'/'+threshold+'. '+needed+' kupon daha gerekiyor.';\n}else{\n  msg='Tebrikler! Ucretsiz masaj hakkiniz onaylandi! ID: '+r.redemptionId+'. Resepsiyona bu kodu gosterin.';\n}\nreturn [{json:{phone:p,message:msg}}];"
       },
       "id": "fmt-claim",
       "name": "Fmt Claim",
@@ -137,13 +137,28 @@
     },
     {
       "parameters": {
-        "jsCode": "const p=$('Parse').first().json.phone;\nreturn [{json:{phone:p,message:'🤖 Komutlar: KUPON <KOD>, DURUM, KUPON KULLAN, IPTAL'}}];"
+        "method": "GET",
+        "url": "http://localhost:3001/api/integrations/coupons/policy",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-policy",
+      "name": "API Policy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Parse').first().json.phone;\nconst policy=$input.first().json;\nconst threshold=policy.defaultRedemptionThreshold||4;\nconst tier=policy.rewardTiers?.[0];\nconst reward=tier?.nameTr||'Ucretsiz Masaj';\nreturn [{json:{phone:p,message:'Kupon Sistemi - ' + threshold + ' kupon = ' + reward + '. Komutlar: KUPON <KOD>, DURUM, KUPON KULLAN, IPTAL'}}];"
       },
       "id": "fmt-help",
       "name": "Fmt Help",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 500]
+      "position": [1100, 500]
     },
     {
       "parameters": {
@@ -198,7 +213,7 @@
       [{ "node": "API Coupon", "type": "main", "index": 0 }],
       [{ "node": "API Balance", "type": "main", "index": 0 }],
       [{ "node": "API Claim", "type": "main", "index": 0 }],
-      [{ "node": "Fmt Help", "type": "main", "index": 0 }],
+      [{ "node": "API Policy", "type": "main", "index": 0 }],
       [{ "node": "Fmt OptOut", "type": "main", "index": 0 }],
       [{ "node": "Ignore", "type": "main", "index": 0 }]
     ]},
@@ -208,6 +223,7 @@
     "Fmt Balance": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
     "API Claim": { "main": [[{ "node": "Fmt Claim", "type": "main", "index": 0 }]] },
     "Fmt Claim": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "API Policy": { "main": [[{ "node": "Fmt Help", "type": "main", "index": 0 }]] },
     "Fmt Help": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
     "Fmt OptOut": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
     "Send WA": { "main": [[{ "node": "OK", "type": "main", "index": 0 }]] }

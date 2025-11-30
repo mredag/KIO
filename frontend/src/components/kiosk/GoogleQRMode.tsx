@@ -2,11 +2,12 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGoogleReviewConfig } from '../../hooks/useKioskApi';
 import { useKioskStore } from '../../stores/kioskStore';
+import { useKioskTheme } from '../../lib/kioskTheme';
 
 /**
  * Google Review QR Mode Component
  * Displays QR code for Google review with animated description
- * Requirements: 8.1, 8.2, 8.3
+ * Requirements: 8.1, 8.2, 8.3, 16.1, 16.2, 16.3, 16.4, 16.5
  * Performance optimized for Raspberry Pi (Requirements 17.1, 17.5)
  */
 export default function GoogleQRMode() {
@@ -15,6 +16,10 @@ export default function GoogleQRMode() {
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const setMode = useKioskStore((state) => state.setMode);
   const setUserViewingQR = useKioskStore((state) => state.setUserViewingQR);
+  
+  // Get theme classes (Requirements: 16.1, 16.2, 16.3, 16.4, 16.5)
+  const { getThemeClasses, theme } = useKioskTheme();
+  const classes = getThemeClasses('googleQr');
   
   // Note: We don't set isUserActive for QR mode because it's okay to interrupt it
   // Only surveys need protection from interruption
@@ -56,10 +61,11 @@ export default function GoogleQRMode() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
-        <div className="text-center">
+      <div className={`h-full w-full flex items-center justify-center ${classes.container}`}>
+        {classes.overlay && <div className={`absolute inset-0 ${classes.overlay}`} />}
+        <div className="text-center relative z-10">
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-400 text-lg">{t('googleReview.loading')}</p>
+          <p className={`text-lg ${classes.subtitle}`}>{t('googleReview.loading')}</p>
         </div>
       </div>
     );
@@ -68,8 +74,9 @@ export default function GoogleQRMode() {
   // Error state
   if (error || !config) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
-        <div className="text-center max-w-md px-8">
+      <div className={`h-full w-full flex items-center justify-center ${classes.container}`}>
+        {classes.overlay && <div className={`absolute inset-0 ${classes.overlay}`} />}
+        <div className="text-center max-w-md px-8 relative z-10">
           <svg
             className="w-20 h-20 text-red-500 mx-auto mb-4"
             fill="none"
@@ -83,10 +90,10 @@ export default function GoogleQRMode() {
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
             />
           </svg>
-          <h2 className="text-2xl font-bold text-white mb-2">
+          <h2 className={`text-2xl ${classes.title} mb-2`}>
             {t('googleReview.error')}
           </h2>
-          <p className="text-gray-400">
+          <p className={classes.subtitle}>
             {t('googleReview.errorMessage')}
           </p>
         </div>
@@ -94,13 +101,16 @@ export default function GoogleQRMode() {
     );
   }
 
-  // Main display (Requirements: 8.1, 8.2, 8.3)
+  // Main display (Requirements: 8.1, 8.2, 8.3, 16.1-16.5)
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 px-8 relative">
-      {/* Close button - Large and easy to tap for kiosk use */}
+    <div className={`h-full w-full flex flex-col items-center justify-center ${classes.container}`}>
+      {/* Theme overlay for neo/immersive themes */}
+      {classes.overlay && <div className={`absolute inset-0 ${classes.overlay}`} />}
+      
+      {/* Close button - Large and easy to tap for kiosk use (Requirement 16.5) */}
       <button
         onClick={handleClose}
-        className="absolute top-8 right-8 w-20 h-20 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-all duration-200 transform hover:scale-110 backdrop-blur-sm"
+        className={`absolute top-8 right-8 w-20 h-20 ${classes.closeButton}`}
         aria-label={t('aria.closeGoogleReview')}
       >
         <svg
@@ -118,13 +128,13 @@ export default function GoogleQRMode() {
         </svg>
       </button>
 
-      {/* Title text from configuration (Requirement 8.1) */}
-      <h1 className="text-5xl md:text-6xl font-bold text-white mb-12 text-center">
+      {/* Title text from configuration (Requirements: 8.1, 16.1) */}
+      <h1 className={`text-5xl md:text-6xl ${classes.title} mb-12 text-center relative z-10`}>
         {config.title}
       </h1>
 
-      {/* QR code in center (Requirements: 8.1, 8.2) */}
-      <div className="bg-white p-8 rounded-3xl shadow-2xl mb-12">
+      {/* QR code in center (Requirements: 8.1, 8.2, 16.1) */}
+      <div className={`${classes.qrContainer} mb-12 relative z-10 ${theme.animations.glowEffect ? 'animate-pulse-subtle' : ''}`}>
         <img
           src={config.qrCode}
           alt="Google Review QR Code"
@@ -132,16 +142,16 @@ export default function GoogleQRMode() {
         />
       </div>
 
-      {/* Description text with vertical movement animation (Requirements: 8.1, 8.3) */}
+      {/* Description text with vertical movement animation (Requirements: 8.1, 8.3, 16.1) */}
       <p
         ref={descriptionRef}
-        className="text-2xl md:text-3xl text-white text-center max-w-2xl leading-relaxed float-vertical"
+        className={`text-2xl md:text-3xl ${classes.subtitle} text-center max-w-2xl leading-relaxed relative z-10 ${theme.animations.floatAnimation ? 'float-vertical' : ''}`}
       >
         {config.description}
       </p>
 
       {/* Optional: Visual indicator for scanning */}
-      <div className="mt-12 flex items-center gap-3 text-gray-300">
+      <div className={`mt-12 flex items-center gap-3 ${classes.subtitle} relative z-10`}>
         <svg
           className="w-8 h-8"
           fill="none"

@@ -22,7 +22,9 @@ import { RateLimitService } from './services/RateLimitService.js';
 import { createAdminRoutes } from './routes/adminRoutes.js';
 import { createKioskRoutes } from './routes/kioskRoutes.js';
 import { createAdminCouponRoutes } from './routes/adminCouponRoutes.js';
+import { createAdminPolicyRoutes } from './routes/adminPolicyRoutes.js';
 import { createIntegrationCouponRoutes } from './routes/integrationCouponRoutes.js';
+import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import {
@@ -121,6 +123,7 @@ const whatsappNumber = process.env.WHATSAPP_NUMBER || '';
 const couponService = new CouponService(db, whatsappNumber);
 const eventLogService = new EventLogService(db);
 const rateLimitService = new RateLimitService(db);
+const couponPolicyService = new CouponPolicyService(db);
 
 // Start Google Sheets initialization and sync queue
 initializeGoogleSheets().then(() => {
@@ -202,6 +205,7 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 // Routes
 app.use('/api/admin', createAdminRoutes(dbService, authService, backupService, mediaService, googleSheetsService));
 app.use('/api/admin/coupons', createAdminCouponRoutes(dbService, couponService, eventLogService));
+app.use('/api/admin/policy', createAdminPolicyRoutes(dbService, couponPolicyService));
 app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 

@@ -6,6 +6,7 @@ import {
   useUpdateSettings,
   useTestSheetsConnection,
 } from '../../hooks/useAdminApi';
+import { themesList, KioskThemeId } from '../../lib/kioskTheme';
 
 type TabId = 'timing' | 'theme' | 'google-review' | 'sheets' | 'security';
 
@@ -22,7 +23,7 @@ export default function SettingsPage() {
   const [slideshowTimeout, setSlideshowTimeout] = useState<number>(60);
   const [surveyTimeout, setSurveyTimeout] = useState<number>(60);
   const [googleQrDisplayDuration, setGoogleQrDisplayDuration] = useState<number>(10);
-  const [kioskTheme, setKioskTheme] = useState<'classic' | 'immersive'>('classic');
+  const [kioskTheme, setKioskTheme] = useState<KioskThemeId>('classic');
 
   // Google Review settings
   const [googleReviewUrl, setGoogleReviewUrl] = useState<string>('');
@@ -64,7 +65,7 @@ export default function SettingsPage() {
       setSheetsSheetId(backendSettings.sheets_sheet_id || '');
       setSheetsSheetName(backendSettings.sheets_sheet_name || '');
       setSheetsCredentials(backendSettings.sheets_credentials || '');
-      setKioskTheme((backendSettings.kiosk_theme as 'classic' | 'immersive') || 'classic');
+      setKioskTheme((backendSettings.kiosk_theme as KioskThemeId) || 'classic');
     }
   }, [settings]);
 
@@ -191,7 +192,7 @@ export default function SettingsPage() {
         google_review_description: googleReviewDescription,
         sheets_sheet_id: sheetsSheetId,
         sheets_sheet_name: sheetsSheetName,
-        kioskTheme,
+        kiosk_theme: kioskTheme,
       };
 
       if (sheetsCredentials) {
@@ -421,55 +422,122 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* Theme Tab */}
+            {/* Theme Tab - Visual theme selector with preview cards (Requirement 15.2) */}
             {activeTab === 'theme' && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex flex-col gap-1">
                   <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.kioskThemeHelp')}</p>
                 </div>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setKioskTheme('classic')}
-                    className={`w-full text-left border rounded-lg p-4 transition-colors ${
-                      kioskTheme === 'classic' 
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400' 
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.kioskThemeClassic')}</div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{t('settings.kioskThemeClassicHelp')}</p>
-                      </div>
-                      {kioskTheme === 'classic' && (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
-                          ✓
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setKioskTheme('immersive')}
-                    className={`w-full text-left border rounded-lg p-4 transition-colors ${
-                      kioskTheme === 'immersive' 
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400' 
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('settings.kioskThemeImmersive')}</div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{t('settings.kioskThemeImmersiveHelp')}</p>
-                      </div>
-                      {kioskTheme === 'immersive' && (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm">
-                          ✓
-                        </span>
-                      )}
-                    </div>
-                  </button>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {themesList.map((theme) => {
+                    const isSelected = kioskTheme === theme.id;
+                    // Get preview gradient colors for each theme
+                    const previewGradient = theme.id === 'classic' 
+                      ? 'from-blue-600 via-purple-600 to-indigo-600'
+                      : theme.id === 'neo'
+                      ? 'from-gray-800 via-slate-700 to-zinc-800'
+                      : 'from-violet-700 via-fuchsia-700 to-rose-700';
+                    
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => setKioskTheme(theme.id)}
+                        className={`w-full text-left border rounded-xl overflow-hidden transition-all duration-200 ${
+                          isSelected 
+                            ? 'border-blue-500 ring-2 ring-blue-500/50 dark:border-blue-400 dark:ring-blue-400/50' 
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md'
+                        }`}
+                      >
+                        {/* Theme Preview */}
+                        <div className={`h-24 bg-gradient-to-br ${previewGradient} relative`}>
+                          {/* Mini QR preview */}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-12 h-12 bg-white rounded-lg shadow-lg flex items-center justify-center">
+                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                              </svg>
+                            </div>
+                          </div>
+                          {/* Selected indicator */}
+                          {isSelected && (
+                            <div className="absolute top-2 right-2">
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-sm shadow-lg">
+                                ✓
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Theme Info */}
+                        <div className="p-4 bg-white dark:bg-gray-800">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              {theme.name}
+                            </div>
+                            {/* Color dots preview */}
+                            <div className="flex gap-1">
+                              {theme.id === 'classic' && (
+                                <>
+                                  <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                                  <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                                  <span className="w-3 h-3 rounded-full bg-indigo-500"></span>
+                                </>
+                              )}
+                              {theme.id === 'neo' && (
+                                <>
+                                  <span className="w-3 h-3 rounded-full bg-gray-700"></span>
+                                  <span className="w-3 h-3 rounded-full bg-cyan-500"></span>
+                                  <span className="w-3 h-3 rounded-full bg-slate-600"></span>
+                                </>
+                              )}
+                              {theme.id === 'immersive' && (
+                                <>
+                                  <span className="w-3 h-3 rounded-full bg-violet-500"></span>
+                                  <span className="w-3 h-3 rounded-full bg-fuchsia-500"></span>
+                                  <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            {theme.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                {/* Theme Features Info */}
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 mt-4">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                    {kioskTheme === 'classic' && 'Klasik Tema Özellikleri'}
+                    {kioskTheme === 'neo' && 'Neo Tema Özellikleri'}
+                    {kioskTheme === 'immersive' && 'Immersive Tema Özellikleri'}
+                  </h4>
+                  <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                    {kioskTheme === 'classic' && (
+                      <>
+                        <li>• Mavi-mor gradient arka plan</li>
+                        <li>• Profesyonel ve temiz görünüm</li>
+                        <li>• Yumuşak animasyonlar</li>
+                      </>
+                    )}
+                    {kioskTheme === 'neo' && (
+                      <>
+                        <li>• Koyu tema, cyan vurgular</li>
+                        <li>• Modern ve şık tasarım</li>
+                        <li>• Neon parıltı efektleri</li>
+                      </>
+                    )}
+                    {kioskTheme === 'immersive' && (
+                      <>
+                        <li>• Mor-pembe gradient arka plan</li>
+                        <li>• Tam ekran görsel deneyim</li>
+                        <li>• Gelişmiş animasyonlar ve efektler</li>
+                      </>
+                    )}
+                  </ul>
                 </div>
               </div>
             )}

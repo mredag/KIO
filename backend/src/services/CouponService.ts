@@ -14,16 +14,33 @@ import { CouponToken, CouponWallet } from '../database/types.js';
 import { TokenGenerator } from './TokenGenerator.js';
 import { PhoneNormalizer } from './PhoneNormalizer.js';
 import { EventLogService } from './EventLogService.js';
+import { CouponPolicyService } from './CouponPolicyService.js';
 
 export class CouponService {
   private db: Database.Database;
   private eventLog: EventLogService;
+  private policyService: CouponPolicyService;
   private whatsappNumber: string;
 
   constructor(db: Database.Database, whatsappNumber?: string) {
     this.db = db;
     this.eventLog = new EventLogService(db);
+    this.policyService = new CouponPolicyService(db);
     this.whatsappNumber = whatsappNumber || process.env.WHATSAPP_NUMBER || '';
+  }
+
+  /**
+   * Get the policy service for external access
+   */
+  getPolicyService(): CouponPolicyService {
+    return this.policyService;
+  }
+
+  /**
+   * Get current redemption threshold from policy
+   */
+  getRedemptionThreshold(): number {
+    return this.policyService.getRedemptionThreshold();
   }
 
   /**
@@ -133,25 +150,28 @@ export class CouponService {
         .prepare('SELECT * FROM coupon_tokens WHERE token = ?')
         .get(token) as any;
 
+      const threshold = this.policyService.getRedemptionThreshold();
+
       if (!tokenRow) {
         return {
           ok: false,
           balance: 0,
-          remainingToFree: 4,
+          remainingToFree: threshold,
           error: 'INVALID_TOKEN',
         };
       }
 
-      // Check if already used (idempotency)
+      // Check if already used
       if (tokenRow.status === 'used') {
-        // Return existing wallet balance without incrementing
+        // Return error for already-used token
         const wallet = this.getOrCreateWallet(normalizedPhone);
-        const remainingToFree = Math.max(0, 4 - wallet.couponCount);
+        const remainingToFree = Math.max(0, threshold - wallet.couponCount);
         
         return {
-          ok: true,
+          ok: false,
           balance: wallet.couponCount,
           remainingToFree,
+          error: 'ALREADY_USED',
         };
       }
 
@@ -168,7 +188,7 @@ export class CouponService {
         return {
           ok: false,
           balance: 0,
-          remainingToFree: 4,
+          remainingToFree: threshold,
           error: 'EXPIRED_TOKEN',
         };
       }
@@ -178,7 +198,7 @@ export class CouponService {
         return {
           ok: false,
           balance: 0,
-          remainingToFree: 4,
+          remainingToFree: threshold,
           error: 'INVALID_TOKEN',
         };
       }
@@ -224,7 +244,7 @@ export class CouponService {
         },
       });
 
-      const remainingToFree = Math.max(0, 4 - newBalance);
+      const remainingToFree = Math.max(0, threshold - newBalance);
 
       return {
         ok: true,
@@ -267,13 +287,28 @@ export class CouponService {
    * @returns Redemption result
    */
   claimRedemption(
-    phone: string
-  ): { ok: boolean; redemptionId?: string; balance?: number; needed?: number; error?: string } {
+    phone: string,
+    tierId?: number  // Optional: specific reward tier to claim
+  ): { ok: boolean; redemptionId?: string; balance?: number; needed?: number; threshold?: number; rewardName?: string; error?: string } {
     const normalizedPhone = PhoneNormalizer.normalize(phone);
+    const threshold = this.policyService.getRedemptionThreshold();
 
     return this.db.transaction(() => {
       // Get wallet
       const wallet = this.getOrCreateWallet(normalizedPhone);
+
+      // Determine which tier to use
+      let couponsRequired = threshold;
+      let rewardName = 'Ücretsiz Masaj';
+      
+      if (tierId) {
+        const tiers = this.policyService.getAllRewardTiers();
+        const selectedTier = tiers.find(t => t.id === tierId && t.isActive);
+        if (selectedTier) {
+          couponsRequired = selectedTier.couponsRequired;
+          rewardName = selectedTier.nameTr;
+        }
+      }
 
       // Log redemption attempt
       this.eventLog.logEvent({
@@ -281,6 +316,8 @@ export class CouponService {
         event: 'redemption_attempt',
         details: {
           currentBalance: wallet.couponCount,
+          requestedTier: tierId,
+          couponsRequired,
         },
       });
 
@@ -299,11 +336,12 @@ export class CouponService {
         return {
           ok: true,
           redemptionId: existingRedemption.id,
+          rewardName,
         };
       }
 
-      // Check if wallet has 4+ coupons
-      if (wallet.couponCount < 4) {
+      // Check if wallet has enough coupons
+      if (wallet.couponCount < couponsRequired) {
         // Log blocked redemption
         this.eventLog.logEvent({
           phone: normalizedPhone,
@@ -311,21 +349,23 @@ export class CouponService {
           details: {
             reason: 'insufficient_coupons',
             currentBalance: wallet.couponCount,
-            needed: 4 - wallet.couponCount,
+            needed: couponsRequired - wallet.couponCount,
+            threshold: couponsRequired,
           },
         });
 
         return {
           ok: false,
           balance: wallet.couponCount,
-          needed: 4 - wallet.couponCount,
+          needed: couponsRequired - wallet.couponCount,
+          threshold: couponsRequired,
           error: 'INSUFFICIENT_COUPONS',
         };
       }
 
-      // Subtract 4 coupons
-      const newBalance = wallet.couponCount - 4;
-      const newTotalRedeemed = wallet.totalRedeemed + 4;
+      // Subtract coupons
+      const newBalance = wallet.couponCount - couponsRequired;
+      const newTotalRedeemed = wallet.totalRedeemed + couponsRequired;
       const now = new Date();
 
       this.db
@@ -349,9 +389,9 @@ export class CouponService {
         .prepare(
           `INSERT INTO coupon_redemptions (
             id, phone, coupons_used, status, created_at
-          ) VALUES (?, ?, 4, 'pending', ?)`
+          ) VALUES (?, ?, ?, 'pending', ?)`
         )
-        .run(redemptionId, normalizedPhone, now.toISOString());
+        .run(redemptionId, normalizedPhone, couponsRequired, now.toISOString());
 
       // Log granted redemption
       this.eventLog.logEvent({
@@ -359,7 +399,8 @@ export class CouponService {
         event: 'redemption_granted',
         details: {
           redemptionId,
-          couponsUsed: 4,
+          couponsUsed: couponsRequired,
+          rewardName,
           newBalance,
         },
       });
@@ -367,6 +408,7 @@ export class CouponService {
       return {
         ok: true,
         redemptionId,
+        rewardName,
       };
     })();
   }

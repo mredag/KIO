@@ -53,13 +53,40 @@ backups/
 /*-import.sql
 /*-export.json
 /massages-export.json
+/massages-import.sql
 /settings-import.sql
 /surveys-import.sql
 
-# WhatsApp test files (contain tokens)
-test-whatsapp.js
-test-*.js
-verify-*.js
-check-*.js
-list-*.js
+# Test files in root (contain tokens/sensitive data)
+/test-*.js
+/test-*.sh
+/test-*.json
+/verify-*.js
+/check-*.js
+/list-*.js
+
+# Progress/status docs (temporary)
 WHATSAPP_SETUP_PROGRESS.md
+PI_DEPLOYMENT_CHECKLIST.md
+NEXT_STEPS_N8N_WORKFLOW_SETUP.md
+
+# Screenshots (generated during testing)
+*-screenshots/
+final-checkpoint-screenshots/
+backend/screenshots/
+
+# Kiro settings (local)
+.kiro/settings/
+
+# Test backups
+backend/test-backups/
+backend/test-uploads/
+backend/test-*.db
+
+# Build error logs
+backend/build_errors.log
+backend/start_error.log
+
+# Test reports (generated)
+*-test-report.json
+*-test-report.md

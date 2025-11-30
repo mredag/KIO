@@ -1099,3 +1099,347 @@ interface TabsProps {
 - Toast enter/exit: 200ms
 - Number counting: 500ms
 - Skeleton pulse: 1.5s infinite
+
+
+## Kiosk Theme System Design
+
+### Overview
+
+The kiosk theme system extends the existing `theme` property in the kiosk store (`'classic' | 'neo' | 'immersive'`) to apply consistent theming across all kiosk screens including Google QR Mode and Coupon QR Mode. The system uses CSS variables and a theme configuration object to enable easy customization without modifying component code.
+
+### Architecture
+
+```mermaid
+graph TB
+    subgraph "Kiosk Theme System"
+        KioskStore[Kiosk Store] --> ThemeConfig[Theme Configuration]
+        ThemeConfig --> ClassicTheme[Classic Theme]
+        ThemeConfig --> NeoTheme[Neo Theme]
+        ThemeConfig --> ImmersiveTheme[Immersive Theme]
+        
+        ThemeConfig --> GoogleQRMode[Google QR Mode]
+        ThemeConfig --> CouponQRMode[Coupon QR Mode]
+        ThemeConfig --> DigitalMenuMode[Digital Menu Mode]
+        
+        AdminSettings[Admin Settings Page] --> KioskStore
+    end
+```
+
+### Theme Configuration Interface
+
+```typescript
+interface KioskThemeConfig {
+  id: 'classic' | 'neo' | 'immersive';
+  name: string;
+  description: string;
+  
+  // Background styles
+  background: {
+    gradient: string; // Tailwind gradient classes
+    overlay?: string; // Optional overlay for effects
+  };
+  
+  // Text colors
+  text: {
+    primary: string;
+    secondary: string;
+    accent: string;
+  };
+  
+  // Button styles
+  button: {
+    primary: string;
+    secondary: string;
+    close: string;
+  };
+  
+  // QR code container
+  qrContainer: {
+    background: string;
+    border?: string;
+    shadow: string;
+  };
+  
+  // Progress bar (for Coupon QR)
+  progressBar: {
+    track: string;
+    fill: string;
+  };
+  
+  // Animations
+  animations: {
+    enabled: boolean;
+    floatAnimation?: boolean;
+    pulseAnimation?: boolean;
+    glowEffect?: boolean;
+  };
+}
+```
+
+### Theme Definitions
+
+#### Classic Theme
+```typescript
+const classicTheme: KioskThemeConfig = {
+  id: 'classic',
+  name: 'Klasik',
+  description: 'Profesyonel ve temiz görünüm',
+  
+  background: {
+    gradient: 'bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900',
+  },
+  
+  text: {
+    primary: 'text-white',
+    secondary: 'text-gray-300',
+    accent: 'text-blue-300',
+  },
+  
+  button: {
+    primary: 'bg-blue-600 hover:bg-blue-500 text-white',
+    secondary: 'bg-white/20 hover:bg-white/30 text-white',
+    close: 'bg-white/20 hover:bg-white/30 backdrop-blur-sm',
+  },
+  
+  qrContainer: {
+    background: 'bg-white',
+    shadow: 'shadow-2xl',
+  },
+  
+  progressBar: {
+    track: 'bg-black/30',
+    fill: 'bg-blue-400',
+  },
+  
+  animations: {
+    enabled: true,
+    floatAnimation: true,
+  },
+};
+```
+
+#### Neo Theme
+```typescript
+const neoTheme: KioskThemeConfig = {
+  id: 'neo',
+  name: 'Neo',
+  description: 'Modern ve karanlık tema',
+  
+  background: {
+    gradient: 'bg-gradient-to-br from-gray-950 via-slate-900 to-zinc-900',
+    overlay: 'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-transparent to-transparent',
+  },
+  
+  text: {
+    primary: 'text-white',
+    secondary: 'text-gray-400',
+    accent: 'text-cyan-400',
+  },
+  
+  button: {
+    primary: 'bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-500/50',
+    secondary: 'bg-gray-800/80 hover:bg-gray-700/80 text-white border border-gray-700',
+    close: 'bg-gray-800/80 hover:bg-gray-700/80 border border-gray-700',
+  },
+  
+  qrContainer: {
+    background: 'bg-white',
+    border: 'border-4 border-cyan-500/30',
+    shadow: 'shadow-[0_0_60px_rgba(6,182,212,0.3)]',
+  },
+  
+  progressBar: {
+    track: 'bg-gray-800',
+    fill: 'bg-gradient-to-r from-cyan-500 to-blue-500',
+  },
+  
+  animations: {
+    enabled: true,
+    floatAnimation: true,
+    glowEffect: true,
+  },
+};
+```
+
+#### Immersive Theme
+```typescript
+const immersiveTheme: KioskThemeConfig = {
+  id: 'immersive',
+  name: 'Immersive',
+  description: 'Tam ekran görsel deneyim',
+  
+  background: {
+    gradient: 'bg-gradient-to-br from-violet-950 via-fuchsia-950 to-rose-950',
+    overlay: 'bg-[conic-gradient(from_180deg_at_50%_50%,_var(--tw-gradient-stops))] from-violet-500/10 via-transparent to-fuchsia-500/10',
+  },
+  
+  text: {
+    primary: 'text-white',
+    secondary: 'text-violet-200',
+    accent: 'text-fuchsia-300',
+  },
+  
+  button: {
+    primary: 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white',
+    secondary: 'bg-white/10 hover:bg-white/20 text-white backdrop-blur-md',
+    close: 'bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20',
+  },
+  
+  qrContainer: {
+    background: 'bg-white',
+    border: 'border-4 border-white/20',
+    shadow: 'shadow-[0_0_80px_rgba(168,85,247,0.4)]',
+  },
+  
+  progressBar: {
+    track: 'bg-white/10',
+    fill: 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500',
+  },
+  
+  animations: {
+    enabled: true,
+    floatAnimation: true,
+    pulseAnimation: true,
+    glowEffect: true,
+  },
+};
+```
+
+### Coupon QR Theme Variants
+
+For Coupon QR mode, each theme has specific color overrides:
+
+```typescript
+const couponThemeOverrides = {
+  classic: {
+    background: {
+      gradient: 'bg-gradient-to-br from-emerald-900 via-teal-900 to-cyan-900',
+    },
+    text: {
+      accent: 'text-emerald-300',
+    },
+    progressBar: {
+      fill: 'bg-emerald-400',
+    },
+  },
+  neo: {
+    background: {
+      gradient: 'bg-gradient-to-br from-gray-950 via-emerald-950 to-teal-950',
+    },
+    text: {
+      accent: 'text-emerald-400',
+    },
+    progressBar: {
+      fill: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+    },
+  },
+  immersive: {
+    background: {
+      gradient: 'bg-gradient-to-br from-emerald-950 via-teal-950 to-cyan-950',
+    },
+    text: {
+      accent: 'text-emerald-300',
+    },
+    progressBar: {
+      fill: 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500',
+    },
+  },
+};
+```
+
+### useKioskTheme Hook
+
+```typescript
+interface UseKioskThemeReturn {
+  theme: KioskThemeConfig;
+  themeId: 'classic' | 'neo' | 'immersive';
+  setTheme: (themeId: 'classic' | 'neo' | 'immersive') => void;
+  getThemeClasses: (variant?: 'googleQr' | 'couponQr') => {
+    container: string;
+    title: string;
+    subtitle: string;
+    button: string;
+    closeButton: string;
+    qrContainer: string;
+    progressTrack: string;
+    progressFill: string;
+  };
+}
+
+function useKioskTheme(): UseKioskThemeReturn;
+```
+
+### Component Integration
+
+#### GoogleQRMode with Theme Support
+
+```typescript
+export default function GoogleQRMode() {
+  const { getThemeClasses } = useKioskTheme();
+  const classes = getThemeClasses('googleQr');
+  
+  return (
+    <div className={`h-full w-full flex flex-col items-center justify-center ${classes.container}`}>
+      <button className={`absolute top-8 right-8 w-20 h-20 rounded-full ${classes.closeButton}`}>
+        {/* Close icon */}
+      </button>
+      
+      <h1 className={`text-5xl font-bold ${classes.title}`}>
+        {config.title}
+      </h1>
+      
+      <div className={`p-8 rounded-3xl ${classes.qrContainer}`}>
+        <img src={config.qrCode} alt="QR Code" />
+      </div>
+      
+      <p className={`text-2xl ${classes.subtitle}`}>
+        {config.description}
+      </p>
+    </div>
+  );
+}
+```
+
+#### CouponQRMode with Theme Support
+
+```typescript
+export default function CouponQRMode() {
+  const { getThemeClasses } = useKioskTheme();
+  const classes = getThemeClasses('couponQr');
+  
+  return (
+    <div className={`h-full w-full flex flex-col items-center justify-center ${classes.container}`}>
+      {/* Countdown Timer */}
+      <div className="absolute top-6 right-6 bg-black/40 px-6 py-3 rounded-2xl">
+        <p className={`text-3xl font-mono font-bold ${countdown <= 10 ? 'text-red-400 animate-pulse' : classes.title}`}>
+          {countdownDisplay}
+        </p>
+      </div>
+      
+      {/* QR Code */}
+      <div className={`p-8 rounded-3xl ${classes.qrContainer}`}>
+        <img src={qrCodeUrl} alt="Coupon QR Code" />
+      </div>
+      
+      {/* Progress Bar */}
+      <div className={`absolute bottom-0 left-0 right-0 h-2 ${classes.progressTrack}`}>
+        <div className={`h-full transition-all duration-1000 ${classes.progressFill}`} />
+      </div>
+    </div>
+  );
+}
+```
+
+### Correctness Properties for Kiosk Theming
+
+### Property 21: Kiosk Theme Persistence
+*For any* kiosk theme selection (classic, neo, immersive), saving to the store and reloading the page SHALL restore the same theme.
+**Validates: Requirements 15.2, 15.3**
+
+### Property 22: Theme Class Application
+*For any* kiosk screen (Google QR, Coupon QR), the applied CSS classes SHALL match the current theme configuration.
+**Validates: Requirements 15.1, 15.4**
+
+### Property 23: Theme Transition Smoothness
+*For any* theme change, the visual transition SHALL complete without page refresh or visible flicker.
+**Validates: Requirements 15.5**

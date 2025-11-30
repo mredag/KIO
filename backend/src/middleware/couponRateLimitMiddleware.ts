@@ -13,8 +13,8 @@ import Database from 'better-sqlite3';
 
 // Rate limit configuration
 const RATE_LIMITS = {
-  consume: 10, // 10 requests per day
-  claim: 5,    // 5 requests per day
+  consume: 100, // 100 requests per day (increased for testing)
+  claim: 50,    // 50 requests per day (increased for testing)
 };
 
 /**

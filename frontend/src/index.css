@@ -190,6 +190,22 @@
   }
 }
 
+/* Subtle pulse animation for glow effects on QR containers */
+@keyframes pulseSubtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.01);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 3s ease-in-out infinite;
+}
+
 /* Performance optimization: Reduce motion for accessibility and performance */
 @media (prefers-reduced-motion: reduce) {
   *,

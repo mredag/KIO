@@ -38,6 +38,48 @@ export function createIntegrationCouponRoutes(
   const couponRateLimit = createCouponRateLimitMiddleware(db);
 
   /**
+   * GET /api/integrations/coupons/policy
+   * Get current coupon policy (thresholds, reward tiers)
+   * 
+   * This endpoint allows n8n and other integrations to dynamically
+   * fetch the current coupon rules instead of hardcoding values.
+   * 
+   * Response:
+   * - defaultRedemptionThreshold: number (e.g., 4)
+   * - tokenExpirationHours: number (e.g., 24)
+   * - maxCouponsPerDay: number (e.g., 10)
+   * - rewardTiers: array of available rewards
+   */
+  router.get('/policy', apiKeyAuth, (_req: Request, res: Response) => {
+    try {
+      const policyService = couponService.getPolicyService();
+      const policy = policyService.getPolicy();
+      
+      res.json({
+        defaultRedemptionThreshold: policy.defaultRedemptionThreshold,
+        tokenExpirationHours: policy.tokenExpirationHours,
+        maxCouponsPerDay: policy.maxCouponsPerDay,
+        rewardTiers: policy.rewardTiers.map(tier => ({
+          id: tier.id,
+          name: tier.name,
+          nameTr: tier.nameTr,
+          couponsRequired: tier.couponsRequired,
+          description: tier.description,
+          descriptionTr: tier.descriptionTr,
+        })),
+      });
+    } catch (error) {
+      console.error('Error fetching policy:', error);
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch coupon policy',
+        },
+      });
+    }
+  });
+
+  /**
    * GET /api/integrations/coupons/health
    * Health check endpoint for coupon system monitoring
    * 
@@ -132,7 +174,39 @@ export function createIntegrationCouponRoutes(
    */
   router.post('/consume', apiKeyAuth, couponRateLimit, (req: Request, res: Response) => {
     try {
-      const { phone, token } = req.body;
+      const { phone, token, messageId } = req.body;
+
+      // Database-backed deduplication for WhatsApp message retries
+      if (messageId) {
+        const existing = db
+          .prepare('SELECT message_id FROM whatsapp_processed_messages WHERE message_id = ?')
+          .get(messageId);
+
+        if (existing) {
+          // Message already processed - return current balance without error
+          const wallet = couponService.getWallet(phone);
+          res.json({
+            ok: true,
+            balance: wallet?.couponCount || 0,
+            remainingToFree: Math.max(0, 4 - (wallet?.couponCount || 0)),
+            duplicate: true,
+          });
+          return;
+        }
+
+        // Mark message as processed
+        try {
+          db.prepare(
+            'INSERT INTO whatsapp_processed_messages (message_id, phone, processed_at) VALUES (?, ?, ?)'
+          ).run(messageId, phone || null, new Date().toISOString());
+        } catch (e) {
+          // Ignore duplicate key errors
+        }
+
+        // Cleanup old entries (older than 48 hours)
+        const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+        db.prepare('DELETE FROM whatsapp_processed_messages WHERE processed_at < ?').run(cutoff);
+      }
 
       // Validate required fields
       if (!phone || typeof phone !== 'string') {
@@ -167,6 +241,17 @@ export function createIntegrationCouponRoutes(
               message: i18n.t('errors:invalidToken', {
                 defaultValue: 'Token is invalid or has already been used',
               }),
+            },
+          });
+          return;
+        } else if (result.error === 'ALREADY_USED') {
+          res.status(400).json({
+            error: {
+              code: 'ALREADY_USED',
+              message: i18n.t('errors:alreadyUsed', {
+                defaultValue: 'This coupon has already been used',
+              }),
+              balance: result.balance,
             },
           });
           return;
@@ -293,8 +378,13 @@ export function createIntegrationCouponRoutes(
         res.json({
           ok: true,
           redemptionId: result.redemptionId,
+          rewardName: result.rewardName,
         });
       } else {
+        // Get current policy for threshold info
+        const policyService = couponService.getPolicyService();
+        const policy = policyService.getPolicy();
+        
         res.status(400).json({
           error: {
             code: 'INSUFFICIENT_COUPONS',
@@ -303,6 +393,12 @@ export function createIntegrationCouponRoutes(
             }),
             balance: result.balance,
             needed: result.needed,
+            threshold: result.threshold || policy.defaultRedemptionThreshold,
+            availableRewards: policy.rewardTiers.map(t => ({
+              name: t.nameTr,
+              couponsRequired: t.couponsRequired,
+              canClaim: (result.balance || 0) >= t.couponsRequired,
+            })),
           },
         });
       }
@@ -449,6 +545,69 @@ export function createIntegrationCouponRoutes(
           message: i18n.t('errors:internalError', {
             defaultValue: 'Internal server error',
           }),
+        },
+      });
+    }
+  });
+
+  /**
+   * POST /api/integrations/coupons/check-message
+   * Check if a WhatsApp message has already been processed (deduplication)
+   * 
+   * Request body:
+   * - messageId: string (required) - WhatsApp message ID
+   * - phone: string (optional) - Phone number for logging
+   * 
+   * Response:
+   * - processed: boolean - true if already processed, false if new
+   * - markedAsProcessed: boolean - true if newly marked
+   */
+  router.post('/check-message', apiKeyAuth, (req: Request, res: Response) => {
+    try {
+      const { messageId, phone } = req.body;
+
+      if (!messageId || typeof messageId !== 'string') {
+        res.status(400).json({
+          error: {
+            code: 'MISSING_MESSAGE_ID',
+            message: 'Message ID is required',
+          },
+        });
+        return;
+      }
+
+      // Check if message already processed
+      const existing = db
+        .prepare('SELECT message_id FROM whatsapp_processed_messages WHERE message_id = ?')
+        .get(messageId);
+
+      if (existing) {
+        res.json({
+          processed: true,
+          markedAsProcessed: false,
+        });
+        return;
+      }
+
+      // Mark as processed
+      db.prepare(
+        'INSERT INTO whatsapp_processed_messages (message_id, phone, processed_at) VALUES (?, ?, ?)'
+      ).run(messageId, phone || null, new Date().toISOString());
+
+      // Cleanup old entries (older than 48 hours)
+      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      db.prepare('DELETE FROM whatsapp_processed_messages WHERE processed_at < ?').run(cutoff);
+
+      res.json({
+        processed: false,
+        markedAsProcessed: true,
+      });
+    } catch (error) {
+      console.error('Error checking message:', error);
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error',
         },
       });
     }

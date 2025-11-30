@@ -125,6 +125,14 @@ function App() {
               }
             />
             <Route
+              path="/admin/coupons/settings"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.CouponSettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/settings"
               element={
                 <ProtectedRoute>

@@ -1,0 +1,138 @@
+{
+  "name": "OpenRouter AI Base Template",
+  "description": "Base HTTP request node template for OpenRouter API calls with 3-second timeout",
+  "version": "1.0.0",
+  "requirements": ["6.1", "6.2"],
+  
+  "nodes": {
+    "intentClassification": {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENROUTER_API_KEY_HERE" },
+            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
+            { "name": "X-Title", "value": "SPA Digital Kiosk" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"system\",\"content\":\"Sen bir spa resepsiyon asistanısın. Müşteri mesajlarını şu kategorilere ayır: balance_check, coupon_submit, redemption, help, complaint, other. Sadece kategori adını döndür.\"},{\"role\":\"user\",\"content\":\"{{ $json.message }}\"}],\"temperature\":0.1,\"max_tokens\":20}",
+        "options": {
+          "timeout": 3000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "description": "Intent classification with gpt-4o-mini, 3s timeout, low temperature for consistency"
+    },
+    
+    "sentimentAnalysis": {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENROUTER_API_KEY_HERE" },
+            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
+            { "name": "X-Title", "value": "SPA Digital Kiosk" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"system\",\"content\":\"Müşteri geri bildirimini analiz et. Kategoriler: positive, neutral, negative. Sadece kategori adını döndür.\"},{\"role\":\"user\",\"content\":\"{{ $json.surveyResponse }}\"}],\"temperature\":0.1,\"max_tokens\":10}",
+        "options": {
+          "timeout": 3000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "description": "Sentiment analysis with gpt-4o-mini, 3s timeout, low temperature"
+    },
+    
+    "helpResponse": {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENROUTER_API_KEY_HERE" },
+            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
+            { "name": "X-Title", "value": "SPA Digital Kiosk" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"system\",\"content\":\"Sen bir spa kupon sistemi asistanısın. Türkçe yardım et. Kupon sistemi: Her masaj = 1 kupon, 4 kupon = 1 ücretsiz masaj. Komutlar: DURUM (bakiye), KUPON <KOD> (ekle), KUPON KULLAN (kullan).\"},{\"role\":\"user\",\"content\":\"{{ $json.question }}\"}],\"temperature\":0.3,\"max_tokens\":200}",
+        "options": {
+          "timeout": 3000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "description": "Help response generation with gpt-4o-mini, 3s timeout"
+    },
+    
+    "dailySummary": {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENROUTER_API_KEY_HERE" },
+            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
+            { "name": "X-Title", "value": "SPA Digital Kiosk" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"openai/gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"Müşteri geri bildirimlerini özetle. Türkçe yaz. İçerik: toplam yanıt, memnuniyet oranı, konular, dikkat edilecekler. Maksimum 200 kelime.\"},{\"role\":\"user\",\"content\":\"{{ $json.responses }}\"}],\"temperature\":0.5,\"max_tokens\":500}",
+        "options": {
+          "timeout": 30000,
+          "response": { "response": { "neverError": true } }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "description": "Daily summary with gpt-4o (complex analysis), 30s timeout"
+    }
+  },
+
+  "config": {
+    "defaultModel": "openai/gpt-4o-mini",
+    "complexModel": "openai/gpt-4o",
+    "fallbackModel": "meta-llama/llama-3.2-3b-instruct:free",
+    "defaultTimeout": 3000,
+    "summaryTimeout": 30000,
+    "headers": {
+      "HTTP-Referer": "https://spa-kiosk.local",
+      "X-Title": "SPA Digital Kiosk"
+    }
+  },
+
+  "modelCosts": {
+    "openai/gpt-4o-mini": "$0.15/1M tokens (input), $0.60/1M tokens (output)",
+    "openai/gpt-4o": "$2.50/1M tokens (input), $10.00/1M tokens (output)",
+    "meta-llama/llama-3.2-3b-instruct:free": "Free"
+  },
+  
+  "notes": {
+    "timeout": "3-second timeout for real-time requests ensures graceful degradation to keyword fallback (Requirement 6.2)",
+    "headers": "HTTP-Referer and X-Title are required by OpenRouter for tracking and rate limiting",
+    "authentication": "Use Header Auth credential with 'Bearer ' prefix - MUST include space after Bearer",
+    "errorHandling": "neverError: true allows handling errors in subsequent Code nodes",
+    "temperature": "Low temperature (0.1) for classification tasks, higher (0.3-0.5) for generation tasks"
+  }
+}

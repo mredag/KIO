@@ -2,7 +2,7 @@
 import './i18n';
 
 // Kiosk types
-export type KioskMode = 'digital-menu' | 'survey' | 'google-qr';
+export type KioskMode = 'digital-menu' | 'survey' | 'google-qr' | 'coupon-qr' | 'slideshow';
 
 // SSE Event Types
 export interface KioskSSEEvent {

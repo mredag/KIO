@@ -6,6 +6,8 @@ interface KioskStore {
   // Current state
   mode: KioskMode;
   activeSurveyId: string | null;
+  couponQrUrl: string | null;
+  couponToken: string | null;
   isOffline: boolean;
   lastSync: Date | null;
   isUserViewingQR: boolean; // Flag to prevent mode override when user is viewing QR
@@ -27,6 +29,7 @@ interface KioskStore {
   // Actions
   setMode: (mode: KioskMode) => void;
   setActiveSurveyId: (id: string | null) => void;
+  setCouponData: (url: string | null, token: string | null) => void;
   setOffline: (offline: boolean) => void;
   setLastSync: (date: Date) => void;
   setUserViewingQR: (viewing: boolean) => void;
@@ -56,6 +59,8 @@ export const useKioskStore = create<KioskStore>()(
       // Initial state
       mode: 'digital-menu',
       activeSurveyId: null,
+      couponQrUrl: null,
+      couponToken: null,
       isOffline: false,
       lastSync: null,
       isUserViewingQR: false,
@@ -71,6 +76,7 @@ export const useKioskStore = create<KioskStore>()(
       // Actions
       setMode: (mode) => set({ mode }),
       setActiveSurveyId: (id) => set({ activeSurveyId: id }),
+      setCouponData: (url, token) => set({ couponQrUrl: url, couponToken: token }),
       setOffline: (offline) => set({ isOffline: offline }),
       setLastSync: (date) => set({ lastSync: date }),
       setUserViewingQR: (viewing) => set({ isUserViewingQR: viewing }),

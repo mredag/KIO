@@ -6,6 +6,8 @@ import { useKioskEvents } from '../../hooks/useKioskEvents';
 import DigitalMenuMode from './DigitalMenuMode';
 import SurveyMode from './SurveyMode';
 import GoogleQRMode from './GoogleQRMode';
+import CouponQRMode from './CouponQRMode';
+import SlideshowMode from './SlideshowMode';
 
 /**
  * Kiosk Mode Router Component
@@ -66,6 +68,10 @@ export default function KioskModeRouter() {
     }
   }, [mode, displayMode, isTransitioning]);
 
+  // Get massages for slideshow mode
+  const massages = useKioskStore((state) => state.massages);
+  const setMode = useKioskStore((state) => state.setMode);
+
   // Render the appropriate mode component
   const renderMode = () => {
     switch (displayMode) {
@@ -75,6 +81,10 @@ export default function KioskModeRouter() {
         return <SurveyMode />;
       case 'google-qr':
         return <GoogleQRMode />;
+      case 'coupon-qr':
+        return <CouponQRMode />;
+      case 'slideshow':
+        return <SlideshowMode massages={massages} onExit={() => setMode('digital-menu')} />;
       default:
         return <DigitalMenuMode />;
     }

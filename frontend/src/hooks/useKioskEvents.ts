@@ -15,6 +15,7 @@ import { useKioskStore } from '../stores/kioskStore';
 export function useKioskEvents() {
   const setMode = useKioskStore((state) => state.setMode);
   const setActiveSurveyId = useKioskStore((state) => state.setActiveSurveyId);
+  const setCouponData = useKioskStore((state) => state.setCouponData);
   const setPendingModeChange = useKioskStore((state) => state.setPendingModeChange);
   const isUserActive = useKioskStore((state) => state.isUserActive);
   const setSseConnected = useKioskStore((state) => state.setSseConnected);
@@ -53,7 +54,12 @@ export function useKioskEvents() {
           console.log('[SSE] Mode change received:', eventData);
           
           // Extract the actual data from the event
-          const { mode, activeSurveyId } = eventData.data || eventData;
+          const { mode, activeSurveyId, couponQrUrl, couponToken } = eventData.data || eventData;
+          
+          // Update coupon data if present
+          if (couponQrUrl !== undefined) {
+            setCouponData(couponQrUrl, couponToken);
+          }
           
           // Get current state
           const state = useKioskStore.getState();
@@ -156,6 +162,6 @@ export function useKioskEvents() {
       
       setSseConnected(false);
     };
-  }, [setMode, setActiveSurveyId, setPendingModeChange, setSseConnected, queryClient]);
+  }, [setMode, setActiveSurveyId, setCouponData, setPendingModeChange, setSseConnected, queryClient]);
   // Note: isUserActive removed from deps to prevent reconnection on every state change
 }

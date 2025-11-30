@@ -145,12 +145,17 @@ export function useUpdateKioskMode() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: { mode: string; activeSurveyId?: string }) => {
+    mutationFn: async (data: { mode: string; activeSurveyId?: string; couponQrUrl?: string; couponToken?: string }) => {
       // Transform camelCase to snake_case for backend
-      const payload = {
+      const payload: Record<string, any> = {
         mode: data.mode,
         active_survey_id: data.activeSurveyId,
       };
+      // Add coupon QR data if present
+      if (data.couponQrUrl) {
+        payload.coupon_qr_url = data.couponQrUrl;
+        payload.coupon_token = data.couponToken;
+      }
       const response = await api.put('/admin/kiosk/mode', payload);
       return response.data;
     },
@@ -400,7 +405,7 @@ export function useIssueToken() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params?: { kioskId?: string; issuedFor?: string }) => {
+    mutationFn: async (params?: { kioskId?: string; issuedFor?: string; phone?: string }) => {
       try {
         const response = await api.post('/admin/coupons/issue', {
           kioskId: params?.kioskId || 'admin-panel',

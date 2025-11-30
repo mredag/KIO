@@ -276,7 +276,7 @@ export default function SurveyEditorPage() {
                 {isNewSurvey ? t('surveyEditor.titleCreate') : t('surveyEditor.titleEdit')}
               </h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                {formData.name || 'Untitled Survey'}
+                {formData.name || t('surveyEditor.untitledSurvey')}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -290,7 +290,7 @@ export default function SurveyEditorPage() {
                       : 'text-gray-600 dark:text-gray-400'
                   }`}
                 >
-                  ✏️ Edit
+                  ✏️ {t('surveyEditor.edit')}
                 </button>
                 <button
                   onClick={() => setViewMode('preview')}
@@ -300,7 +300,7 @@ export default function SurveyEditorPage() {
                       : 'text-gray-600 dark:text-gray-400'
                   }`}
                 >
-                  👁️ Preview
+                  👁️ {t('surveyEditor.preview')}
                 </button>
               </div>
               
@@ -308,7 +308,7 @@ export default function SurveyEditorPage() {
                 onClick={handleCancel}
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t('surveyEditor.cancel')}
               </button>
               <button
                 onClick={handleSubmit}
@@ -316,10 +316,10 @@ export default function SurveyEditorPage() {
                 className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors font-medium disabled:opacity-50"
               >
                 {(updateSurvey.isPending || createSurvey.isPending) 
-                  ? 'Saving...'
+                  ? t('surveyEditor.saving')
                   : isNewSurvey 
-                    ? 'Create Survey'
-                    : 'Save Changes'
+                    ? t('surveyEditor.createSurvey')
+                    : t('surveyEditor.saveChanges')
                 }
               </button>
             </div>
@@ -344,7 +344,7 @@ export default function SurveyEditorPage() {
           {viewMode === 'edit' && (
             <div className="w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-                Question Types
+                {t('surveyEditor.questionTypes')}
               </h3>
               <div className="space-y-2">
                 <button
@@ -354,10 +354,10 @@ export default function SurveyEditorPage() {
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <span className="text-2xl">⭐</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-50">Rating</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-50">{t('surveyEditor.typeRating')}</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Numeric rating scale (1-5 or 1-10)
+                    {t('surveyEditor.ratingDescription')}
                   </p>
                 </button>
 
@@ -368,10 +368,10 @@ export default function SurveyEditorPage() {
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <span className="text-2xl">◉</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-50">Single Choice</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-50">{t('surveyEditor.typeSingleChoice')}</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Select one option from a list
+                    {t('surveyEditor.singleChoiceDescription')}
                   </p>
                 </button>
               </div>
@@ -379,58 +379,58 @@ export default function SurveyEditorPage() {
               {/* Survey Settings */}
               <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wide">
-                  Survey Settings
+                  {t('surveyEditor.surveySettings')}
                 </h3>
                 <div className="space-y-3">
                   {isNewSurvey && (
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Survey Type
+                        {t('surveyEditor.surveyType')}
                       </label>
                       <select
                         value={surveyType}
                         onChange={(e) => setSurveyType(e.target.value as 'satisfaction' | 'discovery')}
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                       >
-                        <option value="satisfaction">Satisfaction</option>
-                        <option value="discovery">Discovery</option>
+                        <option value="satisfaction">{t('surveyEditor.satisfactionSurvey')}</option>
+                        <option value="discovery">{t('surveyEditor.discoverySurvey')}</option>
                       </select>
                     </div>
                   )}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Template Name
+                      {t('surveyEditor.templateName')}
                     </label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                      placeholder="e.g., Post-Service Survey"
+                      placeholder={t('surveyEditor.templateNamePlaceholder')}
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Display Title
+                      {t('surveyEditor.displayTitle')}
                     </label>
                     <input
                       type="text"
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                      placeholder="Title shown to users"
+                      placeholder={t('surveyEditor.displayTitlePlaceholder')}
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Description
+                      {t('surveyEditor.description')}
                     </label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       rows={3}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                      placeholder="Optional description"
+                      placeholder={t('surveyEditor.descriptionPlaceholder')}
                     />
                   </div>
                 </div>
@@ -445,7 +445,7 @@ export default function SurveyEditorPage() {
               <div className="max-w-2xl mx-auto">
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-2">
-                    {formData.title || 'Untitled Survey'}
+                    {formData.title || t('surveyEditor.untitledSurvey')}
                   </h2>
                   {formData.description && (
                     <p className="text-gray-600 dark:text-gray-400 mb-6">{formData.description}</p>

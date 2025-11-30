@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../contexts/ToastContext';
 
 interface QuickAction {
@@ -17,6 +18,7 @@ interface QuickActionsProps {
 }
 
 export function QuickActions({ actions, onActionClick }: QuickActionsProps) {
+  const { t } = useTranslation('admin');
   const navigate = useNavigate();
   const { addToast } = useToast();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -36,8 +38,8 @@ export function QuickActions({ actions, onActionClick }: QuickActionsProps) {
     } catch (error) {
       addToast({
         type: 'error',
-        title: 'Action Failed',
-        message: `Failed to execute ${action.label}`,
+        title: t('dashboard.actionFailed'),
+        message: t('dashboard.actionFailedMessage', { action: action.label }),
       });
     } finally {
       setLoadingAction(null);
@@ -54,7 +56,7 @@ export function QuickActions({ actions, onActionClick }: QuickActionsProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">
-        Quick Actions
+        {t('dashboard.quickActions')}
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {actions.map((action) => {
@@ -101,7 +103,7 @@ export function QuickActions({ actions, onActionClick }: QuickActionsProps) {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  <span>Processing...</span>
+                  <span>{t('dashboard.processing')}</span>
                 </>
               ) : (
                 <>

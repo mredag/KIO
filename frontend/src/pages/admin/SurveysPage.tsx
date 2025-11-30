@@ -136,7 +136,7 @@ export default function SurveysPage() {
                 }
               `}
             >
-              All Surveys ({surveys?.length || 0})
+              {t('surveys.allSurveys')} ({surveys?.length || 0})
             </button>
             <button
               onClick={() => setActiveTab('satisfaction')}
@@ -149,7 +149,7 @@ export default function SurveysPage() {
                 }
               `}
             >
-              Satisfaction ({surveys?.filter((s) => s.type === 'satisfaction').length || 0})
+              {t('surveys.satisfaction')} ({surveys?.filter((s) => s.type === 'satisfaction').length || 0})
             </button>
             <button
               onClick={() => setActiveTab('discovery')}
@@ -162,7 +162,7 @@ export default function SurveysPage() {
                 }
               `}
             >
-              Discovery ({surveys?.filter((s) => s.type === 'discovery').length || 0})
+              {t('surveys.discovery')} ({surveys?.filter((s) => s.type === 'discovery').length || 0})
             </button>
           </nav>
         </div>

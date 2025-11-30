@@ -1,4 +1,5 @@
 import { ReactNode, useState, useMemo, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SkeletonTable } from '../ui/Skeleton';
 
 export interface Column<T> {
@@ -27,16 +28,21 @@ export function DataTable<T extends Record<string, any>>({
   columns,
   pageSize = 10,
   searchable = false,
-  searchPlaceholder = 'Search...',
-  emptyMessage = 'No data available',
+  searchPlaceholder,
+  emptyMessage,
   isLoading = false,
   onRowClick,
 }: DataTableProps<T>) {
+  const { t } = useTranslation('admin');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Use provided placeholders or fallback to translations
+  const finalSearchPlaceholder = searchPlaceholder || t('dataTable.searchTable');
+  const finalEmptyMessage = emptyMessage || t('dataTable.noResultsFound');
 
   // Debounce search query (300ms)
   useEffect(() => {
@@ -163,7 +169,7 @@ export function DataTable<T extends Record<string, any>>({
     if (Object.prototype.toString.call(value) === '[object Date]') {
       return (value as Date).toLocaleDateString();
     }
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (typeof value === 'boolean') return value ? t('dataTable.yes') : t('dataTable.no');
     return String(value);
   };
 
@@ -191,7 +197,7 @@ export function DataTable<T extends Record<string, any>>({
             />
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-            {emptyMessage}
+            {finalEmptyMessage}
           </h3>
         </div>
       </div>
@@ -222,9 +228,9 @@ export function DataTable<T extends Record<string, any>>({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={searchPlaceholder}
+            placeholder={finalSearchPlaceholder}
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
-            aria-label="Search table"
+            aria-label={t('dataTable.searchTable')}
           />
         </div>
       )}
@@ -289,7 +295,7 @@ export function DataTable<T extends Record<string, any>>({
                     colSpan={columns.length}
                     className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
-                    No results found
+                    {t('dataTable.noResultsFound')}
                   </td>
                 </tr>
               ) : (
@@ -321,15 +327,15 @@ export function DataTable<T extends Record<string, any>>({
           <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-3 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <div className="text-sm text-gray-700 dark:text-gray-300">
-                Showing{' '}
+                {t('dataTable.showing')}{' '}
                 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span>
                 {' '}-{' '}
                 <span className="font-medium">
                   {Math.min(currentPage * pageSize, sortedData.length)}
                 </span>
-                {' '}of{' '}
+                {' '}{t('dataTable.of')}{' '}
                 <span className="font-medium">{sortedData.length}</span>
-                {' '}results
+                {' '}{t('dataTable.results')}
               </div>
 
               <div className="flex items-center gap-2">
@@ -337,9 +343,9 @@ export function DataTable<T extends Record<string, any>>({
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                   className="px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-sky-400 dark:focus:ring-offset-gray-900"
-                  aria-label="Go to previous page"
+                  aria-label={t('dataTable.goToPreviousPage')}
                 >
-                  Previous
+                  {t('dataTable.previous')}
                 </button>
 
                 <div className="flex items-center gap-1">
@@ -367,7 +373,7 @@ export function DataTable<T extends Record<string, any>>({
                               : 'text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                           }
                         `}
-                        aria-label={`Go to page ${pageNum}`}
+                        aria-label={t('dataTable.goToPage', { page: pageNum })}
                         aria-current={currentPage === pageNum ? 'page' : undefined}
                       >
                         {pageNum}
@@ -380,9 +386,9 @@ export function DataTable<T extends Record<string, any>>({
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
                   className="px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-sky-400 dark:focus:ring-offset-gray-900"
-                  aria-label="Go to next page"
+                  aria-label={t('dataTable.goToNextPage')}
                 >
-                  Next
+                  {t('dataTable.next')}
                 </button>
               </div>
             </div>

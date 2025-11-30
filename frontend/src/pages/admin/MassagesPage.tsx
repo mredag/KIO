@@ -337,7 +337,7 @@ export default function MassagesPage() {
             {/* Layout Filter */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Layout Template
+                {t('massages.layoutTemplate')}
               </label>
               <select
                 value={layoutFilter}
@@ -355,23 +355,23 @@ export default function MassagesPage() {
             {/* Status Filter */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Status
+                {t('massages.statusFilter')}
               </label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
               >
-                <option value="all">All Status</option>
-                <option value="featured">Featured Only</option>
-                <option value="campaign">Campaign Only</option>
+                <option value="all">{t('massages.allStatus')}</option>
+                <option value="featured">{t('massages.featuredOnly')}</option>
+                <option value="campaign">{t('massages.campaignOnly')}</option>
               </select>
             </div>
 
             {/* Bulk Layout Changer */}
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Bulk Layout Change
+                {t('massages.bulkLayoutChange')}
               </label>
               <div className="flex gap-2">
                 <select
@@ -389,7 +389,7 @@ export default function MassagesPage() {
                   disabled={applyingBulk || updateMassage.isPending}
                   className="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                  {applyingBulk ? t('massages.loading') : 'Apply'}
+                  {applyingBulk ? t('massages.loading') : t('massages.apply')}
                 </button>
               </div>
             </div>
@@ -403,7 +403,7 @@ export default function MassagesPage() {
             columns={columns}
             pageSize={10}
             searchable={true}
-            searchPlaceholder="Search massages..."
+            searchPlaceholder={t('massages.searchPlaceholder')}
             emptyMessage={t('massages.noMassages')}
             isLoading={isLoading}
             onRowClick={(massage) => handleEdit(massage.id)}

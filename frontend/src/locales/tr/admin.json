@@ -57,7 +57,13 @@
     "lastSeen": "Son Görülme",
     "sheetsSync": "Google Sheets Senkronizasyonu",
     "lastSync": "Son Senkronizasyon",
-    "pendingSync": "Bekleyen Senkronizasyon"
+    "pendingSync": "Bekleyen Senkronizasyon",
+    "quickActions": "Hızlı İşlemler",
+    "recentActivity": "Son Aktiviteler",
+    "noRecentActivity": "Son aktivite yok",
+    "processing": "İşleniyor...",
+    "actionFailed": "İşlem Başarısız",
+    "actionFailedMessage": "{{action}} işlemi gerçekleştirilemedi"
   },
   "massages": {
     "title": "Masaj Yönetimi",
@@ -113,7 +119,14 @@
     "loading": "Masajlar yükleniyor...",
     "loadError": "Masajlar yüklenemedi. Lütfen tekrar deneyin.",
     "deleteError": "Masaj silinemedi. Lütfen tekrar deneyin.",
-    "reorderError": "Masajlar yeniden sıralanamadı. Lütfen tekrar deneyin."
+    "reorderError": "Masajlar yeniden sıralanamadı. Lütfen tekrar deneyin.",
+    "statusFilter": "Durum",
+    "allStatus": "Tüm Durumlar",
+    "featuredOnly": "Sadece Öne Çıkanlar",
+    "campaignOnly": "Sadece Kampanyalar",
+    "bulkLayoutChange": "Toplu Düzen Değişikliği",
+    "apply": "Uygula",
+    "searchPlaceholder": "Masajlarda ara..."
   },
   "surveys": {
     "title": "Anket Şablonları",
@@ -137,6 +150,7 @@
     "typeDiscovery": "Keşif",
     "satisfaction": "Memnuniyet",
     "discovery": "Keşif",
+    "allSurveys": "Tüm Anketler",
     "loading": "Anket şablonları yükleniyor...",
     "loadError": "Anket şablonları yüklenemedi. Lütfen tekrar deneyin."
   },
@@ -487,6 +501,20 @@
     "navigate": "Gezin",
     "select": "Seç",
     "close": "Kapat"
+  },
+  "dataTable": {
+    "noResultsFound": "Sonuç bulunamadı",
+    "yes": "Evet",
+    "no": "Hayır",
+    "showing": "Gösteriliyor",
+    "of": "/",
+    "results": "sonuç",
+    "previous": "Önceki",
+    "next": "Sonraki",
+    "goToPage": "{{page}}. sayfaya git",
+    "goToPreviousPage": "Önceki sayfaya git",
+    "goToNextPage": "Sonraki sayfaya git",
+    "searchTable": "Tabloda ara"
   },
   "aria": {
     "navigateTo": "{{page}} sayfasına git",

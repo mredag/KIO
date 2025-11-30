@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { SkeletonText } from '../ui/Skeleton';
 
 interface ActivityItem {
@@ -17,27 +18,27 @@ interface ActivityFeedProps {
   isLoading?: boolean;
 }
 
-function formatRelativeTime(date: Date): string {
+function formatRelativeTime(date: Date, t: any): string {
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   if (diffInSeconds < 60) {
-    return 'just now';
+    return t('kioskControl.justNow');
   }
 
   const diffInMinutes = Math.floor(diffInSeconds / 60);
   if (diffInMinutes < 60) {
-    return `${diffInMinutes}m ago`;
+    return t('kioskControl.minutesAgo', { count: diffInMinutes });
   }
 
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) {
-    return `${diffInHours}h ago`;
+    return t('kioskControl.hoursAgo', { count: diffInHours });
   }
 
   const diffInDays = Math.floor(diffInHours / 24);
   if (diffInDays < 7) {
-    return `${diffInDays}d ago`;
+    return t('kioskControl.daysAgo', { count: diffInDays });
   }
 
   return date.toLocaleDateString();
@@ -100,6 +101,7 @@ const typeColors: Record<string, string> = {
 };
 
 export function ActivityFeed({ items, maxItems = 10, isLoading = false }: ActivityFeedProps) {
+  const { t } = useTranslation('admin');
   const navigate = useNavigate();
   const [displayItems, setDisplayItems] = useState<ActivityItem[]>([]);
   const [timestamps, setTimestamps] = useState<Record<string, string>>({});
@@ -109,7 +111,7 @@ export function ActivityFeed({ items, maxItems = 10, isLoading = false }: Activi
     const updateTimestamps = () => {
       const newTimestamps: Record<string, string> = {};
       items.forEach((item) => {
-        newTimestamps[item.id] = formatRelativeTime(item.timestamp);
+        newTimestamps[item.id] = formatRelativeTime(item.timestamp, t);
       });
       setTimestamps(newTimestamps);
     };
@@ -118,7 +120,7 @@ export function ActivityFeed({ items, maxItems = 10, isLoading = false }: Activi
     const interval = setInterval(updateTimestamps, 60000); // Update every minute
 
     return () => clearInterval(interval);
-  }, [items]);
+  }, [items, t]);
 
   // Limit items and sort by timestamp
   useEffect(() => {
@@ -156,7 +158,7 @@ export function ActivityFeed({ items, maxItems = 10, isLoading = false }: Activi
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mb-4">
-        Recent Activity
+        {t('dashboard.recentActivity')}
       </h3>
       {displayItems.length === 0 ? (
         <div className="text-center py-8">
@@ -173,7 +175,7 @@ export function ActivityFeed({ items, maxItems = 10, isLoading = false }: Activi
               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('dashboard.noRecentActivity')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -210,7 +212,7 @@ export function ActivityFeed({ items, maxItems = 10, isLoading = false }: Activi
                     {item.message}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {timestamps[item.id] || formatRelativeTime(item.timestamp)}
+                    {timestamps[item.id] || formatRelativeTime(item.timestamp, t)}
                   </p>
                 </div>
               </div>

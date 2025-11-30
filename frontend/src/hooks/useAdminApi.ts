@@ -438,6 +438,21 @@ export function useRecentTokens() {
   });
 }
 
+// Delete unused token
+export function useDeleteToken() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const response = await api.delete(`/admin/coupons/tokens/${token}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'coupons', 'recent-tokens'] });
+    },
+  });
+}
+
 // Get wallet by phone
 export function useCouponWallet(phone: string) {
   return useQuery({

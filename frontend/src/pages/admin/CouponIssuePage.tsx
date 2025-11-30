@@ -1,27 +1,59 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
-import { useIssueToken, useRecentTokens } from '../../hooks/useAdminApi';
+import { useIssueToken, useRecentTokens, useUpdateKioskMode, useDeleteToken } from '../../hooks/useAdminApi';
 import { formatDateTime } from '../../lib/dateFormatter';
 import { getErrorMessage } from '../../lib/errorHandler';
 import { useToast } from '../../contexts/ToastContext';
 import QRCode from 'qrcode';
 
+// Normalize phone number to E.164 format (Turkish)
+function normalizePhoneNumber(phone: string): string {
+  // Remove all non-digit characters
+  let digits = phone.replace(/\D/g, '');
+  
+  // Handle different formats:
+  // 905067070403 -> +905067070403
+  // 5067070403 -> +905067070403
+  // 05067070403 -> +905067070403
+  
+  if (digits.startsWith('90') && digits.length === 12) {
+    // Already has country code: 905067070403
+    return '+' + digits;
+  } else if (digits.startsWith('0') && digits.length === 11) {
+    // Starts with 0: 05067070403
+    return '+90' + digits.substring(1);
+  } else if (digits.length === 10 && !digits.startsWith('0')) {
+    // 10 digits without leading 0: 5067070403
+    return '+90' + digits;
+  }
+  
+  // Return as-is with + prefix if not matching patterns
+  return digits.startsWith('+') ? phone : '+' + digits;
+}
+
 export default function CouponIssuePage() {
   const { t } = useTranslation(['admin', 'common']);
   const { addToast } = useToast();
   const issueToken = useIssueToken();
-  const { data: recentTokens, isLoading: tokensLoading, error: tokensError } = useRecentTokens();
+  const deleteToken = useDeleteToken();
+  const updateKioskMode = useUpdateKioskMode();
+  const { data: recentTokens, isLoading: tokensLoading, error: tokensError, refetch: refetchTokens } = useRecentTokens();
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [currentToken, setCurrentToken] = useState<string>('');
-  const [, setWaUrl] = useState<string>('');
+  const [currentWaUrl, setCurrentWaUrl] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
+  const [sendingToKiosk, setSendingToKiosk] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const handleIssueToken = async () => {
     try {
-      const result = await issueToken.mutateAsync({});
+      // Normalize phone if provided
+      const normalizedPhone = phone.trim() ? normalizePhoneNumber(phone.trim()) : undefined;
+      
+      const result = await issueToken.mutateAsync({ phone: normalizedPhone });
       setCurrentToken(result.token);
-      setWaUrl(result.waUrl);
+      setCurrentWaUrl(result.waUrl);
       
       // Generate large QR code
       const qrUrl = await QRCode.toDataURL(result.waUrl, {
@@ -33,6 +65,9 @@ export default function CouponIssuePage() {
         },
       });
       setQrCodeUrl(qrUrl);
+      
+      // Refetch recent tokens
+      refetchTokens();
       
       addToast({
         type: 'success',
@@ -48,6 +83,66 @@ export default function CouponIssuePage() {
         duration: 5000,
       });
       console.error('Failed to issue token:', err);
+    }
+  };
+
+  const handleSendToKiosk = async () => {
+    if (!currentWaUrl) return;
+    
+    setSendingToKiosk(true);
+    try {
+      // Change kiosk mode to show coupon QR temporarily
+      await updateKioskMode.mutateAsync({
+        mode: 'coupon-qr',
+        couponQrUrl: currentWaUrl,
+        couponToken: currentToken,
+      });
+      
+      addToast({
+        type: 'success',
+        title: t('admin:coupons.sentToKiosk'),
+        message: t('admin:coupons.sentToKioskMessage'),
+        duration: 5000,
+      });
+    } catch (err) {
+      const errorMessage = getErrorMessage(err);
+      addToast({
+        type: 'error',
+        title: t('common:messages.error'),
+        message: errorMessage,
+        duration: 5000,
+      });
+    } finally {
+      setSendingToKiosk(false);
+    }
+  };
+
+  const handleDeleteToken = async (token: string) => {
+    try {
+      await deleteToken.mutateAsync(token);
+      setDeleteConfirm(null);
+      refetchTokens();
+      
+      // Clear current token if it was deleted
+      if (token === currentToken) {
+        setCurrentToken('');
+        setCurrentWaUrl('');
+        setQrCodeUrl('');
+      }
+      
+      addToast({
+        type: 'success',
+        title: t('admin:coupons.tokenDeleted'),
+        duration: 3000,
+      });
+    } catch (err) {
+      const errorMessage = getErrorMessage(err);
+      addToast({
+        type: 'error',
+        title: t('common:messages.error'),
+        message: errorMessage,
+        duration: 5000,
+      });
     }
   };
 
@@ -159,11 +254,11 @@ export default function CouponIssuePage() {
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+905551234567"
+                placeholder="5067070403, 05067070403, 905067070403"
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {t('admin:coupons.phoneNumberHelp')}
+                {t('admin:coupons.phoneNumberHelpFormats')}
               </p>
             </div>
             <button
@@ -203,7 +298,7 @@ export default function CouponIssuePage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <button
                   onClick={handleCopyToken}
                   className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
@@ -230,6 +325,23 @@ export default function CouponIssuePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                   </svg>
                   {t('admin:coupons.print')}
+                </button>
+                <button
+                  onClick={handleSendToKiosk}
+                  disabled={sendingToKiosk}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50"
+                >
+                  {sendingToKiosk ? (
+                    <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  {t('admin:coupons.sendToKiosk')}
                 </button>
               </div>
             </div>
@@ -290,6 +402,9 @@ export default function CouponIssuePage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                       {t('admin:coupons.expires')}
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      {t('admin:coupons.actions')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -323,6 +438,16 @@ export default function CouponIssuePage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {formatDateTime(token.expiresAt)}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {token.status !== 'used' && (
+                          <button
+                            onClick={() => setDeleteConfirm(token.token)}
+                            className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium"
+                          >
+                            {t('admin:coupons.delete')}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -330,6 +455,38 @@ export default function CouponIssuePage() {
             </div>
           )}
         </div>
+
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">
+                {t('admin:coupons.deleteTokenConfirmTitle')}
+              </h3>
+              <p className="text-gray-700 dark:text-gray-300 mb-2">
+                {t('admin:coupons.deleteTokenConfirmMessage')}
+              </p>
+              <p className="font-mono text-lg font-bold text-gray-900 dark:text-gray-100 mb-6 bg-gray-100 dark:bg-gray-700 p-2 rounded">
+                {deleteConfirm}
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {t('admin:coupons.cancel')}
+                </button>
+                <button
+                  onClick={() => handleDeleteToken(deleteConfirm)}
+                  disabled={deleteToken.isPending}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {deleteToken.isPending ? t('admin:coupons.deleting') : t('admin:coupons.yesDelete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

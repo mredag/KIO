@@ -342,6 +342,64 @@ export function createAdminCouponRoutes(
   });
 
   /**
+   * DELETE /api/admin/coupons/tokens/:token
+   * Delete an unused token (staff mistake correction)
+   * 
+   * URL params:
+   * - token: string - Token to delete
+   * 
+   * Response:
+   * - success: boolean
+   * - message: string
+   */
+  router.delete('/tokens/:token', authMiddleware, (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const username = req.session.user?.username || 'unknown';
+
+      if (!token) {
+        res.status(400).json({ error: 'Token is required' });
+        return;
+      }
+
+      // Check if token exists and is unused
+      const tokenData = db.getTokenByCode(token);
+      
+      if (!tokenData) {
+        res.status(404).json({ error: 'Token not found' });
+        return;
+      }
+
+      if (tokenData.status === 'used') {
+        res.status(400).json({ error: 'Cannot delete a used token' });
+        return;
+      }
+
+      // Delete the token
+      db.deleteToken(token);
+
+      // Log deletion
+      db.createLog({
+        level: 'info',
+        message: 'Coupon token deleted',
+        details: {
+          token: token.substring(0, 4) + '****' + token.substring(8),
+          user: username,
+          reason: 'Staff correction',
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'Token deleted successfully',
+      });
+    } catch (error: any) {
+      console.error('Error deleting token:', error);
+      res.status(500).json({ error: i18n.t('errors:internalError') });
+    }
+  });
+
+  /**
    * GET /api/admin/coupons/events/:phone
    * Get event history for a customer
    * 

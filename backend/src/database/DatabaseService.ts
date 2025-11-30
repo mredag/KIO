@@ -900,6 +900,25 @@ export class DatabaseService {
     return this.db.prepare(query).all(limit) as any[];
   }
 
+  /**
+   * Get token by code
+   */
+  getTokenByCode(token: string): any | null {
+    const query = `
+      SELECT token, status, created_at, expires_at, used_at
+      FROM coupon_tokens
+      WHERE token = ?
+    `;
+    return this.db.prepare(query).get(token) as any | null;
+  }
+
+  /**
+   * Delete a token
+   */
+  deleteToken(token: string): void {
+    this.db.prepare('DELETE FROM coupon_tokens WHERE token = ?').run(token);
+  }
+
   // ==================== COUPON EVENT OPERATIONS ====================
 
   /**

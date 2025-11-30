@@ -98,8 +98,10 @@ export interface KioskState {
 }
 
 export interface KioskStateUpdate {
-  mode?: 'digital-menu' | 'survey' | 'google-qr';
+  mode?: 'digital-menu' | 'survey' | 'google-qr' | 'coupon-qr';
   active_survey_id?: string | null;
+  coupon_qr_url?: string | null;
+  coupon_token?: string | null;
 }
 
 export interface SystemSettings {

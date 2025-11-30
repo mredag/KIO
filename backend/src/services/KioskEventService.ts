@@ -76,14 +76,16 @@ export class KioskEventService {
   /**
    * Broadcast mode change to all kiosks
    */
-  broadcastModeChange(mode: string, activeSurveyId?: string | null): void {
-    console.log(`[SSE] Broadcasting mode change: ${mode}${activeSurveyId ? ` (survey: ${activeSurveyId})` : ''}`);
+  broadcastModeChange(mode: string, activeSurveyId?: string | null, couponData?: { couponQrUrl: string; couponToken: string }): void {
+    console.log(`[SSE] Broadcasting mode change: ${mode}${activeSurveyId ? ` (survey: ${activeSurveyId})` : ''}${couponData ? ` (coupon: ${couponData.couponToken})` : ''}`);
     
     this.broadcast({
       type: 'mode-change',
       data: { 
         mode, 
-        activeSurveyId: activeSurveyId || null 
+        activeSurveyId: activeSurveyId || null,
+        couponQrUrl: couponData?.couponQrUrl || null,
+        couponToken: couponData?.couponToken || null,
       },
       timestamp: new Date().toISOString(),
     });

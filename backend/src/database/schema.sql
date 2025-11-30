@@ -48,8 +48,10 @@ CREATE TABLE IF NOT EXISTS survey_responses (
 -- Kiosk state table (single row)
 CREATE TABLE IF NOT EXISTS kiosk_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
-  mode TEXT CHECK(mode IN ('digital-menu', 'survey', 'google-qr')),
+  mode TEXT CHECK(mode IN ('digital-menu', 'survey', 'google-qr', 'coupon-qr')),
   active_survey_id TEXT,
+  coupon_qr_url TEXT,
+  coupon_token TEXT,
   last_heartbeat DATETIME,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (active_survey_id) REFERENCES survey_templates(id)

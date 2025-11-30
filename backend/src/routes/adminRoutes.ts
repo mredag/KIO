@@ -696,10 +696,10 @@ export function createAdminRoutes(
    */
   router.put('/kiosk/mode', authMiddleware, validateKioskMode, handleValidationErrors, (req: Request, res: Response) => {
     try {
-      const { mode, active_survey_id } = req.body;
+      const { mode, active_survey_id, coupon_qr_url, coupon_token } = req.body;
 
       // Validate mode
-      if (!mode || !['digital-menu', 'survey', 'google-qr'].includes(mode)) {
+      if (!mode || !['digital-menu', 'survey', 'google-qr', 'coupon-qr'].includes(mode)) {
         res.status(400).json({ error: i18n.t('validation:invalidMode') });
         return;
       }
@@ -707,6 +707,12 @@ export function createAdminRoutes(
       // Validate survey mode requires active_survey_id
       if (mode === 'survey' && !active_survey_id) {
         res.status(400).json({ error: i18n.t('validation:surveyRequired') });
+        return;
+      }
+
+      // Validate coupon-qr mode requires coupon_qr_url
+      if (mode === 'coupon-qr' && !coupon_qr_url) {
+        res.status(400).json({ error: 'Coupon QR URL is required for coupon-qr mode' });
         return;
       }
 
@@ -723,12 +729,15 @@ export function createAdminRoutes(
       const kioskState = db.updateKioskState({
         mode,
         active_survey_id: mode === 'survey' ? active_survey_id : null,
+        coupon_qr_url: mode === 'coupon-qr' ? coupon_qr_url : null,
+        coupon_token: mode === 'coupon-qr' ? coupon_token : null,
       });
 
       // Broadcast mode change via SSE to all connected kiosks
       kioskEventService.broadcastModeChange(
         mode, 
-        mode === 'survey' ? active_survey_id : null
+        mode === 'survey' ? active_survey_id : null,
+        mode === 'coupon-qr' ? { couponQrUrl: coupon_qr_url, couponToken: coupon_token } : undefined
       );
 
       // Log mode change
@@ -738,6 +747,7 @@ export function createAdminRoutes(
         details: { 
           mode, 
           active_survey_id: mode === 'survey' ? active_survey_id : null,
+          coupon_token: mode === 'coupon-qr' ? coupon_token : null,
           user: req.session.user?.username 
         },
       });

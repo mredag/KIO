@@ -452,6 +452,16 @@ export class DatabaseService {
       values.push(data.active_survey_id);
     }
 
+    if (data.coupon_qr_url !== undefined) {
+      updates.push('coupon_qr_url = ?');
+      values.push(data.coupon_qr_url);
+    }
+
+    if (data.coupon_token !== undefined) {
+      updates.push('coupon_token = ?');
+      values.push(data.coupon_token);
+    }
+
     updates.push('updated_at = ?');
     values.push(now);
 

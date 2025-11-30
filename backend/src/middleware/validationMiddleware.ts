@@ -287,7 +287,7 @@ export const validateKioskMode: ValidationChain[] = [
     .trim()
     .notEmpty()
     .withMessage('Kiosk mode is required')
-    .isIn(['digital-menu', 'survey', 'google-qr'])
+    .isIn(['digital-menu', 'survey', 'google-qr', 'coupon-qr'])
     .withMessage('Invalid kiosk mode'),
   
   body('activeSurveyId')
@@ -295,6 +295,18 @@ export const validateKioskMode: ValidationChain[] = [
     .trim()
     .notEmpty()
     .withMessage('Active survey ID cannot be empty if provided'),
+  
+  body('coupon_qr_url')
+    .optional()
+    .trim()
+    .isURL()
+    .withMessage('Coupon QR URL must be a valid URL'),
+  
+  body('coupon_token')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Coupon token cannot be empty if provided'),
 ];
 
 /**

@@ -67,6 +67,19 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.log('Added kiosk_theme column to system_settings table');
   }
 
+  // Add coupon QR columns to kiosk_state for existing installations
+  const kioskStateColumns = db.prepare('PRAGMA table_info(kiosk_state)').all() as Array<{ name: string }>;
+  const hasCouponQrUrl = kioskStateColumns.some((column) => column.name === 'coupon_qr_url');
+  if (!hasCouponQrUrl) {
+    db.prepare("ALTER TABLE kiosk_state ADD COLUMN coupon_qr_url TEXT").run();
+    console.log('Added coupon_qr_url column to kiosk_state table');
+  }
+  const hasCouponToken = kioskStateColumns.some((column) => column.name === 'coupon_token');
+  if (!hasCouponToken) {
+    db.prepare("ALTER TABLE kiosk_state ADD COLUMN coupon_token TEXT").run();
+    console.log('Added coupon_token column to kiosk_state table');
+  }
+
   // Check if coupon tables exist (for existing installations)
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
   const tableNames = tables.map(t => t.name);

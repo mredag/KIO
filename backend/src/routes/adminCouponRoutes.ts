@@ -110,7 +110,14 @@ export function createAdminCouponRoutes(
       // Get recent tokens from database
       const tokens = db.getRecentTokens(10);
 
-      res.json(tokens);
+      // Add waUrl to each token
+      const whatsappNumber = process.env.WHATSAPP_NUMBER || '';
+      const tokensWithWaUrl = tokens.map((token: any) => ({
+        ...token,
+        waUrl: `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`KUPON ${token.token}`)}`,
+      }));
+
+      res.json(tokensWithWaUrl);
     } catch (error) {
       console.error('Error fetching recent tokens:', error);
       res.status(500).json({ error: i18n.t('errors:internalError') });

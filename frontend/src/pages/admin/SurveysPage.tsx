@@ -188,7 +188,7 @@ export default function SurveysPage() {
               onClick={handleCreateNew}
               className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors font-medium"
             >
-              Create Your First Survey
+              {t('surveys.createFirstSurvey')}
             </button>
           </div>
         ) : (
@@ -231,20 +231,20 @@ export default function SurveysPage() {
                   {/* Quick Analytics Preview */}
                   <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Responses</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('surveys.responses')}</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">
                         {responseCount}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Questions</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('surveys.questionsCount')}</p>
                       <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">
                         {survey.questions.length}
                       </p>
                     </div>
                     {avgRating && (
                       <div className="col-span-2">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Rating</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('surveys.avgRating')}</p>
                         <div className="flex items-center gap-2">
                           <p className="text-2xl font-bold text-gray-900 dark:text-gray-50">
                             {avgRating}
@@ -261,13 +261,13 @@ export default function SurveysPage() {
                       onClick={() => navigate(`/admin/surveys/${survey.id}/analytics`)}
                       className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
                     >
-                      📊 Analytics
+                      📊 {t('surveys.analytics')}
                     </button>
                     <button
                       onClick={() => handleEdit(survey.id)}
                       className="flex-1 px-3 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors text-sm font-medium"
                     >
-                      ✏️ Edit
+                      ✏️ {t('surveys.editButton')}
                     </button>
                     <button
                       onClick={() => handleDelete(survey.id, survey.name)}

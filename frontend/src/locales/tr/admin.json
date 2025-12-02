@@ -153,7 +153,13 @@
     "discovery": "Keşif",
     "allSurveys": "Tüm Anketler",
     "loading": "Anket şablonları yükleniyor...",
-    "loadError": "Anket şablonları yüklenemedi. Lütfen tekrar deneyin."
+    "loadError": "Anket şablonları yüklenemedi. Lütfen tekrar deneyin.",
+    "responses": "Yanıtlar",
+    "questionsCount": "Sorular",
+    "avgRating": "Ort. Puan",
+    "analytics": "Analitik",
+    "editButton": "Düzenle",
+    "createFirstSurvey": "İlk Anketinizi Oluşturun"
   },
   "surveyEditor": {
     "titleCreate": "Yeni Anket Şablonu Oluştur",
@@ -477,6 +483,7 @@
     "sentToKioskMessage": "QR kod kiosk ekranında gösteriliyor",
     "delete": "Sil",
     "tokenDeleted": "Token silindi",
+    "clickToView": "Detayları görüntülemek için tıklayın",
     "deleteTokenConfirmTitle": "Token Silinsin mi?",
     "deleteTokenConfirmMessage": "Bu tokeni silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
     "deleting": "Siliniyor...",

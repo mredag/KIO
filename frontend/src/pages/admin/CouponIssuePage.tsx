@@ -46,6 +46,39 @@ export default function CouponIssuePage() {
   const [sendingToKiosk, setSendingToKiosk] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  const handleSelectToken = async (token: any) => {
+    // Don't allow selecting used tokens
+    if (token.status === 'used') {
+      addToast({
+        type: 'info',
+        title: t('admin:coupons.statusUsed'),
+        duration: 2000,
+      });
+      return;
+    }
+    
+    try {
+      // Use waUrl from the token (provided by backend)
+      const waUrl = token.waUrl;
+      
+      // Generate large QR code
+      const qrUrl = await QRCode.toDataURL(waUrl, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF',
+        },
+      });
+      
+      setCurrentToken(token.token);
+      setCurrentWaUrl(waUrl);
+      setQrCodeUrl(qrUrl);
+    } catch (err) {
+      console.error('Failed to generate QR for token:', err);
+    }
+  };
+
   const handleIssueToken = async () => {
     try {
       // Normalize phone if provided
@@ -409,11 +442,23 @@ export default function CouponIssuePage() {
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                   {recentTokens.map((token: any) => (
-                    <tr key={token.token} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <tr
+                      key={token.token}
+                      onClick={() => handleSelectToken(token)}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors ${
+                        currentToken === token.token
+                          ? 'bg-sky-50 dark:bg-sky-900/30 ring-2 ring-sky-500 ring-inset'
+                          : ''
+                      } ${token.status === 'used' ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      title={token.status === 'used' ? t('admin:coupons.statusUsed') : t('admin:coupons.clickToView')}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
                           {token.token}
                         </span>
+                        {currentToken === token.token && (
+                          <span className="ml-2 text-xs text-sky-600 dark:text-sky-400">✓</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span

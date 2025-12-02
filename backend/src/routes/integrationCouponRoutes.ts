@@ -329,9 +329,16 @@ export function createIntegrationCouponRoutes(
    * Request body:
    * - phone: string (required) - Customer phone number (will be normalized)
    * 
-   * Response (success):
+   * Response (success - new redemption):
    * - ok: true
    * - redemptionId: string - Unique redemption identifier
+   * - isNew: true - Indicates this is a newly created redemption
+   * 
+   * Response (success - existing pending):
+   * - ok: true
+   * - redemptionId: string - Existing pending redemption ID
+   * - isNew: false - Indicates this is an existing pending redemption
+   * - message: string - Informative message about pending status
    * 
    * Response (insufficient coupons):
    * - ok: false
@@ -370,6 +377,7 @@ export function createIntegrationCouponRoutes(
           redemptionId: result.redemptionId,
           balance: result.balance,
           needed: result.needed,
+          isNew: result.isNew,
           apiClient: req.apiClient,
         },
       });
@@ -379,6 +387,10 @@ export function createIntegrationCouponRoutes(
           ok: true,
           redemptionId: result.redemptionId,
           rewardName: result.rewardName,
+          isNew: result.isNew ?? true,
+          message: result.isNew === false 
+            ? 'Zaten bekleyen bir kullanim talebiniz var. Resepsiyona kodu gosterin.'
+            : undefined,
         });
       } else {
         // Get current policy for threshold info

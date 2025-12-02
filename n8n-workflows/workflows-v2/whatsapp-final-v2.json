@@ -1,6 +1,6 @@
 {
-  "name": "WhatsApp Kupon Final",
-  "versionId": "final-v7-turkish-errors",
+  "name": "WhatsApp Kupon Final v2",
+  "versionId": "final-v6-pending-check",
   "nodes": [
     {
       "parameters": {
@@ -74,7 +74,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Parse').first().json.phone;\nlet msg;\n\nif (r.error) {\n  // Turkish error messages based on error code\n  const code = r.error.code;\n  if (code === 'INVALID_TOKEN') {\n    msg = '❌ Bu kupon kodu gecersiz. Lutfen kodu kontrol edin.';\n  } else if (code === 'ALREADY_USED') {\n    msg = '❌ Bu kupon daha once kullanilmis.';\n  } else if (code === 'EXPIRED_TOKEN') {\n    msg = '❌ Bu kuponun suresi dolmus.';\n  } else {\n    msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n  }\n} else {\n  msg = `✅ Kupon eklendi! Bakiye: ${r.balance || 0}/4`;\n}\n\nreturn [{ json: { phone: p, message: msg } }];"
+        "jsCode": "const r=$input.first().json,p=$('Parse').first().json.phone;\nlet msg=r.error?'❌ '+r.error.message:`✅ Kupon eklendi! Bakiye: ${r.balance||0}/4`;\nreturn [{json:{phone:p,message:msg}}];"
       },
       "id": "fmt-coupon",
       "name": "Fmt Coupon",
@@ -127,7 +127,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Parse').first().json.phone;\nconst err = r.error;\nlet msg;\n\nif (err) {\n  const bal = err.balance || 0;\n  const needed = err.needed || (4 - bal);\n  const threshold = err.threshold || 4;\n  msg = `❌ Yeterli kupon yok. Mevcut: ${bal}/${threshold}. ${needed} kupon daha gerekiyor.`;\n} else if (r.ok && r.redemptionId) {\n  if (r.isNew === false) {\n    // Existing pending - remind user\n    msg = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;\n  } else {\n    msg = `🎉 Tebrikler! Ucretsiz masaj hakkiniz onaylandi!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  }\n} else {\n  msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n}\n\nreturn [{ json: { phone: p, message: msg } }];"
+        "jsCode": "const r = $input.first().json;\nconst p = $('Parse').first().json.phone;\nconst err = r.error;\nlet msg;\n\nif (err) {\n  // Error case - insufficient coupons\n  const bal = err.balance || 0;\n  const needed = err.needed || (4 - bal);\n  const threshold = err.threshold || 4;\n  msg = `❌ Yeterli kupon yok.\\n📊 Mevcut: ${bal}/${threshold} kupon\\n📍 ${needed} kupon daha toplayin.`;\n} else if (r.ok && r.redemptionId) {\n  // Check if this is a NEW redemption or existing pending one\n  if (r.isNew === false) {\n    // Existing pending redemption - remind user they already have one\n    msg = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n🎫 Kod: ${r.redemptionId}\\n\\nResepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;\n  } else {\n    // New redemption created\n    msg = `🎉 Tebrikler! Ucretsiz masaj hakkiniz kullanildi.\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  }\n} else {\n  // Unexpected response\n  msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n}\n\nreturn [{ json: { phone: p, message: msg } }];"
       },
       "id": "fmt-claim",
       "name": "Fmt Claim",

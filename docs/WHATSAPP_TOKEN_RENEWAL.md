@@ -129,8 +129,8 @@ ssh eform-kio@192.168.1.5
 # Check n8n is running
 systemctl status n8n
 
-# Test workflow via webhook (if you have ngrok/public URL)
-curl -X POST https://your-ngrok-url.ngrok.io/webhook/whatsapp \
+# Test workflow via webhook (Cloudflare Tunnel URL)
+curl -X POST https://webhook.eformspa.com/api/whatsapp/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "entry": [{

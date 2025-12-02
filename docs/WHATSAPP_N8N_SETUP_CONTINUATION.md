@@ -1,7 +1,7 @@
 # WhatsApp n8n Setup - Continuation Guide
 
-**Last Updated:** 2025-11-29
-**Status:** v2 workflows imported, credentials need to be linked in n8n UI
+**Last Updated:** 2025-12-02
+**Status:** ✅ Production Ready with Cloudflare Tunnel
 
 ---
 
@@ -10,125 +10,146 @@
 ### ✅ Completed
 
 1. **n8n installed and running** on Raspberry Pi (192.168.1.5:5678)
-2. **4 workflows imported and active:**
-   - WhatsApp Coupon Capture
-   - WhatsApp Balance Check
-   - WhatsApp Claim Redemption
-   - WhatsApp Opt-Out
 
-3. **Credentials created in n8n:**
+2. **Cloudflare Tunnel configured** (permanent HTTPS URL):
+   - **Webhook URL:** `https://webhook.eformspa.com/webhook/whatsapp`
+   - **Status:** Running as systemd service
+   - **No more URL changes!** ✅
+
+3. **Backend webhook proxy** configured:
+   - Meta sends webhooks to: `https://webhook.eformspa.com/api/whatsapp/webhook`
+   - Backend forwards to n8n: `http://localhost:5678/webhook/whatsapp`
+
+4. **Active workflow:**
+   - WhatsApp Kupon Ultimate v1 (handles all commands)
+
+5. **Credentials configured in n8n:**
    - Backend API Key (Header Auth)
    - WhatsApp Business API (Header Auth)
 
-4. **Credentials linked to workflows:**
-   - Backend API nodes → Backend API Key
-   - WhatsApp API nodes → WhatsApp Business API
-
-5. **Backend API verified working:**
+6. **Backend API verified working:**
    ```bash
    curl -s -X GET 'http://192.168.1.5:3001/api/integrations/coupons/wallet/905551234567' \
      -H 'Authorization: Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8='
    # Returns: {"phone":"+905551234567","couponCount":0,...}
    ```
 
-6. **Ngrok installed and configured:**
-   - Auth token configured
-   - Running as background process
-   - Public URL: `https://tibial-marlena-lumberly.ngrok-free.dev`
+---
+
+## Architecture
+
+```
+WhatsApp User
+     │
+     ▼
+Meta WhatsApp API
+     │
+     ▼ (webhook POST)
+https://webhook.eformspa.com/api/whatsapp/webhook
+     │
+     ▼ (Cloudflare Tunnel)
+Raspberry Pi Backend (port 3001)
+     │
+     ▼ (forward to n8n)
+n8n (port 5678) /webhook/whatsapp
+     │
+     ├─► Process command (KUPON, DURUM, KULLAN, etc.)
+     │
+     ▼
+Backend API (port 3001) - Coupon operations
+     │
+     ▼
+WhatsApp Reply via Meta API
+```
 
 ---
 
-## 🔴 Next Step: Configure Meta WhatsApp Webhook
+## Cloudflare Tunnel Configuration
 
-### Webhook URLs
+### Service Status
+```bash
+# Check tunnel status
+ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"
 
-| Workflow | Public Webhook URL |
-|----------|-------------------|
-| Coupon Capture | `https://tibial-marlena-lumberly.ngrok-free.dev/webhook/whatsapp-coupon` |
-| Balance Check | `https://tibial-marlena-lumberly.ngrok-free.dev/webhook/whatsapp-balance` |
-| Claim Redemption | `https://tibial-marlena-lumberly.ngrok-free.dev/webhook/whatsapp-claim` |
-| Opt-Out | `https://tibial-marlena-lumberly.ngrok-free.dev/webhook/whatsapp-optout` |
+# View tunnel logs
+ssh eform-kio@192.168.1.5 "journalctl -u cloudflared -n 50 --no-pager"
 
-### Steps to Configure Meta Webhook
+# Restart tunnel if needed
+ssh eform-kio@192.168.1.5 "sudo systemctl restart cloudflared"
+```
 
-1. **Go to Meta Business Suite:**
-   - https://business.facebook.com/
-   - Navigate to WhatsApp → Configuration
+### Tunnel Config Location
+- Config file: `/home/eform-kio/.cloudflared/config.yml`
+- Credentials: `/home/eform-kio/.cloudflared/credentials.json`
 
-2. **Configure Webhook:**
-   - Click "Edit" on Webhook section
-   - **Callback URL:** `https://tibial-marlena-lumberly.ngrok-free.dev/webhook/whatsapp-coupon`
-   - **Verify Token:** `spa-kiosk-verify-token` (or any string you choose)
-   - Click "Verify and Save"
-
-3. **Subscribe to Webhook Fields:**
-   - Check "messages" field
-   - Save changes
-
-4. **Test the Integration:**
-   - Send a WhatsApp message to your business number (905365100558)
-   - Message: `KUPON ABC123DEF456` (use a valid token from admin panel)
+### Config Content
+```yaml
+tunnel: spa-webhook
+credentials-file: /home/eform-kio/.cloudflared/credentials.json
+ingress:
+  - hostname: webhook.eformspa.com
+    service: http://localhost:3001
+  - service: http_status:404
+```
 
 ---
 
-## Important Notes
+## Meta Webhook Configuration
 
-### Ngrok URL Changes
-- **Free ngrok URLs change every restart!**
-- Current URL: `https://tibial-marlena-lumberly.ngrok-free.dev`
-- After Pi restart, you'll need to:
-  1. Start ngrok again: `ngrok http 5678`
-  2. Get new URL: `curl http://localhost:4040/api/tunnels`
-  3. Update Meta webhook with new URL
+### Current Settings
+- **Callback URL:** `https://webhook.eformspa.com/api/whatsapp/webhook`
+- **Verify Token:** `spa-kiosk-verify-token`
+- **Subscribed Fields:** `messages` ✅
 
-### For Production (Permanent Solution)
-Options:
-1. **Ngrok paid plan** - Get a static domain
-2. **Port forwarding** - Forward router port to Pi
-3. **Cloud deployment** - Deploy n8n to a VPS
-4. **Cloudflare Tunnel** - Free alternative to ngrok
+### To Update (if needed)
+1. Go to: https://developers.facebook.com/apps/1311694093443416/whatsapp-business/wa-settings/
+2. Edit Webhook section
+3. Update Callback URL if changed
+4. Click "Verify and Save"
 
 ---
 
 ## Quick Commands Reference
 
-### Check ngrok status
+### Check all services
 ```bash
-ssh eform-kio@192.168.1.5 "curl -s http://localhost:4040/api/tunnels | jq '.tunnels[0].public_url'"
-```
+# Cloudflare Tunnel
+ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager | head -5"
 
-### Restart ngrok
-```bash
-ssh eform-kio@192.168.1.5 "pkill ngrok; nohup ngrok http 5678 --log=stdout > ~/ngrok.log 2>&1 &"
-```
+# n8n
+ssh eform-kio@192.168.1.5 "systemctl status n8n --no-pager | head -5"
 
-### Check n8n status
-```bash
-ssh eform-kio@192.168.1.5 "systemctl status n8n --no-pager"
-```
-
-### Check backend status
-```bash
+# Backend
 ssh eform-kio@192.168.1.5 "pm2 status"
 ```
 
-### Test backend API
+### Test webhook endpoint
 ```bash
-ssh eform-kio@192.168.1.5 "curl -s http://localhost:3001/api/kiosk/health"
+# Test from local machine
+curl -X POST https://webhook.eformspa.com/api/whatsapp/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"entry":[{"changes":[{"value":{"messages":[{"from":"905551234567","text":{"body":"DURUM"}}]}}]}]}'
+```
+
+### Restart services
+```bash
+# Restart all
+ssh eform-kio@192.168.1.5 "sudo systemctl restart cloudflared && sudo systemctl restart n8n && pm2 restart kiosk-backend"
 ```
 
 ---
 
-## Test Messages (After Meta Webhook Configured)
+## Test Messages
 
-Send these to your WhatsApp Business number (905365100558):
+Send these to WhatsApp Business number (+90 536 510 05 58):
 
 | Action | Message |
 |--------|---------|
 | Add coupon | `KUPON ABC123DEF456` |
-| Check balance | `bakiye` |
-| Claim redemption | `kupon kullan` |
-| Opt out | `durdur` |
+| Check balance | `DURUM` or `bakiye` |
+| Claim redemption | `KUPON KULLAN` |
+| Get help | `YARDIM` |
+| Opt out | `IPTAL` |
 
 ---
 
@@ -143,110 +164,50 @@ Send these to your WhatsApp Business number (905365100558):
 - **Header:** `Authorization: Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=`
 
 ### WhatsApp Business
-- **Phone Number:** 905365100558
+- **Phone Number:** +90 536 510 05 58
+- **Phone Number ID:** 471153662739049
 - **Access Token:** (configured in n8n credentials)
+
+### Meta App
+- **App ID:** 1311694093443416
+- **App Secret:** 36e2f75cab508989d382282c71d205f0
 
 ---
 
 ## Troubleshooting
 
 ### Webhook not receiving messages
-1. Check ngrok is running: `curl http://localhost:4040/api/tunnels`
-2. Verify Meta webhook URL matches ngrok URL
-3. Check n8n workflow is active (green toggle)
-
-### API returns HTML instead of JSON
-- Backend needs restart: `pm2 restart kiosk-backend`
-
-### Ngrok URL changed
-- Get new URL and update Meta webhook configuration
+1. Check Cloudflare Tunnel: `systemctl status cloudflared`
+2. Check backend is running: `pm2 status`
+3. Check n8n is running: `systemctl status n8n`
+4. Verify Meta webhook URL is correct
 
 ### n8n workflow errors
 - Check n8n Executions tab for error details
 - Verify credentials are linked to HTTP Request nodes
 
----
-
-## Architecture Summary
-
-```
-WhatsApp User
-     │
-     ▼
-Meta WhatsApp API
-     │
-     ▼ (webhook)
-Ngrok Public URL
-     │
-     ▼ (tunnel)
-Raspberry Pi (192.168.1.5)
-     │
-     ├─► n8n (port 5678) - Workflow automation
-     │        │
-     │        ▼
-     └─► Backend API (port 3001) - Coupon system
-              │
-              ▼
-         SQLite Database
-```
-
----
-
-**Next Action:** Configure Meta WhatsApp webhook with the ngrok URL above.
-
-
----
-
-## 🔴 CRITICAL: Use V1 Workflows (Not V2)
-
-**V2 workflows won't work** - they use WhatsApp Trigger which is limited to 1 per phone number by Facebook.
-
-**V1 workflows are correct** - they use n8n Webhook triggers (unlimited).
-
-### V1 Workflows (Use These)
-
-| Workflow | Webhook Path |
-|----------|--------------|
-| WhatsApp Coupon Capture | `/webhook/whatsapp-coupon` |
-| WhatsApp Balance Check | `/webhook/whatsapp-balance` |
-| WhatsApp Claim Redemption | `/webhook/whatsapp-claim` |
-| WhatsApp Opt-Out | `/webhook/whatsapp-optout` |
-
-### Next Steps
-
-1. **Delete v2 workflows** (they won't work)
-2. **Import v1 workflows** from `n8n-workflows/workflows/`
-3. **Link credentials** in n8n UI:
-   - Webhook nodes → No credential needed
-   - HTTP Request (Backend API) → Backend API Key
-   - HTTP Request (WhatsApp) → WhatsApp Business API
-4. **Configure Meta webhook** with ngrok URL
-5. **Test with real WhatsApp message**
-
-### Import V1 Workflows
-
+### Tunnel not connecting
 ```bash
-# Copy v1 workflows to Pi
-scp n8n-workflows/workflows/*.json eform-kio@192.168.1.5:~/n8n-workflows/
+# Restart tunnel
+ssh eform-kio@192.168.1.5 "sudo systemctl restart cloudflared"
 
-# Import via n8n CLI
-ssh eform-kio@192.168.1.5 "n8n import:workflow --separate --input=/home/eform-kio/n8n-workflows/"
+# Check logs
+ssh eform-kio@192.168.1.5 "journalctl -u cloudflared -n 20"
 ```
-
-### Meta App Credentials (for reference)
-
-- **App ID:** 1311694093443416
-- **App Secret:** 36e2f75cab508989d382282c71d205f0
-- **Verify Token:** `spa_kiosk_webhook_verify_2024`
 
 ---
 
-## Summary of What's Done
+## Migration from ngrok (Completed)
 
-1. ✅ n8n installed and running on Pi
-2. ✅ Backend API Key credential created
-3. ✅ WhatsApp Business API credential created
-4. ✅ Ngrok installed and configured
-5. 🔴 **PENDING:** Import v1 workflows (delete v2)
-6. 🔴 **PENDING:** Link credentials to v1 workflows
-7. 🔴 **PENDING:** Configure Meta webhook with ngrok URL
+We migrated from ngrok to Cloudflare Tunnel because:
+- ✅ **Permanent URL** - No more URL changes on restart
+- ✅ **Free** - No paid plan needed
+- ✅ **Reliable** - Runs as systemd service
+- ✅ **Secure** - HTTPS with valid certificate
+
+The ngrok setup has been removed and is no longer needed.
+
+---
+
+**Status:** ✅ Production Ready
+**Last Verified:** 2025-12-02

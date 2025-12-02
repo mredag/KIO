@@ -1,0 +1,260 @@
+{
+  "name": "WhatsApp Kupon Ultimate",
+  "versionId": "ultimate-v1",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "whatsapp", "responseMode": "responseNode", "options": {} },
+      "id": "webhook", "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [200, 400], "webhookId": "whatsapp-ultimate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nif (input.query && input.query['hub.mode'] === 'subscribe') {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\nconst body = input.body || input;\nif (body.object !== 'whatsapp_business_account') return [{ json: { route: 'ignore' } }];\nconst value = body.entry?.[0]?.changes?.[0]?.value;\nif (!value || (value.statuses && !value.messages)) return [{ json: { route: 'ignore' } }];\nconst messages = value.messages;\nif (!messages?.[0]?.text?.body) return [{ json: { route: 'ignore' } }];\nconst msg = messages[0];\nreturn [{ json: { route: 'process', phone: msg.from, text: msg.text.body.trim(), messageId: msg.id } }];"
+      },
+      "id": "parse", "name": "Parse", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Verify" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "process", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Process" }
+        ] },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "router", "name": "Router", "type": "n8n-nodes-base.switch", "typeVersion": 3, "position": [600, 400]
+    },
+    { "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" }, "id": "resp-verify", "name": "Verify Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [850, 200] },
+    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ignore", "name": "Ignore Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [850, 600] },
+    {
+      "parameters": {
+        "jsCode": "// Pre-AI Keyword Router - Skip Gemini for simple commands (~60% cost savings)\nconst input = $input.first().json;\nconst text = (input.text || '').toLowerCase().trim();\nconst phone = input.phone;\n\n// Greeting patterns\nif (/^(merhaba|selam|hey|hi|hello|iyi gunler|gunaydin|iyi aksamlar)$/i.test(text)) {\n  return [{ json: { route: 'keyword', intent: 'greeting', phone, response: '👋 Merhaba! SPA Kupon Sistemine hosgeldiniz.', confidence: 'high' } }];\n}\n\n// Help patterns\nif (/^(yardim|yardım|help|nasil|bilgi|info|\\?)$/i.test(text)) {\n  return [{ json: { route: 'keyword', intent: 'help', phone, response: '🎫 Yardim bilgisi gonderiyorum...', confidence: 'high' } }];\n}\n\n// Balance patterns\nif (/^(durum|bakiye|bakiyem|kac kupon|kaç kupon|kuponlarim|kuponlarım)$/i.test(text)) {\n  return [{ json: { route: 'keyword', intent: 'balance', phone, response: '📊 Bakiyenizi kontrol ediyorum...', confidence: 'high' } }];\n}\n\n// Claim patterns\nif (/^(kupon kullan|kullan|hediye|hediye masaj|ucretsiz masaj|ücretsiz masaj)$/i.test(text)) {\n  return [{ json: { route: 'keyword', intent: 'claim', phone, response: '🎁 Hediye talebinizi isliyorum...', confidence: 'high' } }];\n}\n\n// Coupon code pattern (8+ alphanumeric)\nconst couponMatch = text.match(/kupon\\s+([a-z0-9]{8,})/i) || text.match(/^([a-z0-9]{8,})$/i);\nif (couponMatch) {\n  return [{ json: { route: 'keyword', intent: 'coupon', phone, couponCode: couponMatch[1].toUpperCase(), response: '✅ Kuponunuzu ekliyorum...', confidence: 'high' } }];\n}\n\n// Not a simple command - send to AI\nreturn [{ json: { route: 'ai', phone, text: input.text } }];"
+      },
+      "id": "pre-ai-router", "name": "Pre-AI Router", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [750, 400]
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "keyword", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Keyword" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.route }}", "rightValue": "ai", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "AI" }
+        ] },
+        "options": {}
+      },
+      "id": "keyword-or-ai", "name": "Keyword or AI?", "type": "n8n-nodes-base.switch", "typeVersion": 3, "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format keyword match to same structure as AI output\nconst input = $input.first().json;\nreturn [{ json: {\n  needMoreInfo: false,\n  intent: input.intent,\n  couponCode: input.couponCode || null,\n  response: input.response,\n  confidence: 'high',\n  phone: input.phone,\n  source: 'keyword'\n} }];"
+      },
+      "id": "keyword-to-intent", "name": "Keyword to Intent", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "hasOutputParser": true,
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "Sen bir SPA kupon sistemi asistanisin. Turkce konusuyorsun.\n\nGOREV: Kullanicinin mesajini analiz et ve ne yapmak istedigini belirle.\n\nKATEGORILER:\n- balance: Bakiye sorgusu (durum, bakiye, kac kuponum var, ne kadar)\n- coupon: Kupon kodu gonderimi (mesajda 8+ karakterli alfanumerik kod varsa)\n- claim: Kupon kullanma istegi (kupon kullan, kullanmak istiyorum, hediye masaj)\n- help: Yardim istegi (yardim, nasil calisir, bilgi)\n- greeting: Selamlama (merhaba, selam, iyi gunler)\n- other: Diger (anlamsiz veya konu disi mesajlar)\n\nKURALLAR:\n1. Mesajda 8+ karakterli kod varsa (ornek: ABC12345) intent='coupon' ve couponCode'u cikart\n2. Kullanici kupon kullanmak istiyorsa intent='claim'\n3. Bakiye sormak istiyorsa intent='balance'\n4. Emin degilsen needMoreInfo=true yap ve soru sor\n\nCIKTI FORMATI (JSON):\n{\n  \"intent\": \"balance|coupon|claim|help|greeting|other\",\n  \"couponCode\": \"varsa kod, yoksa null\",\n  \"response\": \"Kullaniciya Turkce cevap\",\n  \"needMoreInfo\": true/false,\n  \"confidence\": \"high|medium|low\"\n}"
+        }
+      },
+      "id": "ai-agent", "name": "AI Agent", "type": "@n8n/n8n-nodes-langchain.agent", "typeVersion": 1.7, "position": [1050, 500]
+    },
+    {
+      "parameters": { "sessionIdType": "customKey", "sessionKey": "={{ $json.phone }}" },
+      "id": "chat-memory", "name": "Chat Memory", "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow", "typeVersion": 1.3, "position": [650, 550]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "models/gemini-2.0-flash", "mode": "list" },
+        "options": { "temperature": 0.1 }
+      },
+      "id": "gemini-model", "name": "Gemini Model", "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini", "typeVersion": 1, "position": [650, 700],
+      "credentials": { "googlePalmApi": { "id": "8vCTje6QjWsq6I98", "name": "Google Gemini(PaLM) Api account" } }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"intent\": \"balance\",\n  \"couponCode\": null,\n  \"response\": \"Bakiyenizi kontrol ediyorum...\",\n  \"needMoreInfo\": false,\n  \"confidence\": \"high\"\n}"
+      },
+      "id": "output-parser", "name": "Output Parser", "type": "@n8n/n8n-nodes-langchain.outputParserStructured", "typeVersion": 1.3, "position": [850, 550]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the parsed output from AI Agent\nconst input = $input.first().json;\nconst parseData = $('Parse').first().json;\n\n// The output parser returns: { output: { intent, couponCode, response, needMoreInfo, confidence } }\n// But sometimes it's nested as: { output: { response: { intent, ... } } }\nlet parsed = input.output || input;\n\n// Handle string JSON\nif (typeof parsed === 'string') {\n  try { parsed = JSON.parse(parsed); } catch(e) {}\n}\n\n// Check if response is nested object (output.response.intent exists)\nif (parsed.response && typeof parsed.response === 'object' && parsed.response.intent) {\n  // Nested structure: { response: { intent, couponCode, response, ... } }\n  const nested = parsed.response;\n  return [{ json: { \n    needMoreInfo: nested.needMoreInfo === true || nested.needMoreInfo === 'true',\n    intent: nested.intent || 'other',\n    couponCode: nested.couponCode || null,\n    response: nested.response || 'Anlamadim, tekrar deneyin.',\n    confidence: nested.confidence || 'low',\n    phone: parseData.phone\n  } }];\n}\n\n// Flat structure: { intent, couponCode, response, ... }\nreturn [{ json: { \n  needMoreInfo: parsed.needMoreInfo === true || parsed.needMoreInfo === 'true',\n  intent: parsed.intent || 'other',\n  couponCode: parsed.couponCode || null,\n  response: parsed.response || 'Anlamadim, tekrar deneyin.',\n  confidence: parsed.confidence || 'low',\n  phone: parseData.phone\n} }];"
+      },
+      "id": "process-ai-output", "name": "Process AI Output", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": false }, "combinator": "and", "conditions": [
+          { "leftValue": "={{ $json.needMoreInfo }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }
+        ] }
+      },
+      "id": "need-more-info", "name": "Need More Info?", "type": "n8n-nodes-base.if", "typeVersion": 2.2, "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn [{ json: { phone: input.phone, message: input.response } }];"
+      },
+      "id": "send-clarification", "name": "Send Clarification", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n// Check if this is an API intent that needs acknowledgment\nconst apiIntents = ['balance', 'coupon', 'claim'];\nconst needsAck = apiIntents.includes(input.intent) && input.response;\nreturn [{ json: { intent: input.intent, phone: input.phone, couponCode: input.couponCode, aiResponse: input.response, needsAck } }];"
+      },
+      "id": "extract-intent", "name": "Extract Intent", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1450, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.phone, type: 'text', text: { body: $json.aiResponse } }) }}"
+      },
+      "id": "send-ack", "name": "Send Acknowledgment", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1600, 350],
+      "credentials": { "httpHeaderAuth": { "id": "CigixqRw14bgeG1D", "name": "WhatsApp Business API" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass through the original data after sending acknowledgment\nconst extractData = $('Extract Intent').first().json;\nreturn [{ json: extractData }];"
+      },
+      "id": "after-ack", "name": "After Ack", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1750, 350]
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "balance", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Balance" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "coupon", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Coupon" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "claim", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Claim" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "help", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Help" },
+          { "conditions": { "options": { "caseSensitive": false }, "conditions": [{ "leftValue": "={{ $json.intent }}", "rightValue": "greeting", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Greeting" }
+        ] },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "intent-router", "name": "Intent Router", "type": "n8n-nodes-base.switch", "typeVersion": 3, "position": [1650, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3001/api/integrations/coupons/wallet/{{ $json.phone }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-balance", "name": "API Balance", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1900, 200],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/consume",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.phone, token: $json.couponCode }) }}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-coupon", "name": "API Coupon", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1900, 350],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/coupons/claim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.phone }) }}",
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "api-claim", "name": "API Claim", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1900, 500],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $json.phone || $('Extract Intent').first().json.phone;\nreturn [{ json: { phone, message: '🎫 SPA Kupon Sistemi\\n\\n📌 Nasil Calisir:\\n• Her masaj = 1 kupon\\n• 4 kupon = 1 ucretsiz masaj\\n\\n📱 Komutlar:\\n• DURUM - Bakiye sorgula\\n• KUPON <KOD> - Kupon ekle\\n• KUPON KULLAN - Hediye al\\n\\n❓ Sorulariniz icin yazin!' } }];"
+      },
+      "id": "help-response", "name": "Help Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1900, 650]
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $json.phone || $('Extract Intent').first().json.phone;\nreturn [{ json: { phone, message: '👋 Merhaba! SPA Kupon Sistemine hosgeldiniz.\\n\\nSize nasil yardimci olabilirim?\\n• Bakiye sorgulamak icin: DURUM\\n• Kupon eklemek icin: KUPON <KOD>\\n• Hediye almak icin: KUPON KULLAN' } }];"
+      },
+      "id": "greeting-response", "name": "Greeting Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1900, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "const phone = $json.phone || $('Extract Intent').first().json.phone;\nconst aiResponse = $('Extract Intent').first().json.aiResponse || 'Anlamadigim bir sey var. Lutfen tekrar deneyin veya YARDIM yazin.';\nreturn [{ json: { phone, message: aiResponse } }];"
+      },
+      "id": "other-response", "name": "Other Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1900, 950]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet phone = input.phone;\nlet message = '';\n\n// Get phone from After Ack if not in current input\ntry {\n  if (!phone) phone = $('After Ack').first().json.phone;\n} catch(e) {}\n\nif (input.error) {\n  const code = input.error.code || 'ERROR';\n  if (code === 'WALLET_NOT_FOUND') message = '📊 Henuz kupon hesabiniz yok. Ilk kuponunuzu ekleyin!';\n  else if (code === 'INVALID_TOKEN') message = '❌ Bu kupon kodu gecersiz. Lutfen kontrol edin.';\n  else if (code === 'ALREADY_USED') message = '❌ Bu kupon daha once kullanilmis.';\n  else if (code === 'EXPIRED_TOKEN') message = '❌ Kupon suresi dolmus.';\n  else if (code === 'INSUFFICIENT_COUPONS') {\n    const bal = input.error.balance || 0;\n    const needed = input.error.needed || (4 - bal);\n    message = `📊 Yeterli kuponunuz yok.\\nMevcut: ${bal}/4 kupon\\n${needed} kupon daha toplayin.`;\n  }\n  else message = '❌ Bir hata olustu: ' + (input.error.message || code);\n} else if (input.couponCount !== undefined) {\n  const count = input.couponCount || 0;\n  const needed = 4 - count;\n  message = `📊 Kupon Bakiyeniz\\n\\n🎫 Mevcut: ${count}/4 kupon\\n${needed > 0 ? `📍 ${needed} kupon daha = ucretsiz masaj!` : '🎉 Ucretsiz masaj hakkiniz var! KUPON KULLAN yazin.'}`;\n} else if (input.balance !== undefined) {\n  const count = input.balance || 0;\n  const needed = input.remainingToFree || (4 - count);\n  message = `✅ Kupon eklendi!\\n\\n🎫 Yeni bakiye: ${count}/4 kupon\\n${needed > 0 ? `📍 ${needed} kupon daha = ucretsiz masaj!` : '🎉 Ucretsiz masaj hakkiniz var! KUPON KULLAN yazin.'}`;\n} else if (input.redemptionId) {\n  if (input.isNew === false) {\n    message = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n\\n🎫 Kod: ${input.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  } else {\n    message = `🎉 Tebrikler! Ucretsiz masaj hakkiniz kullanildi.\\n\\n🎫 Kod: ${input.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  }\n} else {\n  message = '❓ Beklenmeyen bir durum olustu. Lutfen tekrar deneyin.';\n}\n\nreturn [{ json: { phone, message } }];"
+      },
+      "id": "format-api-response", "name": "Format API Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.phone, type: 'text', text: { body: $json.message } }) }}"
+      },
+      "id": "send-whatsapp", "name": "Send WhatsApp", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [2300, 500],
+      "credentials": { "httpHeaderAuth": { "id": "CigixqRw14bgeG1D", "name": "WhatsApp Business API" } }
+    },
+    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ok", "name": "OK Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [2500, 500] }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Parse", "type": "main", "index": 0 }]] },
+    "Parse": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
+    "Router": { "main": [
+      [{ "node": "Verify Response", "type": "main", "index": 0 }],
+      [{ "node": "Pre-AI Router", "type": "main", "index": 0 }],
+      [{ "node": "Ignore Response", "type": "main", "index": 0 }]
+    ]},
+    "Pre-AI Router": { "main": [[{ "node": "Keyword or AI?", "type": "main", "index": 0 }]] },
+    "Keyword or AI?": { "main": [
+      [{ "node": "Keyword to Intent", "type": "main", "index": 0 }],
+      [{ "node": "AI Agent", "type": "main", "index": 0 }]
+    ]},
+    "Keyword to Intent": { "main": [[{ "node": "Extract Intent", "type": "main", "index": 0 }]] },
+    "Gemini Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "Output Parser": { "ai_outputParser": [[{ "node": "AI Agent", "type": "ai_outputParser", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Process AI Output", "type": "main", "index": 0 }]] },
+    "Process AI Output": { "main": [[{ "node": "Need More Info?", "type": "main", "index": 0 }]] },
+    "Need More Info?": { "main": [
+      [{ "node": "Send Clarification", "type": "main", "index": 0 }],
+      [{ "node": "Extract Intent", "type": "main", "index": 0 }]
+    ]},
+    "Send Clarification": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Extract Intent": { "main": [[{ "node": "Send Acknowledgment", "type": "main", "index": 0 }]] },
+    "Send Acknowledgment": { "main": [[{ "node": "After Ack", "type": "main", "index": 0 }]] },
+    "After Ack": { "main": [[{ "node": "Intent Router", "type": "main", "index": 0 }]] },
+    "Intent Router": { "main": [
+      [{ "node": "API Balance", "type": "main", "index": 0 }],
+      [{ "node": "API Coupon", "type": "main", "index": 0 }],
+      [{ "node": "API Claim", "type": "main", "index": 0 }],
+      [{ "node": "Help Response", "type": "main", "index": 0 }],
+      [{ "node": "Greeting Response", "type": "main", "index": 0 }],
+      [{ "node": "Other Response", "type": "main", "index": 0 }]
+    ]},
+    "API Balance": { "main": [[{ "node": "Format API Response", "type": "main", "index": 0 }]] },
+    "API Coupon": { "main": [[{ "node": "Format API Response", "type": "main", "index": 0 }]] },
+    "API Claim": { "main": [[{ "node": "Format API Response", "type": "main", "index": 0 }]] },
+    "Help Response": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Greeting Response": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Other Response": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Format API Response": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Send WhatsApp": { "main": [[{ "node": "OK Response", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveManualExecutions": false, "saveDataErrorExecution": "all", "saveDataSuccessExecution": "none" }
+}

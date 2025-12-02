@@ -247,8 +247,8 @@ LIMIT 10;
 **Symptoms**: No executions in n8n UI
 
 **Solutions**:
-1. Verify webhook URL in Meta dashboard
-2. Check n8n is publicly accessible (use ngrok for local testing)
+1. Verify webhook URL in Meta dashboard: `https://webhook.eformspa.com/api/whatsapp/webhook`
+2. Check Cloudflare Tunnel is running: `systemctl status cloudflared`
 3. Verify webhook subscription includes "messages" field
 4. Check n8n logs for incoming requests
 

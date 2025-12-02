@@ -81,15 +81,28 @@ Configure in Meta Cloud API Dashboard:
   ```
 - **Retry**: 3 attempts with 1s wait between tries
 
-**Response**:
+**Response (new redemption)**:
 ```json
 {
   "ok": true,
   "redemptionId": "uuid-v4",
-  "balance": 0
+  "rewardName": "Ücretsiz Masaj",
+  "isNew": true
 }
 ```
-or
+
+**Response (existing pending redemption)**:
+```json
+{
+  "ok": true,
+  "redemptionId": "uuid-v4",
+  "rewardName": "Ücretsiz Masaj",
+  "isNew": false,
+  "message": "Zaten bekleyen bir kullanim talebiniz var. Resepsiyona kodu gosterin."
+}
+```
+
+**Response (insufficient coupons)**:
 ```json
 {
   "ok": false,
@@ -115,7 +128,10 @@ or
 ### 10. Format Success (Customer)
 - **Type**: Function Node
 - **Purpose**: Creates Turkish success message for customer
-- **Message**: "🎉 Tebrikler! 4 kuponunuz kullanıldı. Redemption ID: {id}. Resepsiyona bu kodu göstererek ücretsiz masajınızı alabilirsiniz."
+- **Logic**: Checks `isNew` flag to distinguish new vs existing pending redemption
+- **Messages**:
+  - **New redemption** (`isNew: true`): "🎉 Tebrikler! Ücretsiz masaj hakkınız onaylandı! 🎫 Kod: {id}. Resepsiyona bu kodu gösterin."
+  - **Existing pending** (`isNew: false`): "⏳ Zaten bekleyen bir kullanım talebiniz var! 🎫 Kod: {id}. Resepsiyona bu kodu gösterin. Onaylandıktan sonra yeni kupon toplayabilirsiniz."
 
 ### 11. Format Insufficient
 - **Type**: Function Node
@@ -348,8 +364,10 @@ WHERE phone = '+905551234567';
 
 ### Idempotency
 - Duplicate claims within 5 minutes return same redemption ID
-- Backend also checks for existing pending redemption
+- Backend checks for existing pending redemption and returns it with `isNew: false`
+- Workflow shows different message for existing pending vs new redemption
 - Prevents double-spending of coupons
+- Customer clearly informed when they already have a pending redemption
 
 ### Staff Workflow
 1. Staff receives notification with redemption ID
@@ -382,7 +400,14 @@ WHERE phone = '+905551234567';
 ## Status
 
 ✅ Workflow defined  
-⏳ Testing in progress  
-⏳ Production deployment pending
+✅ Testing complete  
+✅ Production deployed
 
-Last Updated: 2025-11-28
+**Recent Updates (2025-12-01)**:
+- Added `isNew` flag to distinguish new vs existing pending redemptions
+- Workflow now shows different messages:
+  - New: "🎉 Tebrikler! Ücretsiz masaj hakkınız onaylandı!"
+  - Existing: "⏳ Zaten bekleyen bir kullanım talebiniz var!"
+- Prevents confusion when customer says "kupon kullan" multiple times
+
+Last Updated: 2025-12-01

@@ -24,6 +24,7 @@ import { createKioskRoutes } from './routes/kioskRoutes.js';
 import { createAdminCouponRoutes } from './routes/adminCouponRoutes.js';
 import { createAdminPolicyRoutes } from './routes/adminPolicyRoutes.js';
 import { createIntegrationCouponRoutes } from './routes/integrationCouponRoutes.js';
+import { createWhatsappWebhookRoutes } from './routes/whatsappWebhookRoutes.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -57,9 +58,35 @@ app.use(additionalSecurityHeaders);
 // Requirements: 33.1 - Implement CORS configuration
 app.use(cors(corsOptions));
 
-// Body parsing with size limits
+// Body parsing with size limits and error handling for malformed JSON
 // Requirements: 33.1 - Configure file upload restrictions
-app.use(express.json({ limit: requestLimits.json }));
+app.use(express.json({ 
+  limit: requestLimits.json,
+  verify: (req: any, _res, buf) => {
+    // Store raw body for debugging JSON parse errors
+    req.rawBody = buf.toString('utf8');
+  }
+}));
+
+// Handle JSON parse errors with detailed logging
+app.use((err: any, req: any, res: any, next: any) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    console.error('[JSON Parse Error] Malformed JSON received:', {
+      path: req.path,
+      method: req.method,
+      rawBody: req.rawBody?.substring(0, 500), // First 500 chars
+      rawBodyHex: req.rawBody ? Buffer.from(req.rawBody.substring(0, 100)).toString('hex') : null,
+      error: err.message,
+    });
+    return res.status(400).json({ 
+      error: 'Invalid JSON format',
+      details: err.message,
+      hint: 'Check for special characters or encoding issues'
+    });
+  }
+  next(err);
+});
+
 app.use(express.urlencoded({ extended: true, limit: requestLimits.urlencoded }));
 
 // Session configuration
@@ -208,6 +235,7 @@ app.use('/api/admin/coupons', createAdminCouponRoutes(dbService, couponService, 
 app.use('/api/admin/policy', createAdminPolicyRoutes(dbService, couponPolicyService));
 app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
+app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
 
 // Serve frontend static files in production - use centralized config
 if (process.env.NODE_ENV === 'production') {

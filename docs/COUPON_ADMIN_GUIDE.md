@@ -499,6 +499,18 @@ This ensures customers are recognized regardless of how they format their number
 - If balance ≥ 4 but blocked: Check rate limits, may need to wait
 - If pending redemption exists: Customer already has active request
 
+### Customer Gets "Already Pending" Message
+
+**Symptoms**: Customer sends "kupon kullan" and gets "⏳ Zaten bekleyen bir kullanım talebiniz var!"
+
+**Explanation**: This is normal behavior. The customer already has a pending redemption that hasn't been completed by staff yet.
+
+**Solutions:**
+1. Look up the customer's pending redemption in the Redemptions page
+2. If customer is present, complete the redemption
+3. If customer forgot about it, remind them to visit for their free massage
+4. The message includes their redemption code - they can show this at reception
+
 ### Token Won't Generate
 
 **Symptoms**: "Generate New Token" button doesn't work
@@ -672,7 +684,13 @@ A: Check the "Marketing Opt-In" field in wallet lookup. "No" means they opted ou
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2025-11-28  
+**Document Version**: 1.1  
+**Last Updated**: 2025-12-01  
 **For**: Admin Staff  
 **System**: WhatsApp Coupon Loyalty Program
+
+### Changelog
+
+**v1.1 (2025-12-01)**
+- Added troubleshooting for "Already Pending" message
+- Clarified behavior when customer has existing pending redemption

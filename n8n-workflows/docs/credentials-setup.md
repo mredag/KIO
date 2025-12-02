@@ -218,19 +218,20 @@ GET /webhook/whatsapp-coupon?hub.mode=subscribe&hub.verify_token=my_verify_token
 
 n8n webhook should respond with the challenge string.
 
-### Local Development with ngrok
+### Production Setup with Cloudflare Tunnel
 
-For local testing, use ngrok to expose your local n8n:
+The production webhook uses Cloudflare Tunnel for a permanent HTTPS URL:
+
+- **Webhook URL**: `https://webhook.eformspa.com/api/whatsapp/webhook`
+- **Tunnel Service**: Running as systemd service on Raspberry Pi
+- **No URL changes** - Permanent domain configured in Cloudflare
 
 ```bash
-# Install ngrok
-# Download from https://ngrok.com/
+# Check tunnel status
+ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"
 
-# Start ngrok
-ngrok http 5678
-
-# Use the HTTPS URL in Meta webhook configuration
-# Example: https://abc123.ngrok.io/webhook/whatsapp-coupon
+# Restart if needed
+ssh eform-kio@192.168.1.5 "sudo systemctl restart cloudflared"
 ```
 
 ---

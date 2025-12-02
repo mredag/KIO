@@ -284,12 +284,12 @@ export class CouponService {
    * Requirements: 4.2, 4.3, 20.1, 20.2, 20.3, 20.4
    * 
    * @param phone - Customer phone number (will be normalized)
-   * @returns Redemption result
+   * @returns Redemption result with isNew flag to distinguish new vs existing pending
    */
   claimRedemption(
     phone: string,
     tierId?: number  // Optional: specific reward tier to claim
-  ): { ok: boolean; redemptionId?: string; balance?: number; needed?: number; threshold?: number; rewardName?: string; error?: string } {
+  ): { ok: boolean; redemptionId?: string; balance?: number; needed?: number; threshold?: number; rewardName?: string; error?: string; isNew?: boolean } {
     const normalizedPhone = PhoneNormalizer.normalize(phone);
     const threshold = this.policyService.getRedemptionThreshold();
 
@@ -333,10 +333,12 @@ export class CouponService {
 
       if (existingRedemption) {
         // Return existing redemption ID without creating new one
+        // Mark isNew: false so the caller knows this is an existing pending redemption
         return {
           ok: true,
           redemptionId: existingRedemption.id,
           rewardName,
+          isNew: false,  // Important: indicates this is NOT a new redemption
         };
       }
 
@@ -409,6 +411,7 @@ export class CouponService {
         ok: true,
         redemptionId,
         rewardName,
+        isNew: true,  // This is a newly created redemption
       };
     })();
   }

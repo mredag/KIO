@@ -247,10 +247,30 @@ export function createKioskRoutes(
     try {
       const { surveyId, answers } = req.body;
 
+      // Debug logging for survey submission issues
+      console.log('[Survey] Received submission:', {
+        surveyId,
+        answersType: typeof answers,
+        answersKeys: answers ? Object.keys(answers) : [],
+        answersEmpty: answers ? Object.keys(answers).length === 0 : true,
+        bodyKeys: Object.keys(req.body),
+      });
+
       // Validate input
       if (!surveyId || !answers) {
+        console.log('[Survey] Validation failed: missing surveyId or answers');
         res.status(400).json({ error: i18n.t('validation:surveyDataRequired') });
         return;
+      }
+
+      // Warn if answers is empty (async setState bug indicator)
+      if (Object.keys(answers).length === 0) {
+        console.warn('[Survey] WARNING: Empty answers object received! This may indicate async setState bug in frontend.');
+        db.createLog({
+          level: 'warn',
+          message: 'Empty survey answers received',
+          details: { surveyId, bodyKeys: Object.keys(req.body) },
+        });
       }
 
       // Verify survey exists
@@ -267,6 +287,13 @@ export function createKioskRoutes(
         answers,
       });
 
+      // Verify the response was saved correctly
+      console.log('[Survey] Response saved:', {
+        responseId: response.id,
+        savedAnswers: response.answers,
+        savedAnswersKeys: Object.keys(response.answers || {}),
+      });
+
       // Log survey submission
       db.createLog({
         level: 'info',
@@ -275,6 +302,7 @@ export function createKioskRoutes(
           responseId: response.id,
           surveyId,
           surveyType: survey.type,
+          answerCount: Object.keys(answers).length,
         },
       });
 

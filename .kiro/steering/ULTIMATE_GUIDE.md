@@ -282,6 +282,25 @@ node test-my-app-now.js
 
 ---
 
+## 🔄 n8n/WhatsApp Patterns
+
+### Pending Redemption Handling
+**Symptom:** Customer says "kupon kullan" multiple times, gets same code  
+**Solution:** API returns `isNew` flag, workflow shows different messages
+
+```javascript
+// In n8n Fmt Claim node:
+if (r.isNew === false) {
+  msg = '⏳ Zaten bekleyen bir kullanim talebiniz var! Kod: ' + r.redemptionId;
+} else {
+  msg = '🎉 Tebrikler! Kod: ' + r.redemptionId;
+}
+```
+
+**Files:** `CouponService.ts`, `integrationCouponRoutes.ts`, `whatsapp-final.json`
+
+---
+
 ## ✨ Success Metrics
 
 This guide has solved:
@@ -291,11 +310,12 @@ This guide has solved:
 - ✅ Server startup issues (port conflicts)
 - ✅ Database persistence problems
 - ✅ UI/UX regressions
+- ✅ Duplicate redemption message confusion (2025-12-01)
 
 **Result:** 100% test pass rate, production-ready system
 
 ---
 
-**Last Updated:** 2025-11-28  
+**Last Updated:** 2025-12-01  
 **Status:** ✅ Active and tested  
 **Coverage:** All critical patterns documented

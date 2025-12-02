@@ -672,7 +672,8 @@ return $input.all();
 
 **Issue: Webhook not receiving messages**
 - Check WhatsApp webhook configuration in Meta dashboard
-- Verify webhook URL is publicly accessible (use ngrok for local testing)
+- Verify Cloudflare Tunnel is running: `systemctl status cloudflared`
+- Check webhook URL: `https://webhook.eformspa.com/api/whatsapp/webhook`
 - Check webhook signature verification
 
 **Issue: Backend API returns 401**
@@ -986,8 +987,8 @@ EOF
 ### Test Webhook Manually
 
 ```bash
-# Test from local machine (replace with actual ngrok URL in production)
-curl -X POST http://192.168.1.5:5678/webhook/whatsapp \
+# Test via Cloudflare Tunnel (production URL)
+curl -X POST https://webhook.eformspa.com/api/whatsapp/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "entry": [{
@@ -1001,6 +1002,11 @@ curl -X POST http://192.168.1.5:5678/webhook/whatsapp \
       }]
     }]
   }'
+
+# Or test n8n directly on Pi
+curl -X POST http://192.168.1.5:5678/webhook/whatsapp \
+  -H "Content-Type: application/json" \
+  -d '{"entry":[{"changes":[{"value":{"messages":[{"from":"905551234567","text":{"body":"DURUM"}}]}}]}]}'
 ```
 
 ---
@@ -1010,7 +1016,30 @@ curl -X POST http://192.168.1.5:5678/webhook/whatsapp \
 ### Production Workflow
 | Workflow | File | Status |
 |----------|------|--------|
-| WhatsApp Kupon Final | `n8n-workflows/workflows-v2/whatsapp-final.json` | ✅ Tested & Working |
+| WhatsApp Kupon AI Agent v6 | `n8n-workflows/workflows-v2/whatsapp-ai-code-tools.json` | ✅ AI-Powered (Gemini) |
+| WhatsApp Kupon Final | `n8n-workflows/workflows-v2/whatsapp-final.json` | ✅ Keyword-based fallback |
+
+### ⚠️ CRITICAL: Gemini + n8n Tool Compatibility
+
+**HTTP Request Tool does NOT work with Gemini** - causes "empty parameter keys" error.
+
+**Solution: Use Code Tool (`toolCode`) instead:**
+```json
+{
+  "parameters": {
+    "name": "tool_name",
+    "description": "Tool description",
+    "jsCode": "const param = $fromAI('param_name', 'description', 'string');\nconst response = await fetch('http://...', { ... });\nreturn await response.json();"
+  },
+  "type": "@n8n/n8n-nodes-langchain.toolCode",
+  "typeVersion": 1.1
+}
+```
+
+**Key points:**
+- Use `$fromAI('name', 'description', 'type')` to define parameters
+- Use `fetch()` for HTTP requests inside the code
+- Avoid Turkish characters in tool names (use ASCII only)
 
 ### Legacy Workflows (Deprecated)
 | Workflow | ID | Status |
@@ -1108,7 +1137,34 @@ n8n-workflows/
 
 ---
 
-**Last Updated:** 2025-11-30  
+## 🆕 Recent Updates (2025-12-01)
+
+### Pending Redemption Handling
+
+The `/claim` API now returns an `isNew` flag to distinguish between:
+- **New redemption** (`isNew: true`): First time claiming, coupons deducted
+- **Existing pending** (`isNew: false`): Already has pending redemption, returns same code
+
+**Workflow handles this with different messages:**
+```javascript
+if (r.isNew === false) {
+  // Existing pending - remind user
+  msg = `⏳ Zaten bekleyen bir kullanim talebiniz var!
+🎫 Kod: ${r.redemptionId}
+Resepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;
+} else {
+  // New redemption
+  msg = `🎉 Tebrikler! Ucretsiz masaj hakkiniz onaylandi!
+🎫 Kod: ${r.redemptionId}
+Resepsiyona bu kodu gosterin.`;
+}
+```
+
+This prevents confusion when customers say "kupon kullan" multiple times.
+
+---
+
+**Last Updated:** 2025-12-01  
 **Status:** ✅ Production-ready workflow documented  
 **Working Workflow:** `n8n-workflows/workflows-v2/whatsapp-final.json`  
 **Applies to:** WhatsApp Coupon System feature

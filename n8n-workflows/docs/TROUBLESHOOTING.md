@@ -81,10 +81,10 @@ curl -I https://your-domain.com/webhook/whatsapp
    }
    ```
 
-4. **Use ngrok for local testing**:
+4. **Check Cloudflare Tunnel (production)**:
    ```bash
-   ngrok http 5678
-   # Update Meta webhook URL to ngrok URL
+   ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"
+   # Webhook URL: https://webhook.eformspa.com/api/whatsapp/webhook
    ```
 
 #### Issue: Webhook signature verification fails

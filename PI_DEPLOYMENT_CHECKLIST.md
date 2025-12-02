@@ -200,11 +200,20 @@ pm2 restart kiosk-backend
 
 After successful deployment:
 
-1. **Install n8n** (next step)
-2. **Configure webhooks** in Meta dashboard
-3. **Import n8n workflows**
-4. **Test end-to-end coupon flow**
-5. **Update documentation**
+1. ✅ **n8n installed** and running on Pi
+2. ✅ **Cloudflare Tunnel** configured for permanent webhook URL
+3. ✅ **Meta webhooks** configured with `https://webhook.eformspa.com/api/whatsapp/webhook`
+4. ✅ **n8n workflows** imported and active
+5. ✅ **End-to-end testing** completed
+
+### Cloudflare Tunnel Management
+```bash
+# Check tunnel status
+ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"
+
+# Restart tunnel
+ssh eform-kio@192.168.1.5 "sudo systemctl restart cloudflared"
+```
 
 ## 🔗 Important URLs
 

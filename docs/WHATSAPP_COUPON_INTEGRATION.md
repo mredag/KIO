@@ -16,9 +16,9 @@ This system allows customers to collect loyalty coupons via WhatsApp. When a cus
 ## Architecture
 
 ```
-Customer WhatsApp → Meta Cloud API → ngrok → n8n (Pi) → Backend API → SQLite DB
-                                                    ↓
-                                              WhatsApp Reply
+Customer WhatsApp → Meta Cloud API → Cloudflare Tunnel → Backend (Pi) → n8n → Backend API → SQLite DB
+                                                                                    ↓
+                                                                              WhatsApp Reply
 ```
 
 ### Components
@@ -26,9 +26,10 @@ Customer WhatsApp → Meta Cloud API → ngrok → n8n (Pi) → Backend API → 
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Meta WhatsApp Business API | Cloud | Receives/sends WhatsApp messages |
-| ngrok | Local/Pi | Tunnels webhook to local n8n |
-| n8n | Raspberry Pi (192.168.1.5:5678) | Workflow automation |
-| Backend API | Raspberry Pi (localhost:3001) | Coupon business logic |
+| Cloudflare Tunnel | Pi (systemd) | Permanent HTTPS webhook URL |
+| Backend Webhook Proxy | Raspberry Pi (port 3001) | Receives & forwards to n8n |
+| n8n | Raspberry Pi (port 5678) | Workflow automation |
+| Backend API | Raspberry Pi (port 3001) | Coupon business logic |
 | SQLite Database | Raspberry Pi | Stores coupon data |
 
 ---
@@ -42,8 +43,8 @@ Customer WhatsApp → Meta Cloud API → ngrok → n8n (Pi) → Backend API → 
 **Phone Number ID:** `471153662739049`
 
 **Webhook Configuration:**
-- Callback URL: `https://<ngrok-subdomain>.ngrok-free.dev/webhook/whatsapp`
-- Verify Token: `spa_kiosk_webhook_verify_2024`
+- Callback URL: `https://webhook.eformspa.com/api/whatsapp/webhook`
+- Verify Token: `spa-kiosk-verify-token`
 - Subscribed Fields: `messages` ✅
 
 ### n8n Credentials (on Pi)
@@ -144,17 +145,21 @@ KUPON ABC123DEF456
 
 ## Deployment Steps
 
-### 1. Start ngrok (on development machine or Pi)
+### 1. Cloudflare Tunnel (Already Configured)
+The webhook uses Cloudflare Tunnel for a permanent HTTPS URL:
+- **URL**: `https://webhook.eformspa.com/api/whatsapp/webhook`
+- **Service**: Running as systemd service on Pi
+
 ```bash
-ngrok http 5678
+# Check tunnel status
+ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"
 ```
-Note the HTTPS URL (e.g., `https://tibial-marlena-lumberly.ngrok-free.dev`)
 
 ### 2. Configure Meta Webhook
 1. Go to: https://developers.facebook.com/apps/1311694093443416
 2. Navigate: WhatsApp → Configuration → Webhooks
-3. Set Callback URL: `<ngrok-url>/webhook/whatsapp`
-4. Set Verify Token: `spa_kiosk_webhook_verify_2024`
+3. Set Callback URL: `https://webhook.eformspa.com/api/whatsapp/webhook`
+4. Set Verify Token: `spa-kiosk-verify-token`
 5. Subscribe to: `messages` field
 
 ### 3. Import Workflow to n8n
@@ -187,9 +192,10 @@ KUPON TEST12345678
 
 ### Webhook Not Receiving Messages
 
-1. **Check ngrok is running:** `curl https://<ngrok-url>/webhook/whatsapp`
-2. **Verify Meta subscription:** Must have `messages` field subscribed
-3. **Check n8n workflow is active:** `n8n export:workflow --all`
+1. **Check Cloudflare Tunnel:** `ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"`
+2. **Test webhook URL:** `curl https://webhook.eformspa.com/api/whatsapp/webhook`
+3. **Verify Meta subscription:** Must have `messages` field subscribed
+4. **Check n8n workflow is active:** `n8n export:workflow --all`
 
 ### 404 Errors on Webhook
 
@@ -261,11 +267,17 @@ Content-Type: application/json
 
 ## Maintenance
 
-### Renewing ngrok URL
-When ngrok URL changes:
-1. Get new URL from ngrok dashboard
-2. Update Meta webhook callback URL
-3. No changes needed in n8n (uses relative path)
+### Cloudflare Tunnel
+The webhook uses Cloudflare Tunnel with a permanent URL (`https://webhook.eformspa.com`).
+No URL changes needed - the tunnel runs as a systemd service.
+
+```bash
+# Check tunnel status
+ssh eform-kio@192.168.1.5 "systemctl status cloudflared --no-pager"
+
+# Restart if needed
+ssh eform-kio@192.168.1.5 "sudo systemctl restart cloudflared"
+```
 
 ### Refreshing WhatsApp Token
 1. Go to Meta Developer Console

@@ -114,6 +114,7 @@ export default function SurveyMode() {
 
   // Handle answer selection
   const handleAnswerSelect = (questionId: string, value: any, questionType: string) => {
+    // ✅ CRITICAL: Create new answers object first
     const newAnswers = { ...answers, [questionId]: value };
     setAnswers(newAnswers);
     resetInactivityTimer();
@@ -122,7 +123,7 @@ export default function SurveyMode() {
     if (questionType === 'single-choice' || questionType === 'rating') {
       // Small delay for visual feedback, then advance with the updated answers
       setTimeout(() => {
-        handleNextWithAnswers(newAnswers);
+        handleNextWithAnswers(newAnswers);  // ✅ Pass newAnswers directly
       }, 300);
     }
   };
@@ -138,11 +139,25 @@ export default function SurveyMode() {
         if (currentQuestionIndex < survey.questions.length - 1) {
           setCurrentQuestionIndex(prev => prev + 1);
         } else {
+          // Log survey submission for debugging (works in production too)
+          console.log('[Survey] Submitting response:', {
+            surveyId: survey.id,
+            answersCount: Object.keys(currentAnswers).length,
+            answerKeys: Object.keys(currentAnswers),
+          });
+          
           // Submit survey with the provided answers
           submitResponse({
             surveyId: survey.id,
             timestamp: new Date(),
             answers: currentAnswers,
+          }, {
+            onSuccess: () => {
+              console.log('[Survey] Response submitted successfully');
+            },
+            onError: (error: any) => {
+              console.error('[Survey] Submission failed:', error?.message || error);
+            },
           });
           setShowThankYou(true);
           
@@ -160,29 +175,48 @@ export default function SurveyMode() {
   const handleNext = () => {
     if (!survey) return;
     
-    const container = document.getElementById('survey-content');
-    if (container) {
-      container.style.opacity = '0';
-      setTimeout(() => {
-        if (currentQuestionIndex < survey.questions.length - 1) {
-          setCurrentQuestionIndex(prev => prev + 1);
-        } else {
-          // Submit survey
-          submitResponse({
-            surveyId: survey.id,
-            timestamp: new Date(),
-            answers,
-          });
-          setShowThankYou(true);
-          
-          // Reset after 3 seconds
-          setTimeout(() => {
-            resetSurvey();
-          }, 3000);
-        }
-        container.style.opacity = '1';
-      }, 150);
-    }
+    // ✅ CRITICAL: Capture current answers at call time (async setState bug fix)
+    // This ensures we use the latest answers even if setState hasn't completed
+    setAnswers(currentAnswers => {
+      const container = document.getElementById('survey-content');
+      if (container) {
+        container.style.opacity = '0';
+        setTimeout(() => {
+          if (currentQuestionIndex < survey.questions.length - 1) {
+            setCurrentQuestionIndex(prev => prev + 1);
+          } else {
+            // Log survey submission for debugging
+            console.log('[Survey] Submitting response (handleNext):', {
+              surveyId: survey.id,
+              answersCount: Object.keys(currentAnswers).length,
+              answerKeys: Object.keys(currentAnswers),
+            });
+            
+            // Submit survey with captured answers
+            submitResponse({
+              surveyId: survey.id,
+              timestamp: new Date(),
+              answers: currentAnswers,  // ✅ Use captured value from setState callback
+            }, {
+              onSuccess: () => {
+                console.log('[Survey] Response submitted successfully');
+              },
+              onError: (error: any) => {
+                console.error('[Survey] Submission failed:', error?.message || error);
+              },
+            });
+            setShowThankYou(true);
+            
+            // Reset after 3 seconds
+            setTimeout(() => {
+              resetSurvey();
+            }, 3000);
+          }
+          container.style.opacity = '1';
+        }, 150);
+      }
+      return currentAnswers;  // Return unchanged to avoid unnecessary re-render
+    });
   };
 
   // Handle previous question

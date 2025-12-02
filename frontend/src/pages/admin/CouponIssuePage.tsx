@@ -119,6 +119,36 @@ export default function CouponIssuePage() {
     }
   };
 
+  const handleSendTokenToKiosk = async (token: any) => {
+    if (!token.waUrl) return;
+    
+    setSendingToKiosk(true);
+    try {
+      await updateKioskMode.mutateAsync({
+        mode: 'coupon-qr',
+        couponQrUrl: token.waUrl,
+        couponToken: token.token,
+      });
+      
+      addToast({
+        type: 'success',
+        title: t('admin:coupons.sentToKiosk'),
+        message: t('admin:coupons.sentToKioskMessage'),
+        duration: 5000,
+      });
+    } catch (err) {
+      const errorMessage = getErrorMessage(err);
+      addToast({
+        type: 'error',
+        title: t('common:messages.error'),
+        message: errorMessage,
+        duration: 5000,
+      });
+    } finally {
+      setSendingToKiosk(false);
+    }
+  };
+
   const handleSendToKiosk = async () => {
     if (!currentWaUrl) return;
     
@@ -484,14 +514,31 @@ export default function CouponIssuePage() {
                         {formatDateTime(token.expiresAt)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {token.status !== 'used' && (
-                          <button
-                            onClick={() => setDeleteConfirm(token.token)}
-                            className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium"
-                          >
-                            {t('admin:coupons.delete')}
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {token.status === 'issued' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendTokenToKiosk(token);
+                              }}
+                              className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 font-medium"
+                              title={t('admin:coupons.sendToKiosk')}
+                            >
+                              📺 {t('admin:coupons.sendToKiosk')}
+                            </button>
+                          )}
+                          {token.status !== 'used' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm(token.token);
+                              }}
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium"
+                            >
+                              {t('admin:coupons.delete')}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

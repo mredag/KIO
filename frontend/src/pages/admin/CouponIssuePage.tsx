@@ -120,13 +120,14 @@ export default function CouponIssuePage() {
   };
 
   const handleSendTokenToKiosk = async (token: any) => {
-    if (!token.waUrl) return;
+    // Generate waUrl if not provided by backend
+    const waUrl = token.waUrl || `https://wa.me/905365100558?text=${encodeURIComponent(`KUPON ${token.token}`)}`;
     
     setSendingToKiosk(true);
     try {
       await updateKioskMode.mutateAsync({
         mode: 'coupon-qr',
-        couponQrUrl: token.waUrl,
+        couponQrUrl: waUrl,
         couponToken: token.token,
       });
       

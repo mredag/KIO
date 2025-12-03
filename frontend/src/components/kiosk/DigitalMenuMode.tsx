@@ -6,6 +6,7 @@ import MassageList from './MassageList';
 import MassageDetailPanel from './MassageDetailPanel';
 import SlideshowMode from './SlideshowMode';
 import NeoDigitalMenu from './NeoDigitalMenu';
+import ShowcaseMode from './ShowcaseMode';
 import { useKioskStore } from '../../stores/kioskStore';
 import { useMemo } from 'react';
 
@@ -134,6 +135,11 @@ export default function DigitalMenuMode() {
         onExit={handleExitSlideshow}
       />
     );
+  }
+
+  // Render ShowcaseMode when showcase theme is active (Requirement 7.3)
+  if (theme === 'showcase') {
+    return <ShowcaseMode massages={sortedMassages} />;
   }
 
   if (theme === 'immersive') {

@@ -428,15 +428,17 @@ export default function SettingsPage() {
                 <div className="flex flex-col gap-1">
                   <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.kioskThemeHelp')}</p>
                 </div>
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {themesList.map((theme) => {
                     const isSelected = kioskTheme === theme.id;
-                    // Get preview gradient colors for each theme
+                    // Get preview gradient colors for each theme - Requirements 7.1, 7.4
                     const previewGradient = theme.id === 'classic' 
                       ? 'from-blue-600 via-purple-600 to-indigo-600'
                       : theme.id === 'neo'
                       ? 'from-gray-800 via-slate-700 to-zinc-800'
-                      : 'from-violet-700 via-fuchsia-700 to-rose-700';
+                      : theme.id === 'immersive'
+                      ? 'from-violet-700 via-fuchsia-700 to-rose-700'
+                      : 'from-[#0a0f1a] via-gray-900 to-[#1a1f2e]'; // Showcase theme
                     
                     return (
                       <button
@@ -449,16 +451,28 @@ export default function SettingsPage() {
                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md'
                         }`}
                       >
-                        {/* Theme Preview */}
+                        {/* Theme Preview - Requirement 7.4 */}
                         <div className={`h-24 bg-gradient-to-br ${previewGradient} relative`}>
-                          {/* Mini QR preview */}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-12 h-12 bg-white rounded-lg shadow-lg flex items-center justify-center">
-                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                              </svg>
+                          {/* Showcase theme: Four-column preview */}
+                          {theme.id === 'showcase' ? (
+                            <div className="absolute inset-0 flex items-center justify-center gap-1 p-2">
+                              {[0, 1, 2, 3].map((i) => (
+                                <div 
+                                  key={i}
+                                  className={`h-full rounded ${i === 1 ? 'flex-[2] bg-teal-500/30' : 'flex-1 bg-white/20'} border border-white/30`}
+                                />
+                              ))}
                             </div>
-                          </div>
+                          ) : (
+                            /* Other themes: Mini QR preview */
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-12 h-12 bg-white rounded-lg shadow-lg flex items-center justify-center">
+                                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                </svg>
+                              </div>
+                            </div>
+                          )}
                           {/* Selected indicator */}
                           {isSelected && (
                             <div className="absolute top-2 right-2">
@@ -497,6 +511,13 @@ export default function SettingsPage() {
                                   <span className="w-3 h-3 rounded-full bg-rose-500"></span>
                                 </>
                               )}
+                              {theme.id === 'showcase' && (
+                                <>
+                                  <span className="w-3 h-3 rounded-full bg-[#0a0f1a]"></span>
+                                  <span className="w-3 h-3 rounded-full bg-[#14b8a6]"></span>
+                                  <span className="w-3 h-3 rounded-full bg-[#1a1f2e]"></span>
+                                </>
+                              )}
                             </div>
                           </div>
                           <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -514,6 +535,7 @@ export default function SettingsPage() {
                     {kioskTheme === 'classic' && 'Klasik Tema Özellikleri'}
                     {kioskTheme === 'neo' && 'Neo Tema Özellikleri'}
                     {kioskTheme === 'immersive' && 'Immersive Tema Özellikleri'}
+                    {kioskTheme === 'showcase' && 'Showcase Tema Özellikleri'}
                   </h4>
                   <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                     {kioskTheme === 'classic' && (
@@ -535,6 +557,14 @@ export default function SettingsPage() {
                         <li>• Mor-pembe gradient arka plan</li>
                         <li>• Tam ekran görsel deneyim</li>
                         <li>• Gelişmiş animasyonlar ve efektler</li>
+                      </>
+                    )}
+                    {kioskTheme === 'showcase' && (
+                      <>
+                        <li>• Video odaklı dört sütunlu düzen</li>
+                        <li>• Koyu lacivert/antrasit renk paleti</li>
+                        <li>• Teal vurgu renkleri ve cam efektli detay kartları</li>
+                        <li>• Otomatik geçiş ve yumuşak animasyonlar</li>
                       </>
                     )}
                   </ul>

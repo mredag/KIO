@@ -7,7 +7,7 @@
 import { useKioskStore } from '../stores/kioskStore';
 
 // Theme type
-export type KioskThemeId = 'classic' | 'neo' | 'immersive';
+export type KioskThemeId = 'classic' | 'neo' | 'immersive' | 'showcase';
 
 // Theme configuration interface
 export interface KioskThemeConfig {
@@ -179,11 +179,88 @@ export const immersiveTheme: KioskThemeConfig = {
   },
 };
 
+// Showcase Theme - Video-centric four-column layout with dark navy/charcoal palette
+// Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 7.1
+export const showcaseTheme: KioskThemeConfig = {
+  id: 'showcase',
+  name: 'Showcase',
+  description: 'Video odaklı dört sütunlu görsel deneyim',
+  
+  background: {
+    // Dark navy (#0a0f1a) to charcoal (#1a1f2e) gradient - Requirement 5.1
+    gradient: 'bg-gradient-to-br from-[#0a0f1a] via-[#111827] to-[#1a1f2e]',
+    overlay: 'bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-teal-900/10 via-transparent to-transparent',
+  },
+  
+  text: {
+    // Soft white (#f0f4f8) for primary text - Requirement 5.2
+    primary: 'text-[#f0f4f8]',
+    // Muted gray (#94a3b8) for secondary text - Requirement 5.4
+    secondary: 'text-[#94a3b8]',
+    // Teal (#14b8a6) for accent elements - Requirement 5.3
+    accent: 'text-[#14b8a6]',
+  },
+  
+  button: {
+    // Teal accent for primary buttons - Requirement 5.3
+    primary: 'bg-[#14b8a6] hover:bg-[#0d9488] text-white transition-colors duration-200',
+    secondary: 'bg-white/10 hover:bg-white/15 text-[#f0f4f8] backdrop-blur-md border border-white/10',
+    close: 'bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/20',
+  },
+  
+  qrContainer: {
+    background: 'bg-white',
+    border: 'border-4 border-[#14b8a6]/30',
+    shadow: 'shadow-[0_0_60px_rgba(20,184,166,0.3)]',
+  },
+  
+  progressBar: {
+    track: 'bg-white/10',
+    fill: 'bg-gradient-to-r from-[#14b8a6] to-[#0d9488]',
+  },
+  
+  animations: {
+    enabled: true,
+    floatAnimation: false, // Showcase uses its own column animations
+    pulseAnimation: false,
+    glowEffect: true,
+  },
+};
+
+// Showcase theme specific color constants for use in ShowcaseMode components
+export const SHOWCASE_COLORS = {
+  background: {
+    start: '#0a0f1a',    // Dark navy
+    end: '#1a1f2e',      // Charcoal
+  },
+  text: {
+    primary: '#f0f4f8',  // Soft white
+    secondary: '#94a3b8', // Muted gray
+  },
+  accent: '#14b8a6',     // Teal
+  glass: {
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: 'rgba(255, 255, 255, 0.2)',
+    blur: '16px',
+  },
+};
+
+// Animation timing constants for Showcase theme
+export const SHOWCASE_ANIMATION_CONFIG = {
+  columnExpand: 400,           // ms - column width transition
+  cardSlideIn: 300,            // ms - glass card entrance
+  cardSlideOut: 200,           // ms - glass card exit
+  entranceStagger: 100,        // ms - delay between column fade-ins
+  autoCycleInterval: 10000,    // ms - time between auto-advances
+  pauseDuration: 60000,        // ms - pause duration after interaction
+};
+
 // Theme map for easy lookup
 export const kioskThemes: Record<KioskThemeId, KioskThemeConfig> = {
   classic: classicTheme,
   neo: neoTheme,
   immersive: immersiveTheme,
+  showcase: showcaseTheme,
 };
 
 // Coupon QR theme overrides - emerald/teal color scheme
@@ -240,6 +317,27 @@ export const couponThemeOverrides: Record<KioskThemeId, Partial<KioskThemeConfig
     progressBar: {
       track: 'bg-white/10',
       fill: 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500',
+    },
+  },
+  showcase: {
+    // Showcase theme already uses teal, so minimal overrides needed
+    background: {
+      gradient: 'bg-gradient-to-br from-[#0a0f1a] via-emerald-950 to-[#1a1f2e]',
+      overlay: 'bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-900/15 via-transparent to-transparent',
+    },
+    text: {
+      primary: 'text-[#f0f4f8]',
+      secondary: 'text-emerald-200',
+      accent: 'text-emerald-400',
+    },
+    qrContainer: {
+      background: 'bg-white',
+      border: 'border-4 border-emerald-500/30',
+      shadow: 'shadow-[0_0_60px_rgba(16,185,129,0.3)]',
+    },
+    progressBar: {
+      track: 'bg-white/10',
+      fill: 'bg-gradient-to-r from-emerald-500 to-teal-500',
     },
   },
 };
@@ -357,4 +455,53 @@ export const themesList: KioskThemeConfig[] = [
   classicTheme,
   neoTheme,
   immersiveTheme,
+  showcaseTheme,
 ];
+
+/**
+ * Massage Selection Algorithm for Showcase Theme
+ * 
+ * Selects exactly 4 massages for display in the Showcase theme columns.
+ * Priority: Featured massages first (sorted by sortOrder), then non-featured.
+ * 
+ * Requirements: 1.2
+ * - Filter featured massages first
+ * - Fill remaining slots with non-featured if needed
+ * - Return exactly 4 massages (or fewer if not enough exist)
+ * 
+ * @param massages - Array of all available massages
+ * @returns Array of exactly 4 massages (or fewer if not enough exist)
+ */
+export interface MassageForSelection {
+  id: string;
+  isFeatured: boolean;
+  sortOrder: number;
+  [key: string]: unknown;
+}
+
+export function selectDisplayMassages<T extends MassageForSelection>(massages: T[]): T[] {
+  const TARGET_COUNT = 4;
+  
+  // Handle empty or invalid input
+  if (!massages || !Array.isArray(massages) || massages.length === 0) {
+    return [];
+  }
+  
+  // Sort all massages by sortOrder for consistent ordering
+  const sortedMassages = [...massages].sort((a, b) => a.sortOrder - b.sortOrder);
+  
+  // Separate featured and non-featured massages
+  const featured = sortedMassages.filter(m => m.isFeatured);
+  const nonFeatured = sortedMassages.filter(m => !m.isFeatured);
+  
+  // If we have 4 or more featured, take first 4
+  if (featured.length >= TARGET_COUNT) {
+    return featured.slice(0, TARGET_COUNT);
+  }
+  
+  // Otherwise, combine featured with non-featured to fill remaining slots
+  const remainingSlots = TARGET_COUNT - featured.length;
+  const fillers = nonFeatured.slice(0, remainingSlots);
+  
+  return [...featured, ...fillers];
+}

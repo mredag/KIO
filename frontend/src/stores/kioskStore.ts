@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { KioskMode, Massage, SurveyTemplate, SurveyResponse, GoogleReviewConfig } from '../types';
+import type { KioskThemeId } from '../lib/kioskTheme';
 
 interface KioskStore {
   // Current state
@@ -11,7 +12,7 @@ interface KioskStore {
   isOffline: boolean;
   lastSync: Date | null;
   isUserViewingQR: boolean; // Flag to prevent mode override when user is viewing QR
-  theme: 'classic' | 'neo' | 'immersive';
+  theme: KioskThemeId;
 
   // SSE state management
   isUserActive: boolean; // True when user is interacting (survey/QR)
@@ -33,7 +34,7 @@ interface KioskStore {
   setOffline: (offline: boolean) => void;
   setLastSync: (date: Date) => void;
   setUserViewingQR: (viewing: boolean) => void;
-  setTheme: (theme: 'classic' | 'neo' | 'immersive') => void;
+  setTheme: (theme: KioskThemeId) => void;
   setMassages: (massages: Massage[]) => void;
   setActiveSurvey: (survey: SurveyTemplate | null) => void;
   setGoogleReviewConfig: (config: GoogleReviewConfig | null) => void;

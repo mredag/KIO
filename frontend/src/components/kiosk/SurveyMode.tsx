@@ -120,19 +120,6 @@ export default function SurveyMode() {
     setAnswers(newAnswers);
     resetInactivityTimer();
     
-    // Check if this question has Google Review action enabled
-    const question = survey?.questions.find(q => q.id === questionId);
-    if (question?.googleReviewAction?.enabled && questionType === 'rating') {
-      const rating = parseInt(value);
-      if (rating >= question.googleReviewAction.minRating) {
-        // Show Google Review QR code
-        setTimeout(() => {
-          useKioskStore.getState().setMode('google-qr');
-        }, 500);
-        return;
-      }
-    }
-    
     // Auto-advance for single-choice and rating questions (better UX, less time consuming)
     if (questionType === 'single-choice' || questionType === 'rating') {
       // Small delay for visual feedback, then advance with the updated answers
@@ -172,6 +159,17 @@ export default function SurveyMode() {
             answerKeys: Object.keys(currentAnswers),
           });
           
+          // Check if any question triggered Google Review
+          let shouldShowGoogleReview = false;
+          survey.questions.forEach(question => {
+            if (question.googleReviewAction?.enabled && question.type === 'rating') {
+              const answer = currentAnswers[question.id];
+              if (answer && parseInt(answer) >= question.googleReviewAction.minRating) {
+                shouldShowGoogleReview = true;
+              }
+            }
+          });
+          
           // Submit survey with the provided answers
           submitResponse({
             surveyId: survey.id,
@@ -187,10 +185,19 @@ export default function SurveyMode() {
           });
           setShowThankYou(true);
           
-          // Reset after 3 seconds
-          setTimeout(() => {
-            resetSurvey();
-          }, 3000);
+          // If Google Review should be shown, switch to google-qr mode after thank you
+          if (shouldShowGoogleReview) {
+            setTimeout(() => {
+              // Set flag so GoogleQRMode knows to return to survey
+              sessionStorage.setItem('returnToSurvey', 'true');
+              useKioskStore.getState().setMode('google-qr');
+            }, 3000);
+          } else {
+            // Reset after 3 seconds
+            setTimeout(() => {
+              resetSurvey();
+            }, 3000);
+          }
         }
         container.style.opacity = '1';
       }, 150);
@@ -230,6 +237,17 @@ export default function SurveyMode() {
               answerKeys: Object.keys(currentAnswers),
             });
             
+            // Check if any question triggered Google Review
+            let shouldShowGoogleReview = false;
+            survey.questions.forEach(question => {
+              if (question.googleReviewAction?.enabled && question.type === 'rating') {
+                const answer = currentAnswers[question.id];
+                if (answer && parseInt(answer) >= question.googleReviewAction.minRating) {
+                  shouldShowGoogleReview = true;
+                }
+              }
+            });
+            
             // Submit survey with captured answers
             submitResponse({
               surveyId: survey.id,
@@ -245,10 +263,19 @@ export default function SurveyMode() {
             });
             setShowThankYou(true);
             
-            // Reset after 3 seconds
-            setTimeout(() => {
-              resetSurvey();
-            }, 3000);
+            // If Google Review should be shown, switch to google-qr mode after thank you
+            if (shouldShowGoogleReview) {
+              setTimeout(() => {
+                // Set flag so GoogleQRMode knows to return to survey
+                sessionStorage.setItem('returnToSurvey', 'true');
+                useKioskStore.getState().setMode('google-qr');
+              }, 3000);
+            } else {
+              // Reset after 3 seconds
+              setTimeout(() => {
+                resetSurvey();
+              }, 3000);
+            }
           }
           container.style.opacity = '1';
         }, 150);

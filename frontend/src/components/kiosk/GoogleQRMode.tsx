@@ -40,6 +40,15 @@ export default function GoogleQRMode() {
     }
   };
 
+  // Auto-return timer (60 seconds)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleClose();
+    }, 60000); // 60 seconds
+
+    return () => clearTimeout(timer);
+  }, []);
+
   // Animate description text with vertical movement using CSS (Requirement 8.3)
   // Optimized for Raspberry Pi performance (Requirements 17.1, 17.5)
   useEffect(() => {

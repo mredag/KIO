@@ -453,7 +453,7 @@ export default function SurveyEditorPage() {
                   
                   {formData.questions.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                      No questions added yet
+                      {t('surveyEditor.noQuestionsAdded')}
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -465,7 +465,7 @@ export default function SurveyEditorPage() {
                             </span>
                             <div className="flex-1">
                               <p className="text-lg font-medium text-gray-900 dark:text-gray-50">
-                                {question.text || 'Question text'}
+                                {question.text || t('surveyEditor.questionText')}
                                 {question.isRequired && <span className="text-red-500 ml-1">*</span>}
                               </p>
                             </div>
@@ -490,7 +490,7 @@ export default function SurveyEditorPage() {
                               {question.options.map((option, optIndex) => (
                                 <label key={optIndex} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
                                   <input type="radio" name={`q${index}`} className="w-4 h-4" />
-                                  <span className="text-gray-900 dark:text-gray-50">{option || `Option ${optIndex + 1}`}</span>
+                                  <span className="text-gray-900 dark:text-gray-50">{option || t('surveyEditor.optionPlaceholder', { number: optIndex + 1 })}</span>
                                 </label>
                               ))}
                             </div>
@@ -506,11 +506,11 @@ export default function SurveyEditorPage() {
               <div className="max-w-3xl mx-auto">
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
-                    Questions ({formData.questions.length})
+                    {t('surveyEditor.questionsSection')} ({formData.questions.length})
                   </h3>
                   {formData.questions.length === 0 && (
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Drag question types from the left panel to get started
+                      {t('surveyEditor.dragFromLeft')}
                     </p>
                   )}
                 </div>
@@ -520,8 +520,8 @@ export default function SurveyEditorPage() {
                     <svg className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    <p className="text-gray-600 dark:text-gray-400 mb-2">No questions yet</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-500">Click a question type on the left to add your first question</p>
+                    <p className="text-gray-600 dark:text-gray-400 mb-2">{t('surveyEditor.noQuestionsYet')}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-500">{t('surveyEditor.dragFromLeft')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -557,20 +557,30 @@ export default function SurveyEditorPage() {
                                   ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' 
                                   : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
                               }`}>
-                                {question.type === 'rating' ? '⭐ Rating' : '◉ Choice'}
+                                {question.type === 'rating' ? `⭐ ${t('surveyEditor.rating')}` : `◉ ${t('surveyEditor.choice')}`}
                               </span>
                               {question.isRequired && (
                                 <span className="px-2 py-0.5 text-xs font-medium rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
-                                  Required
+                                  {t('surveyEditor.required')}
+                                </span>
+                              )}
+                              {question.conditionalOn && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                                  {t('surveyEditor.conditional')}
+                                </span>
+                              )}
+                              {question.googleReviewAction?.enabled && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                  🌟 Google
                                 </span>
                               )}
                             </div>
                             <p className="text-gray-900 dark:text-gray-50 font-medium">
-                              {question.text || <span className="text-gray-400 italic">Click to edit question</span>}
+                              {question.text || <span className="text-gray-400 italic">{t('surveyEditor.clickToEdit')}</span>}
                             </p>
                             {question.type === 'single-choice' && question.options.length > 0 && (
                               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                {question.options.filter(o => o).length} options
+                                {question.options.filter(o => o).length} {t('surveyEditor.answerOptions').toLowerCase()}
                               </p>
                             )}
                           </div>
@@ -600,7 +610,7 @@ export default function SurveyEditorPage() {
             <div className="w-80 bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 p-4 overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                  Question Settings
+                  {t('surveyEditor.questionSettings')}
                 </h3>
                 <button
                   onClick={() => setSelectedQuestionIndex(null)}
@@ -616,29 +626,29 @@ export default function SurveyEditorPage() {
                 {/* Question Text */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Question Text
+                    {t('surveyEditor.questionText')}
                   </label>
                   <textarea
                     value={selectedQuestion.text}
                     onChange={(e) => handleQuestionChange(selectedQuestionIndex, 'text', e.target.value)}
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50 focus:ring-2 focus:ring-sky-500"
-                    placeholder="Enter your question..."
+                    placeholder={t('surveyEditor.questionTextPlaceholder')}
                   />
                 </div>
 
                 {/* Question Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Question Type
+                    {t('surveyEditor.questionType')}
                   </label>
                   <select
                     value={selectedQuestion.type}
                     onChange={(e) => handleQuestionChange(selectedQuestionIndex, 'type', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                   >
-                    <option value="rating">⭐ Rating</option>
-                    <option value="single-choice">◉ Single Choice</option>
+                    <option value="rating">⭐ {t('surveyEditor.rating')}</option>
+                    <option value="single-choice">◉ {t('surveyEditor.choice')}</option>
                   </select>
                 </div>
 
@@ -646,7 +656,7 @@ export default function SurveyEditorPage() {
                 {selectedQuestion.type === 'single-choice' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Answer Options
+                      {t('surveyEditor.answerOptions')}
                     </label>
                     <div className="space-y-2">
                       {selectedQuestion.options.map((option, optIndex) => (
@@ -655,7 +665,7 @@ export default function SurveyEditorPage() {
                             type="text"
                             value={option}
                             onChange={(e) => handleOptionChange(selectedQuestionIndex, optIndex, e.target.value)}
-                            placeholder={`Option ${optIndex + 1}`}
+                            placeholder={t('surveyEditor.optionPlaceholder', { number: optIndex + 1 })}
                             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
                           />
                           {selectedQuestion.options.length > 1 && (
@@ -675,7 +685,7 @@ export default function SurveyEditorPage() {
                       onClick={() => handleAddOption(selectedQuestionIndex)}
                       className="mt-2 text-sm text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 font-medium"
                     >
-                      + Add Option
+                      + {t('surveyEditor.addOption')}
                     </button>
                   </div>
                 )}
@@ -683,7 +693,7 @@ export default function SurveyEditorPage() {
                 {/* Required Toggle */}
                 <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <label htmlFor="required" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Required Question
+                    {t('surveyEditor.requiredQuestion')}
                   </label>
                   <input
                     type="checkbox"
@@ -698,10 +708,10 @@ export default function SurveyEditorPage() {
                 <div className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div>
                     <label htmlFor="track" className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
-                      Track Important
+                      {t('surveyEditor.trackImportant')}
                     </label>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Show on dashboard
+                      {t('surveyEditor.trackImportantHelp')}
                     </p>
                   </div>
                   <input
@@ -713,10 +723,191 @@ export default function SurveyEditorPage() {
                   />
                 </div>
 
+                {/* Conditional Logic */}
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
+                        {t('surveyEditor.conditionalLogic')}
+                      </label>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {t('surveyEditor.conditionalLogicHelp')}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={!!selectedQuestion.conditionalOn}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          handleQuestionChange(selectedQuestionIndex, 'conditionalOn', {
+                            questionId: '',
+                            values: []
+                          });
+                        } else {
+                          handleQuestionChange(selectedQuestionIndex, 'conditionalOn', undefined);
+                        }
+                      }}
+                      className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                    />
+                  </div>
+
+                  {selectedQuestion.conditionalOn && (
+                    <div className="space-y-3 pl-4 border-l-2 border-purple-200 dark:border-purple-800">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          {t('surveyEditor.showWhen')}
+                        </label>
+                        <select
+                          value={selectedQuestion.conditionalOn.questionId}
+                          onChange={(e) => {
+                            const newConditional = { ...selectedQuestion.conditionalOn!, questionId: e.target.value, values: [] };
+                            handleQuestionChange(selectedQuestionIndex, 'conditionalOn', newConditional);
+                          }}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
+                        >
+                          <option value="">{t('surveyEditor.selectQuestion')}</option>
+                          {formData.questions.slice(0, selectedQuestionIndex).map((q, idx) => (
+                            <option key={q.id} value={q.id}>
+                              Q{idx + 1}: {q.text || t('surveyEditor.untitledSurvey')}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedQuestion.conditionalOn.questionId && (() => {
+                        const conditionalQuestion = formData.questions.find(q => q.id === selectedQuestion.conditionalOn!.questionId);
+                        if (!conditionalQuestion) return null;
+
+                        if (conditionalQuestion.type === 'rating') {
+                          return (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                {t('surveyEditor.conditionalValues')}
+                              </label>
+                              <div className="flex flex-wrap gap-2">
+                                {[1, 2, 3, 4, 5].map((rating) => (
+                                  <button
+                                    key={rating}
+                                    type="button"
+                                    onClick={() => {
+                                      const currentValues = selectedQuestion.conditionalOn!.values || [];
+                                      const newValues = currentValues.includes(rating)
+                                        ? currentValues.filter(v => v !== rating)
+                                        : [...currentValues, rating];
+                                      handleQuestionChange(selectedQuestionIndex, 'conditionalOn', {
+                                        ...selectedQuestion.conditionalOn!,
+                                        values: newValues
+                                      });
+                                    }}
+                                    className={`px-3 py-1.5 text-sm rounded-md border-2 transition-colors ${
+                                      (selectedQuestion.conditionalOn?.values || []).includes(rating)
+                                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
+                                        : 'border-gray-300 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-700'
+                                    }`}
+                                  >
+                                    {rating}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        } else if (conditionalQuestion.type === 'single-choice') {
+                          return (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                {t('surveyEditor.conditionalValues')}
+                              </label>
+                              <div className="space-y-1">
+                                {conditionalQuestion.options.map((option, idx) => (
+                                  <label key={idx} className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={(selectedQuestion.conditionalOn!.values || []).includes(option)}
+                                      onChange={(e) => {
+                                        const currentValues = selectedQuestion.conditionalOn!.values || [];
+                                        const newValues = e.target.checked
+                                          ? [...currentValues, option]
+                                          : currentValues.filter(v => v !== option);
+                                        handleQuestionChange(selectedQuestionIndex, 'conditionalOn', {
+                                          ...selectedQuestion.conditionalOn!,
+                                          values: newValues
+                                        });
+                                      }}
+                                      className="h-3 w-3 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                    />
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">{option}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Review Action (for rating questions) */}
+                {selectedQuestion.type === 'rating' && (
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block">
+                          {t('surveyEditor.googleReviewAction')}
+                        </label>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          {t('surveyEditor.googleReviewActionHelp')}
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedQuestion.googleReviewAction?.enabled || false}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            handleQuestionChange(selectedQuestionIndex, 'googleReviewAction', {
+                              enabled: true,
+                              minRating: 4
+                            });
+                          } else {
+                            handleQuestionChange(selectedQuestionIndex, 'googleReviewAction', undefined);
+                          }
+                        }}
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      />
+                    </div>
+
+                    {selectedQuestion.googleReviewAction?.enabled && (
+                      <div className="pl-4 border-l-2 border-green-200 dark:border-green-800">
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          {t('surveyEditor.googleReviewThreshold')}
+                        </label>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          {t('surveyEditor.googleReviewThresholdHelp')}
+                        </p>
+                        <select
+                          value={selectedQuestion.googleReviewAction.minRating}
+                          onChange={(e) => {
+                            handleQuestionChange(selectedQuestionIndex, 'googleReviewAction', {
+                              ...selectedQuestion.googleReviewAction!,
+                              minRating: parseInt(e.target.value)
+                            });
+                          }}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
+                        >
+                          <option value="3">3+</option>
+                          <option value="4">4+</option>
+                          <option value="5">5</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Move Buttons */}
                 <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Reorder
+                    {t('surveyEditor.reorder')}
                   </label>
                   <div className="flex gap-2">
                     <button
@@ -725,7 +916,7 @@ export default function SurveyEditorPage() {
                       disabled={selectedQuestionIndex === 0}
                       className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      ↑ Move Up
+                      ↑ {t('surveyEditor.moveUp')}
                     </button>
                     <button
                       type="button"
@@ -733,7 +924,7 @@ export default function SurveyEditorPage() {
                       disabled={selectedQuestionIndex === formData.questions.length - 1}
                       className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                     >
-                      ↓ Move Down
+                      ↓ {t('surveyEditor.moveDown')}
                     </button>
                   </div>
                 </div>

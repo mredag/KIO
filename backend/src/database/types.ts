@@ -63,6 +63,10 @@ export interface Question {
     questionId: string;
     values: any[];
   };
+  googleReviewAction?: {
+    enabled: boolean;
+    minRating: number;
+  };
 }
 
 export interface SurveyTemplateInput {

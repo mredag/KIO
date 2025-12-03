@@ -101,25 +101,7 @@
       },
       "id": "extract-intent", "name": "Extract Intent", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1450, 500]
     },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.phone, type: 'text', text: { body: $json.aiResponse } }) }}"
-      },
-      "id": "send-ack", "name": "Send Acknowledgment", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1600, 350],
-      "credentials": { "httpHeaderAuth": { "id": "CigixqRw14bgeG1D", "name": "WhatsApp Business API" } }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Pass through the original data after sending acknowledgment\nconst extractData = $('Extract Intent').first().json;\nreturn [{ json: extractData }];"
-      },
-      "id": "after-ack", "name": "After Ack", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1750, 350]
-    },
+    
     {
       "parameters": {
         "rules": { "values": [
@@ -192,7 +174,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nlet phone = input.phone;\nlet message = '';\n\n// Get phone from After Ack if not in current input\ntry {\n  if (!phone) phone = $('After Ack').first().json.phone;\n} catch(e) {}\n\nif (input.error) {\n  const code = input.error.code || 'ERROR';\n  if (code === 'WALLET_NOT_FOUND') message = '📊 Henuz kupon hesabiniz yok. Ilk kuponunuzu ekleyin!';\n  else if (code === 'INVALID_TOKEN') message = '❌ Bu kupon kodu gecersiz. Lutfen kontrol edin.';\n  else if (code === 'ALREADY_USED') message = '❌ Bu kupon daha once kullanilmis.';\n  else if (code === 'EXPIRED_TOKEN') message = '❌ Kupon suresi dolmus.';\n  else if (code === 'INSUFFICIENT_COUPONS') {\n    const bal = input.error.balance || 0;\n    const needed = input.error.needed || (4 - bal);\n    message = `📊 Yeterli kuponunuz yok.\\nMevcut: ${bal}/4 kupon\\n${needed} kupon daha toplayin.`;\n  }\n  else message = '❌ Bir hata olustu: ' + (input.error.message || code);\n} else if (input.couponCount !== undefined) {\n  const count = input.couponCount || 0;\n  const needed = 4 - count;\n  message = `📊 Kupon Bakiyeniz\\n\\n🎫 Mevcut: ${count}/4 kupon\\n${needed > 0 ? `📍 ${needed} kupon daha = ucretsiz masaj!` : '🎉 Ucretsiz masaj hakkiniz var! KUPON KULLAN yazin.'}`;\n} else if (input.balance !== undefined) {\n  const count = input.balance || 0;\n  const needed = input.remainingToFree || (4 - count);\n  message = `✅ Kupon eklendi!\\n\\n🎫 Yeni bakiye: ${count}/4 kupon\\n${needed > 0 ? `📍 ${needed} kupon daha = ucretsiz masaj!` : '🎉 Ucretsiz masaj hakkiniz var! KUPON KULLAN yazin.'}`;\n} else if (input.redemptionId) {\n  if (input.isNew === false) {\n    message = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n\\n🎫 Kod: ${input.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  } else {\n    message = `🎉 Tebrikler! Ucretsiz masaj hakkiniz kullanildi.\\n\\n🎫 Kod: ${input.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  }\n} else {\n  message = '❓ Beklenmeyen bir durum olustu. Lutfen tekrar deneyin.';\n}\n\nreturn [{ json: { phone, message } }];"
+        "jsCode": "const input = $input.first().json;\nlet phone = input.phone;\nlet message = '';\n\n// Get phone from Extract Intent if not in current input\ntry {\n  if (!phone) phone = $('Extract Intent').first().json.phone;\n} catch(e) {}\n\nif (input.error) {\n  const code = input.error.code || 'ERROR';\n  if (code === 'WALLET_NOT_FOUND') message = '📊 Henuz kupon hesabiniz yok. Ilk kuponunuzu ekleyin!';\n  else if (code === 'INVALID_TOKEN') message = '❌ Bu kupon kodu gecersiz. Lutfen kontrol edin.';\n  else if (code === 'ALREADY_USED') message = '❌ Bu kupon daha once kullanilmis.';\n  else if (code === 'EXPIRED_TOKEN') message = '❌ Kupon suresi dolmus.';\n  else if (code === 'INSUFFICIENT_COUPONS') {\n    const bal = input.error.balance || 0;\n    const needed = input.error.needed || (4 - bal);\n    message = `📊 Yeterli kuponunuz yok.\\nMevcut: ${bal}/4 kupon\\n${needed} kupon daha toplayin.`;\n  }\n  else message = '❌ Bir hata olustu: ' + (input.error.message || code);\n} else if (input.couponCount !== undefined) {\n  const count = input.couponCount || 0;\n  const needed = 4 - count;\n  message = `📊 Kupon Bakiyeniz\\n\\n🎫 Mevcut: ${count}/4 kupon\\n${needed > 0 ? `📍 ${needed} kupon daha = ucretsiz masaj!` : '🎉 Ucretsiz masaj hakkiniz var! KUPON KULLAN yazin.'}`;\n} else if (input.balance !== undefined) {\n  const count = input.balance || 0;\n  const needed = input.remainingToFree || (4 - count);\n  message = `✅ Kupon eklendi!\\n\\n🎫 Yeni bakiye: ${count}/4 kupon\\n${needed > 0 ? `📍 ${needed} kupon daha = ucretsiz masaj!` : '🎉 Ucretsiz masaj hakkiniz var! KUPON KULLAN yazin.'}`;\n} else if (input.redemptionId) {\n  if (input.isNew === false) {\n    message = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n\\n🎫 Kod: ${input.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  } else {\n    message = `🎉 Tebrikler! Ucretsiz masaj hakkiniz kullanildi.\\n\\n🎫 Kod: ${input.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n  }\n} else {\n  message = '❓ Beklenmeyen bir durum olustu. Lutfen tekrar deneyin.';\n}\n\nreturn [{ json: { phone, message } }];"
       },
       "id": "format-api-response", "name": "Format API Response", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2100, 400]
     },
@@ -235,9 +217,7 @@
       [{ "node": "Extract Intent", "type": "main", "index": 0 }]
     ]},
     "Send Clarification": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
-    "Extract Intent": { "main": [[{ "node": "Send Acknowledgment", "type": "main", "index": 0 }]] },
-    "Send Acknowledgment": { "main": [[{ "node": "After Ack", "type": "main", "index": 0 }]] },
-    "After Ack": { "main": [[{ "node": "Intent Router", "type": "main", "index": 0 }]] },
+    "Extract Intent": { "main": [[{ "node": "Intent Router", "type": "main", "index": 0 }]] },
     "Intent Router": { "main": [
       [{ "node": "API Balance", "type": "main", "index": 0 }],
       [{ "node": "API Coupon", "type": "main", "index": 0 }],

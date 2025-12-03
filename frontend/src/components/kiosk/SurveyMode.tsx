@@ -5,6 +5,7 @@ import { useSurveyTemplate, useSubmitSurveyResponse } from '../../hooks/useKiosk
 
 /**
  * Survey Mode Component - Dynamic Question Rendering
+ * Optimized for 15-inch kiosk screens - maximizes space usage for readability
  * Performance optimized for Raspberry Pi (Requirements 17.1, 17.2, 17.5)
  */
 export default function SurveyMode() {
@@ -119,6 +120,19 @@ export default function SurveyMode() {
     setAnswers(newAnswers);
     resetInactivityTimer();
     
+    // Check if this question has Google Review action enabled
+    const question = survey?.questions.find(q => q.id === questionId);
+    if (question?.googleReviewAction?.enabled && questionType === 'rating') {
+      const rating = parseInt(value);
+      if (rating >= question.googleReviewAction.minRating) {
+        // Show Google Review QR code
+        setTimeout(() => {
+          useKioskStore.getState().setMode('google-qr');
+        }, 500);
+        return;
+      }
+    }
+    
     // Auto-advance for single-choice and rating questions (better UX, less time consuming)
     if (questionType === 'single-choice' || questionType === 'rating') {
       // Small delay for visual feedback, then advance with the updated answers
@@ -136,8 +150,20 @@ export default function SurveyMode() {
     if (container) {
       container.style.opacity = '0';
       setTimeout(() => {
-        if (currentQuestionIndex < survey.questions.length - 1) {
-          setCurrentQuestionIndex(prev => prev + 1);
+        // Find next visible question
+        let nextIndex = currentQuestionIndex + 1;
+        while (nextIndex < survey.questions.length) {
+          const nextQuestion = survey.questions[nextIndex];
+          if (!nextQuestion.conditionalOn || 
+              (currentAnswers[nextQuestion.conditionalOn.questionId] !== undefined &&
+               nextQuestion.conditionalOn.values.includes(currentAnswers[nextQuestion.conditionalOn.questionId]))) {
+            break;
+          }
+          nextIndex++;
+        }
+        
+        if (nextIndex < survey.questions.length) {
+          setCurrentQuestionIndex(nextIndex);
         } else {
           // Log survey submission for debugging (works in production too)
           console.log('[Survey] Submitting response:', {
@@ -182,8 +208,20 @@ export default function SurveyMode() {
       if (container) {
         container.style.opacity = '0';
         setTimeout(() => {
-          if (currentQuestionIndex < survey.questions.length - 1) {
-            setCurrentQuestionIndex(prev => prev + 1);
+          // Find next visible question
+          let nextIndex = currentQuestionIndex + 1;
+          while (nextIndex < survey.questions.length) {
+            const nextQuestion = survey.questions[nextIndex];
+            if (!nextQuestion.conditionalOn || 
+                (currentAnswers[nextQuestion.conditionalOn.questionId] !== undefined &&
+                 nextQuestion.conditionalOn.values.includes(currentAnswers[nextQuestion.conditionalOn.questionId]))) {
+              break;
+            }
+            nextIndex++;
+          }
+          
+          if (nextIndex < survey.questions.length) {
+            setCurrentQuestionIndex(nextIndex);
           } else {
             // Log survey submission for debugging
             console.log('[Survey] Submitting response (handleNext):', {
@@ -221,12 +259,28 @@ export default function SurveyMode() {
 
   // Handle previous question
   const handlePrevious = () => {
+    if (!survey) return;
+    
     if (currentQuestionIndex > 0) {
       const container = document.getElementById('survey-content');
       if (container) {
         container.style.opacity = '0';
         setTimeout(() => {
-          setCurrentQuestionIndex(prev => prev - 1);
+          // Find previous visible question
+          let prevIndex = currentQuestionIndex - 1;
+          while (prevIndex >= 0) {
+            const prevQuestion = survey.questions[prevIndex];
+            if (!prevQuestion.conditionalOn || 
+                (answers[prevQuestion.conditionalOn.questionId] !== undefined &&
+                 prevQuestion.conditionalOn.values.includes(answers[prevQuestion.conditionalOn.questionId]))) {
+              break;
+            }
+            prevIndex--;
+          }
+          
+          if (prevIndex >= 0) {
+            setCurrentQuestionIndex(prevIndex);
+          }
           container.style.opacity = '1';
         }, 150);
       }
@@ -245,10 +299,10 @@ export default function SurveyMode() {
 
   if (isLoading || !survey) {
     return (
-      <div className="h-full w-full flex items-center justify-center">
+      <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-gray-400">{t('survey.loading')}</p>
+          <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-white mx-auto mb-6"></div>
+          <p className="text-2xl text-gray-300">{t('survey.loading')}</p>
         </div>
       </div>
     );
@@ -261,80 +315,82 @@ export default function SurveyMode() {
 
   return (
     <div 
-      className="h-full w-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 p-6"
+      className="h-full w-full flex flex-col bg-gradient-to-br from-gray-900 to-gray-800"
       onClick={resetInactivityTimer}
       onTouchStart={resetInactivityTimer}
     >
-      <div id="survey-content" className="w-full max-w-6xl fade-transition" style={{ opacity: 1, transition: 'opacity 150ms' }}>
-        {!showThankYou ? (
-          <div className="text-center">
-            {/* Timer Display - Only show after first question and for multi-question surveys */}
-            {shouldShowTimer && (
-              <div className="absolute top-4 right-4 bg-white bg-opacity-90 rounded-full px-4 py-2 shadow-lg">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className={`text-xl font-bold ${timeLeft <= 10 ? 'text-red-600' : 'text-gray-700'}`}>
-                    {timeLeft}s
-                  </span>
-                </div>
-              </div>
-            )}
+      {/* Timer Display - Fixed position top right */}
+      {shouldShowTimer && (
+        <div className="absolute top-6 right-6 bg-white/95 rounded-2xl px-6 py-3 shadow-xl z-10">
+          <div className="flex items-center gap-3">
+            <svg className="w-8 h-8 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className={`text-3xl font-bold ${timeLeft <= 10 ? 'text-red-600 animate-pulse' : 'text-gray-700'}`}>
+              {timeLeft}s
+            </span>
+          </div>
+        </div>
+      )}
 
-            {/* Survey Header */}
+      <div id="survey-content" className="flex-1 flex flex-col justify-center px-8 py-6 fade-transition" style={{ opacity: 1, transition: 'opacity 150ms' }}>
+        {!showThankYou ? (
+          <div className="flex flex-col h-full">
+            {/* Survey Header - Compact but readable */}
             {currentQuestionIndex === 0 && (
-              <div className="mb-4">
-                <h2 className="text-3xl font-bold mb-2 text-white">{survey.title}</h2>
+              <div className="text-center mb-6 flex-shrink-0">
+                <h2 className="text-5xl font-bold mb-3 text-white leading-tight">{survey.title}</h2>
                 {survey.description && (
-                  <p className="text-lg text-gray-300 mb-4">{survey.description}</p>
+                  <p className="text-2xl text-gray-300">{survey.description}</p>
                 )}
               </div>
             )}
 
-            {/* Progress Indicator */}
-            <div className="mb-4">
-              <div className="flex justify-center items-center gap-2 mb-2">
+            {/* Progress Indicator - Larger dots */}
+            <div className="text-center mb-6 flex-shrink-0">
+              <div className="flex justify-center items-center gap-3 mb-3">
                 {survey.questions.map((_, index) => (
                   <div
                     key={index}
-                    className={`h-2 rounded-full transition-all ${
+                    className={`h-3 rounded-full transition-all duration-300 ${
                       index === currentQuestionIndex
-                        ? 'w-8 bg-blue-500'
+                        ? 'w-12 bg-blue-500'
                         : index < currentQuestionIndex
-                        ? 'w-2 bg-blue-400'
-                        : 'w-2 bg-gray-600'
+                        ? 'w-3 bg-blue-400'
+                        : 'w-3 bg-gray-600'
                     }`}
                   />
                 ))}
               </div>
-              <p className="text-sm text-gray-400">
+              <p className="text-xl text-gray-400 font-medium">
                 Soru {currentQuestionIndex + 1} / {survey.questions.length}
               </p>
             </div>
 
-            {/* Question */}
+            {/* Question - Main content area, takes remaining space */}
             {currentQuestion && (
-              <div className="mb-5">
-                <p className="text-2xl text-white mb-5">
+              <div className="flex-1 flex flex-col justify-center">
+                {/* Question Text - Large and prominent */}
+                <p className="text-4xl md:text-5xl text-white text-center mb-10 leading-relaxed font-medium px-4">
                   {currentQuestion.text}
                   {currentQuestion.isRequired && <span className="text-red-400 ml-2">*</span>}
                 </p>
 
-                {/* Rating Question */}
+                {/* Rating Question - Extra large buttons */}
                 {currentQuestion.type === 'rating' && (
-                  <div>
-                    <div className="flex justify-center gap-4 mb-3">
+                  <div className="flex flex-col items-center">
+                    <div className="flex justify-center gap-6 mb-6">
                       {currentQuestion.options.map((option) => (
                         <button
                           key={option}
                           onClick={() => handleAnswerSelect(currentQuestion.id, parseInt(option), 'rating')}
                           className={`
-                            w-20 h-20 rounded-full text-3xl font-bold
-                            transition-all duration-200 transform hover:scale-110
+                            w-24 h-24 md:w-28 md:h-28 rounded-full text-4xl md:text-5xl font-bold
+                            transition-all duration-200 transform hover:scale-110 active:scale-95
+                            shadow-lg
                             ${answers[currentQuestion.id] === parseInt(option)
-                              ? 'bg-blue-500 text-white shadow-lg scale-110'
-                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              ? 'bg-blue-500 text-white shadow-blue-500/50 scale-110 ring-4 ring-blue-300'
+                              : 'bg-gray-700 text-gray-200 hover:bg-gray-600 hover:shadow-xl'
                             }
                           `}
                         >
@@ -342,29 +398,30 @@ export default function SurveyMode() {
                         </button>
                       ))}
                     </div>
-                    <div className="flex justify-between max-w-md mx-auto text-sm text-gray-400">
+                    <div className="flex justify-between w-full max-w-2xl px-4 text-xl text-gray-400 font-medium">
                       <span>Çok Kötü</span>
                       <span>Mükemmel</span>
                     </div>
                   </div>
                 )}
 
-                {/* Single Choice Question */}
+                {/* Single Choice Question - Full width cards */}
                 {currentQuestion.type === 'single-choice' && (
                   <div className={`
-                    grid gap-3 max-w-5xl mx-auto
-                    ${currentQuestion.options.length <= 5 ? 'grid-cols-1' : 'grid-cols-2'}
+                    grid gap-4 w-full max-w-4xl mx-auto px-4
+                    ${currentQuestion.options.length <= 4 ? 'grid-cols-1' : 'grid-cols-2'}
                   `}>
                     {currentQuestion.options.map((option) => (
                       <button
                         key={option}
                         onClick={() => handleAnswerSelect(currentQuestion.id, option, 'single-choice')}
                         className={`
-                          p-4 rounded-lg text-base font-medium
-                          transition-all duration-200 transform hover:scale-105
+                          py-6 px-8 rounded-2xl text-2xl md:text-3xl font-semibold
+                          transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]
+                          shadow-lg text-left
                           ${answers[currentQuestion.id] === option
-                            ? 'bg-blue-500 text-white shadow-lg scale-105'
-                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            ? 'bg-blue-500 text-white shadow-blue-500/40 ring-4 ring-blue-300'
+                            : 'bg-gray-700/80 text-gray-100 hover:bg-gray-600 hover:shadow-xl'
                           }
                         `}
                       >
@@ -376,15 +433,16 @@ export default function SurveyMode() {
               </div>
             )}
 
-            {/* Navigation Buttons - Only show for multi-answer questions or when needed */}
-            <div className="flex justify-center gap-4 mt-5">
+            {/* Navigation Buttons - Bottom area */}
+            <div className="flex justify-center gap-6 mt-8 flex-shrink-0">
               {currentQuestionIndex > 0 && (
                 <button
                   onClick={handlePrevious}
                   className="
-                    px-8 py-3 rounded-lg text-lg font-bold
-                    bg-gray-600 text-gray-300 hover:bg-gray-500
-                    transition-all duration-200 transform hover:scale-105
+                    px-10 py-5 rounded-2xl text-2xl font-bold
+                    bg-gray-600 text-gray-200 hover:bg-gray-500
+                    transition-all duration-200 transform hover:scale-105 active:scale-95
+                    shadow-lg
                   "
                 >
                   ← Geri
@@ -398,10 +456,11 @@ export default function SurveyMode() {
                     onClick={handleNext}
                     disabled={!isCurrentQuestionAnswered()}
                     className={`
-                      px-12 py-3 rounded-lg text-lg font-bold
-                      transition-all duration-200 transform hover:scale-105
+                      px-14 py-5 rounded-2xl text-2xl font-bold
+                      transition-all duration-200 transform hover:scale-105 active:scale-95
+                      shadow-lg
                       ${isCurrentQuestionAnswered()
-                        ? 'bg-green-500 text-white hover:bg-green-600'
+                        ? 'bg-green-500 text-white hover:bg-green-600 shadow-green-500/40'
                         : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                       }
                     `}
@@ -413,9 +472,10 @@ export default function SurveyMode() {
                     <button
                       onClick={handleNext}
                       className="
-                        px-8 py-3 rounded-lg text-lg font-bold
-                        bg-gray-600 text-gray-300 hover:bg-gray-500
-                        transition-all duration-200 transform hover:scale-105
+                        px-10 py-5 rounded-2xl text-2xl font-bold
+                        bg-gray-600 text-gray-200 hover:bg-gray-500
+                        transition-all duration-200 transform hover:scale-105 active:scale-95
+                        shadow-lg
                       "
                     >
                       Atla →
@@ -426,10 +486,15 @@ export default function SurveyMode() {
             </div>
           </div>
         ) : (
-          /* Thank You Screen */
-          <div className="text-center">
-            <h2 className="text-5xl font-bold mb-6 text-white">Teşekkür Ederiz!</h2>
-            <p className="text-2xl text-gray-300">
+          /* Thank You Screen - Full screen impact */
+          <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <div className="mb-8">
+              <svg className="w-32 h-32 text-green-400 mx-auto animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-6xl md:text-7xl font-bold mb-8 text-white">Teşekkür Ederiz!</h2>
+            <p className="text-3xl md:text-4xl text-gray-300 leading-relaxed">
               Görüşleriniz bizim için çok değerli.
             </p>
           </div>

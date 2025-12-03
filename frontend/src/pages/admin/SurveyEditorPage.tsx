@@ -78,7 +78,7 @@ export default function SurveyEditorPage() {
 
     try {
       if (isNewSurvey) {
-        const newSurvey = await createSurvey.mutateAsync({
+        await createSurvey.mutateAsync({
           name: formData.name,
           type: surveyType,
           title: formData.title,
@@ -86,11 +86,11 @@ export default function SurveyEditorPage() {
           questions: formData.questions,
         } as any);
 
-        setSuccessMessage('Survey template created successfully!');
+        setSuccessMessage(t('surveyEditor.successCreate'));
         
-        // Navigate to edit page after creation
+        // Navigate to surveys list instead of edit page to avoid empty screen
         setTimeout(() => {
-          navigate(`/admin/surveys/${newSurvey.id}/edit`);
+          navigate('/admin/surveys');
         }, 1500);
       } else {
         await updateSurvey.mutateAsync({
@@ -103,7 +103,7 @@ export default function SurveyEditorPage() {
           } as any,
         });
 
-        setSuccessMessage('Survey template updated successfully!');
+        setSuccessMessage(t('surveyEditor.successUpdate'));
         
         // Clear success message after 3 seconds
         setTimeout(() => {

@@ -352,6 +352,46 @@ export const validateSurveyTemplate: ValidationChain[] = [
     .optional()
     .isBoolean()
     .withMessage('isRequired must be a boolean'),
+  
+  body('questions.*.trackImportant')
+    .optional()
+    .isBoolean()
+    .withMessage('trackImportant must be a boolean'),
+  
+  body('questions.*.conditionalOn')
+    .optional()
+    .isObject()
+    .withMessage('conditionalOn must be an object'),
+  
+  body('questions.*.conditionalOn.questionId')
+    .optional()
+    .isString()
+    .withMessage('conditionalOn.questionId must be a string'),
+  
+  body('questions.*.conditionalOn.values')
+    .optional()
+    .isArray()
+    .withMessage('conditionalOn.values must be an array'),
+  
+  body('questions.*.googleReviewAction')
+    .optional()
+    .isObject()
+    .withMessage('googleReviewAction must be an object'),
+  
+  body('questions.*.googleReviewAction.enabled')
+    .optional()
+    .isBoolean()
+    .withMessage('googleReviewAction.enabled must be a boolean'),
+  
+  body('questions.*.googleReviewAction.minRating')
+    .optional()
+    .isInt({ min: 1, max: 5 })
+    .withMessage('googleReviewAction.minRating must be between 1 and 5'),
+  
+  body('questions.*.isRequired')
+    .optional()
+    .isBoolean()
+    .withMessage('isRequired must be a boolean'),
 ];
 
 /**

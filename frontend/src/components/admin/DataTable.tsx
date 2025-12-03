@@ -6,6 +6,7 @@ export interface Column<T> {
   id: string;
   header: string;
   accessor: keyof T | ((row: T) => ReactNode);
+  render?: (row: T) => ReactNode; // Custom render function
   sortable?: boolean;
   width?: string;
 }
@@ -158,6 +159,11 @@ export function DataTable<T extends Record<string, any>>({
 
   // Render cell content
   const renderCell = (row: T, column: Column<T>) => {
+    // Use custom render function if provided
+    if (column.render) {
+      return column.render(row);
+    }
+    
     if (typeof column.accessor === 'function') {
       return column.accessor(row);
     }

@@ -29,6 +29,7 @@ export default function CouponRedemptionsPage() {
   const { t } = useTranslation(['admin', 'common']);
   const { addToast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -56,25 +57,56 @@ export default function CouponRedemptionsPage() {
     };
   }, [redemptions]);
 
+  // Calculate date range based on filter
+  const calculateDateRange = useMemo(() => {
+    const now = new Date();
+    let start = '';
+    let end = '';
+
+    switch (dateRangeFilter) {
+      case 'last7days':
+        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        end = now.toISOString().split('T')[0];
+        break;
+      case 'last30days':
+        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        end = now.toISOString().split('T')[0];
+        break;
+      case 'last3months':
+        start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        end = now.toISOString().split('T')[0];
+        break;
+      case 'custom':
+        start = startDate;
+        end = endDate;
+        break;
+      default:
+        start = '';
+        end = '';
+    }
+
+    return { start, end };
+  }, [dateRangeFilter, startDate, endDate]);
+
   // Filter by date range
   const filteredRedemptions = useMemo(() => {
     if (!redemptions) return [];
     
     let filtered = redemptions;
     
-    if (startDate) {
-      const start = new Date(startDate);
+    if (calculateDateRange.start) {
+      const start = new Date(calculateDateRange.start);
       filtered = filtered.filter((r: Redemption) => new Date(r.createdAt) >= start);
     }
     
-    if (endDate) {
-      const end = new Date(endDate);
+    if (calculateDateRange.end) {
+      const end = new Date(calculateDateRange.end);
       end.setHours(23, 59, 59, 999);
       filtered = filtered.filter((r: Redemption) => new Date(r.createdAt) <= end);
     }
     
     return filtered;
-  }, [redemptions, startDate, endDate]);
+  }, [redemptions, calculateDateRange]);
 
   const handleComplete = async (redemptionId: string) => {
     try {
@@ -128,12 +160,13 @@ export default function CouponRedemptionsPage() {
     }
   };
 
-  // Define columns for DataTable
+  // Define columns for DataTable with custom rendering
   const columns: Column<Redemption>[] = [
     {
       id: 'id',
       header: t('admin:coupons.redemptionId'),
-      accessor: (row) => (
+      accessor: 'id',
+      render: (row) => (
         <span className="font-mono text-sm text-gray-900 dark:text-gray-100">
           {row.id.substring(0, 8)}...
         </span>
@@ -143,7 +176,8 @@ export default function CouponRedemptionsPage() {
     {
       id: 'phone',
       header: t('admin:coupons.phone'),
-      accessor: (row) => (
+      accessor: 'phone',
+      render: (row) => (
         <span className="font-mono text-sm text-gray-900 dark:text-gray-100">
           {row.phoneMasked}
         </span>
@@ -160,7 +194,8 @@ export default function CouponRedemptionsPage() {
     {
       id: 'status',
       header: t('admin:coupons.status'),
-      accessor: (row) => (
+      accessor: 'status',
+      render: (row) => (
         <span
           className={`px-2 py-1 text-xs font-medium rounded-full ${
             row.status === 'completed'
@@ -182,17 +217,22 @@ export default function CouponRedemptionsPage() {
     {
       id: 'createdAt',
       header: t('admin:coupons.createdAt'),
-      accessor: (row) => formatDateTime(row.createdAt),
+      accessor: 'createdAt',
+      render: (row) => formatDateTime(row.createdAt),
       sortable: true,
       width: '180px',
     },
     {
       id: 'actions',
       header: t('admin:coupons.actions'),
-      accessor: (row) => (
+      accessor: () => '', // Empty accessor for search
+      render: (row) => (
         <div className="flex gap-2">
           <button
-            onClick={() => setSelectedRedemption(row)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedRedemption(row);
+            }}
             className="text-sky-600 hover:text-sky-900 dark:text-sky-400 dark:hover:text-sky-300 font-medium"
           >
             {t('admin:coupons.view')}
@@ -200,13 +240,19 @@ export default function CouponRedemptionsPage() {
           {row.status === 'pending' && (
             <>
               <button
-                onClick={() => setCompleteModal(row.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCompleteModal(row.id);
+                }}
                 className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 font-medium"
               >
                 {t('admin:coupons.complete')}
               </button>
               <button
-                onClick={() => setRejectModal(row.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRejectModal(row.id);
+                }}
                 className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 font-medium"
               >
                 {t('admin:coupons.reject')}
@@ -280,7 +326,7 @@ export default function CouponRedemptionsPage() {
 
         {/* Filters */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {t('admin:coupons.filterByStatus')}
@@ -298,26 +344,54 @@ export default function CouponRedemptionsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('admin:coupons.startDate')}
+                {t('admin:coupons.dateRange')}
               </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+              <select
+                value={dateRangeFilter}
+                onChange={(e) => {
+                  setDateRangeFilter(e.target.value);
+                  if (e.target.value !== 'custom') {
+                    setStartDate('');
+                    setEndDate('');
+                  }
+                }}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100"
-              />
+              >
+                <option value="all">{t('admin:coupons.allTime')}</option>
+                <option value="last7days">{t('admin:coupons.last7Days')}</option>
+                <option value="last30days">{t('admin:coupons.last30Days')}</option>
+                <option value="last3months">{t('admin:coupons.last3Months')}</option>
+                <option value="custom">{t('admin:coupons.customRange')}</option>
+              </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t('admin:coupons.endDate')}
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100"
-              />
-            </div>
+            {dateRangeFilter === 'custom' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('admin:coupons.startDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    lang="tr"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('admin:coupons.endDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    lang="tr"
+                    className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
 

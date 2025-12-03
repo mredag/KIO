@@ -230,7 +230,7 @@ export default function SurveyEditorPage() {
       id: `q${Date.now()}`,
       text: '',
       type: type,
-      options: type === 'single-choice' ? [''] : [],
+      options: type === 'single-choice' ? [''] : type === 'rating' ? ['1', '2', '3', '4', '5'] : [],
       isRequired: false,
     };
     const newQuestions = [...formData.questions, newQuestion];

@@ -1,0 +1,186 @@
+{
+  "name": "Instagram SPA AI Agent",
+  "versionId": "instagram-ai-v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "instagram-spa-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Webhook verification (GET request from Meta)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\n// Check if it's Instagram webhook\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\n// Parse Instagram messaging webhook\nconst entry = body.entry?.[0];\nif (!entry) {\n  return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n}\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) {\n  return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n}\n\n// Check for message (not read receipt or other events)\nconst message = messaging.message;\nif (!message || !message.text) {\n  return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n}\n\n// Extract sender ID (Instagram-scoped user ID)\nconst senderId = messaging.sender?.id;\nif (!senderId) {\n  return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n}\n\nreturn [{ \n  json: { \n    route: 'process', \n    senderId: senderId,\n    text: message.text.trim(),\n    messageId: message.mid,\n    timestamp: messaging.timestamp\n  } \n}];"
+      },
+      "id": "parse",
+      "name": "Parse Instagram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "v", "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Verify"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "p", "leftValue": "={{ $json.route }}", "rightValue": "process", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Process"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "i", "leftValue": "={{ $json.route }}", "rightValue": "ignore", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ignore"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "router",
+      "name": "Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [600, 400]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" },
+      "id": "resp-verify",
+      "name": "Verify Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ignore",
+      "name": "Ignore Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 600]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Kullanici ID: ' + $json.senderId + '\\nMesaj: ' + $json.text }}",
+        "options": {
+          "systemMessage": "Sen Eform SPA merkezinin Instagram asistanisin. Turkce yanit ver, samimi ve yardimci ol.\n\n## SPA BILGILERI (Knowledge Base)\n\n### Konum ve Iletisim\n- Adres: [SPA ADRESINIZI BURAYA YAZIN]\n- Telefon: [TELEFON NUMARANIZ]\n- Instagram: @eformspa\n- Calisma Saatleri: Pazartesi-Cumartesi 10:00-22:00, Pazar 12:00-20:00\n\n### Hizmetler ve Fiyatlar\n- Klasik Masaj (50 dk): 800 TL\n- Aromaterapi Masaj (60 dk): 1000 TL\n- Thai Masaj (60 dk): 1200 TL\n- Hot Stone Masaj (75 dk): 1400 TL\n- Cift Masaji (60 dk): 1800 TL\n- Kese + Kopuk (45 dk): 600 TL\n\n### Kupon Sistemi\n- Her masaj sonrasi 1 kupon kazanilir\n- 4 kupon = 1 ucretsiz masaj\n- Kupon islemleri icin WhatsApp kullanin: [WHATSAPP NUMARASI]\n\n### Ozel Bilgiler\n- Randevu onerilir ama walk-in de kabul edilir\n- Ozel gun indirimleri icin Instagram'i takip edin\n- Grup rezervasyonlari icin onceden arayin\n\n## YANITLAMA KURALLARI\n1. Kisa ve oz yanit ver (max 3-4 cumle)\n2. Emoji kullan ama asiri degil\n3. Fiyat sorarlarsa guncel fiyatlari ver\n4. Randevu icin telefon numarasini ver\n5. Kupon sorusu gelirse WhatsApp'a yonlendir\n6. Bilmedigin konularda 'Detayli bilgi icin bizi arayin' de\n\n## ORNEK YANITLAR\n- 'Neredesiniz?' → Adres + Google Maps linki onerebilirsin\n- 'Fiyatlar ne?' → En populer 3 hizmeti listele\n- 'Acik misiniz?' → Gunun saatine gore yanit ver\n- 'Randevu almak istiyorum' → Telefon numarasini ver"
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "models/gemini-2.0-flash", "mode": "list", "cachedResultName": "models/gemini-2.0-flash" },
+        "options": { "temperature": 0.4 }
+      },
+      "id": "gemini-model",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [650, 550],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8vCTje6QjWsq6I98",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'ig_' + $json.senderId }}",
+        "contextWindowLength": 10
+      },
+      "id": "chat-memory",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [750, 550]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nlet senderId;\ntry { senderId = $('Parse Instagram').first().json.senderId; } catch (e) { senderId = 'unknown'; }\nconst aiOutput = input.output || input.text || 'Bir hata olustu. Lutfen tekrar deneyin.';\n\n// Clean up response for Instagram (remove markdown, limit length)\nlet cleanMessage = aiOutput\n  .replace(/\\*\\*/g, '')  // Remove bold markdown\n  .replace(/\\*/g, '')    // Remove italic markdown\n  .replace(/#{1,6}\\s/g, '')  // Remove headers\n  .substring(0, 1000);   // Instagram message limit\n\nreturn [{ json: { senderId: senderId, message: cleanMessage } }];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer IGAATRkaY1kWFBZAGFvTnZACd0ZAMUy1peklsTUtWczVISjBRWjN0a2s2RnlIcUFreEM5WkRrT3VSNi13VHpUYzc0TUJnaHR2MTNvMTRsUXVpS1MxaWRBSlFvMEQwTENkVkhwRC1kUjQ1ZAUtzOEtqN083cmltYnRwUjN3b2I4WmgxUQZDZD" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"recipient\":{\"id\":\"{{ $json.senderId }}\"},\"message\":{\"text\":\"{{ $json.message }}\"}}",
+        "options": {}
+      },
+      "id": "send-instagram",
+      "name": "Send Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1300, 400]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ok",
+      "name": "OK Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Parse Instagram", "type": "main", "index": 0 }]] },
+    "Parse Instagram": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
+    "Router": { "main": [
+      [{ "node": "Verify Response", "type": "main", "index": 0 }],
+      [{ "node": "AI Agent", "type": "main", "index": 0 }],
+      [{ "node": "Ignore Response", "type": "main", "index": 0 }]
+    ]},
+    "Gemini Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Send Instagram": { "main": [[{ "node": "OK Response", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" }
+}

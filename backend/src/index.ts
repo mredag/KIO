@@ -25,6 +25,7 @@ import { createAdminCouponRoutes } from './routes/adminCouponRoutes.js';
 import { createAdminPolicyRoutes } from './routes/adminPolicyRoutes.js';
 import { createIntegrationCouponRoutes } from './routes/integrationCouponRoutes.js';
 import { createWhatsappWebhookRoutes } from './routes/whatsappWebhookRoutes.js';
+import { createInstagramWebhookRoutes } from './routes/instagramWebhookRoutes.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -236,6 +237,7 @@ app.use('/api/admin/policy', createAdminPolicyRoutes(dbService, couponPolicyServ
 app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
+app.use('/webhook/instagram', createInstagramWebhookRoutes());
 
 // Serve frontend static files in production - use centralized config
 if (process.env.NODE_ENV === 'production') {

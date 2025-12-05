@@ -1,6 +1,6 @@
-# n8n WhatsApp Kupon Workflows
+# n8n Messaging Workflows
 
-WhatsApp üzerinden kupon sistemi entegrasyonu için n8n workflow'ları.
+WhatsApp ve Instagram üzerinden kupon sistemi ve AI chatbot entegrasyonu için n8n workflow'ları.
 
 ## 📂 Yapı
 
@@ -9,10 +9,14 @@ n8n-workflows/
 ├── workflows-v2/
 │   ├── whatsapp-final.json      ✅ Production (keyword-based)
 │   ├── whatsapp-hybrid-v2.json  🆕 Keyword + AI fallback
-│   └── whatsapp-ai-agent.json   🆕 Full AI Agent (LangChain)
+│   ├── whatsapp-ai-agent.json   🆕 Full AI Agent (LangChain)
+│   └── instagram-ai-agent.json  🆕 Instagram AI Chatbot
+├── knowledge-base/
+│   └── spa-info.md              📚 SPA bilgi tabanı (AI için)
 ├── templates/
 │   └── openrouter-base.json     OpenRouter HTTP template
 ├── docs/
+│   ├── instagram-setup.md       📱 Instagram kurulum rehberi
 │   ├── WORKFLOW_COMPARISON.md   Workflow karşılaştırması
 │   ├── TROUBLESHOOTING.md       Sorun giderme
 │   ├── turkish-message-templates.md
@@ -41,13 +45,20 @@ ssh eform-kio@192.168.1.5 "n8n import:workflow --input=~/whatsapp-hybrid-v2.json
 
 ## 📊 Workflow Seçimi
 
+### WhatsApp Workflows
 | Senaryo | Workflow | Maliyet |
 |---------|----------|---------|
 | Production, güvenilir | `whatsapp-final.json` | $0 |
 | AI denemek | `whatsapp-hybrid-v2.json` | ~$0.01/gün |
 | Tam AI | `whatsapp-ai-agent.json` | ~$0.10/gün |
 
+### Instagram Workflows
+| Senaryo | Workflow | Maliyet |
+|---------|----------|---------|
+| AI Chatbot (Gemini) | `instagram-ai-agent.json` | ~$0.05/gün |
+
 Detaylı karşılaştırma: [docs/WORKFLOW_COMPARISON.md](docs/WORKFLOW_COMPARISON.md)
+Instagram kurulum: [docs/instagram-setup.md](docs/instagram-setup.md)
 
 ## 🔧 Gerekli Credentials
 

@@ -8,7 +8,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nif (input.query && input.query['hub.mode'] === 'subscribe') {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\nconst body = input.body || input;\nif (body.object !== 'whatsapp_business_account') return [{ json: { route: 'ignore' } }];\nconst value = body.entry?.[0]?.changes?.[0]?.value;\nif (!value || (value.statuses && !value.messages)) return [{ json: { route: 'ignore' } }];\nconst messages = value.messages;\nif (!messages?.[0]?.text?.body) return [{ json: { route: 'ignore' } }];\nconst msg = messages[0];\nreturn [{ json: { route: 'process', phone: msg.from, text: msg.text.body.trim(), messageId: msg.id } }];"
+        "jsCode": "const input = $input.first().json;\nif (input.query && input.query['hub.mode'] === 'subscribe') {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\nconst body = input.body || input;\nif (body.object !== 'whatsapp_business_account') return [{ json: { route: 'ignore' } }];\nconst value = body.entry?.[0]?.changes?.[0]?.value;\nif (!value || (value.statuses && !value.messages)) return [{ json: { route: 'ignore' } }];\nconst messages = value.messages;\nif (!messages?.[0]?.text?.body) return [{ json: { route: 'ignore' } }];\nconst msg = messages[0];\n// Ignore specific phone numbers\nconst ignoredPhones = ['905302500558'];\nif (ignoredPhones.includes(msg.from)) return [{ json: { route: 'ignore', reason: 'blocked_number' } }];\nreturn [{ json: { route: 'process', phone: msg.from, text: msg.text.body.trim(), messageId: msg.id } }];"
       },
       "id": "parse", "name": "Parse", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [400, 400]
     },

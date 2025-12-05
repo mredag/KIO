@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
 import { useSurveyTemplates, useUpdateSurveyTemplate, useCreateSurveyTemplate } from '../../hooks/useAdminApi';
 import { Question } from '../../types';
+import { isImageUrl } from '../../lib/surveyIcons';
+import EmojiPicker from '../../components/ui/EmojiPicker';
 
 interface FormData {
   name: string;
@@ -38,6 +40,13 @@ export default function SurveyEditorPage() {
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
   const [draggedQuestionIndex, setDraggedQuestionIndex] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [emojiPickerState, setEmojiPickerState] = useState<{
+    isOpen: boolean;
+    questionIndex: number;
+    optionIndex: number;
+    position?: { top: number; left: number };
+  }>({ isOpen: false, questionIndex: -1, optionIndex: -1 });
 
   // Load survey data for editing
   useEffect(() => {
@@ -55,24 +64,53 @@ export default function SurveyEditorPage() {
     }
   }, [surveys, id, isNewSurvey]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Close emoji picker on Escape
+      if (e.key === 'Escape' && emojiPickerState.isOpen) {
+        closeEmojiPicker();
+        e.preventDefault();
+      }
+      
+      // Ctrl+S to save
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        if (!isSubmitting) {
+          const form = document.querySelector('form');
+          if (form) {
+            form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+          }
+        }
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [emojiPickerState.isOpen, isSubmitting]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError('');
     setSuccessMessage('');
+    setIsSubmitting(true);
 
     // Validation
     if (!formData.name.trim()) {
       setSubmitError('Survey name is required');
+      setIsSubmitting(false);
       return;
     }
 
     if (!formData.title.trim()) {
       setSubmitError(t('surveyEditor.errorTitle'));
+      setIsSubmitting(false);
       return;
     }
 
     if (formData.questions.length === 0) {
       setSubmitError(t('surveyEditor.errorQuestions'));
+      setIsSubmitting(false);
       return;
     }
 
@@ -115,6 +153,8 @@ export default function SurveyEditorPage() {
       setSubmitError(
         error.response?.data?.error || `Failed to ${isNewSurvey ? 'create' : 'update'} survey template. Please try again.`
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -161,9 +201,11 @@ export default function SurveyEditorPage() {
 
   const handleAddOption = (questionIndex: number) => {
     const newQuestions = [...formData.questions];
+    const currentIcons = newQuestions[questionIndex].optionIcons || [];
     newQuestions[questionIndex] = {
       ...newQuestions[questionIndex],
       options: [...newQuestions[questionIndex].options, ''],
+      optionIcons: [...currentIcons, ''],
     };
     setFormData({ ...formData, questions: newQuestions });
   };
@@ -171,11 +213,96 @@ export default function SurveyEditorPage() {
   const handleRemoveOption = (questionIndex: number, optionIndex: number) => {
     const newQuestions = [...formData.questions];
     const newOptions = newQuestions[questionIndex].options.filter((_, i) => i !== optionIndex);
+    const newIcons = (newQuestions[questionIndex].optionIcons || []).filter((_, i) => i !== optionIndex);
     newQuestions[questionIndex] = {
       ...newQuestions[questionIndex],
       options: newOptions,
+      optionIcons: newIcons,
     };
     setFormData({ ...formData, questions: newQuestions });
+  };
+
+  const handleOptionIconChange = (questionIndex: number, optionIndex: number, icon: string) => {
+    const newQuestions = [...formData.questions];
+    const currentIcons = newQuestions[questionIndex].optionIcons || [];
+    // Ensure array is long enough
+    const newIcons = [...currentIcons];
+    while (newIcons.length <= optionIndex) {
+      newIcons.push('');
+    }
+    newIcons[optionIndex] = icon;
+    newQuestions[questionIndex] = {
+      ...newQuestions[questionIndex],
+      optionIcons: newIcons,
+    };
+    setFormData({ ...formData, questions: newQuestions });
+  };
+
+  const openEmojiPicker = (questionIndex: number, optionIndex: number, event: React.MouseEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pickerWidth = 400;
+    const pickerHeight = 500;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // On mobile (< 640px), center the picker
+    if (viewportWidth < 640) {
+      setEmojiPickerState({
+        isOpen: true,
+        questionIndex,
+        optionIndex,
+        position: undefined // Will use centered positioning
+      });
+      return;
+    }
+    
+    // Calculate initial position
+    let top = rect.bottom + window.scrollY + 5;
+    let left = rect.left + window.scrollX;
+    
+    // Adjust horizontal position if it goes off-screen
+    if (left + pickerWidth > viewportWidth - 20) {
+      // Try to align to right edge of button
+      left = rect.right + window.scrollX - pickerWidth;
+      
+      // If still off-screen, align to right edge of viewport
+      if (left < 20) {
+        left = viewportWidth - pickerWidth - 20;
+      }
+    }
+    
+    // Ensure minimum left padding
+    if (left < 20) {
+      left = 20;
+    }
+    
+    // Adjust vertical position if it goes off-screen
+    if (rect.bottom + pickerHeight > viewportHeight - 20) {
+      // Show above the button instead
+      top = rect.top + window.scrollY - pickerHeight - 5;
+      
+      // If still off-screen at top, center it vertically
+      if (top < window.scrollY + 20) {
+        top = window.scrollY + Math.max(20, (viewportHeight - pickerHeight) / 2);
+      }
+    }
+    
+    setEmojiPickerState({
+      isOpen: true,
+      questionIndex,
+      optionIndex,
+      position: { top, left }
+    });
+  };
+
+  const closeEmojiPicker = () => {
+    setEmojiPickerState({ isOpen: false, questionIndex: -1, optionIndex: -1 });
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    if (emojiPickerState.questionIndex >= 0 && emojiPickerState.optionIndex >= 0) {
+      handleOptionIconChange(emojiPickerState.questionIndex, emojiPickerState.optionIndex, emoji);
+    }
   };
 
   const handleMoveQuestionUp = (index: number) => {
@@ -658,27 +785,91 @@ export default function SurveyEditorPage() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {t('surveyEditor.answerOptions')}
                     </label>
-                    <div className="space-y-2">
-                      {selectedQuestion.options.map((option, optIndex) => (
-                        <div key={optIndex} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={option}
-                            onChange={(e) => handleOptionChange(selectedQuestionIndex, optIndex, e.target.value)}
-                            placeholder={t('surveyEditor.optionPlaceholder', { number: optIndex + 1 })}
-                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
-                          />
-                          {selectedQuestion.options.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveOption(selectedQuestionIndex, optIndex)}
-                              className="px-2 text-red-600 hover:text-red-800 dark:text-red-400"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                    <div className="space-y-3">
+                      {selectedQuestion.options.map((option, optIndex) => {
+                        const currentIcon = selectedQuestion.optionIcons?.[optIndex] || '';
+                        const isImageIcon = isImageUrl(currentIcon);
+                        return (
+                          <div key={optIndex} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+                            <div className="flex gap-2 items-center mb-2">
+                              <span className="text-xl w-8 h-8 flex items-center justify-center">
+                                {isImageIcon ? (
+                                  <img src={currentIcon} alt="" className="w-6 h-6 object-contain" />
+                                ) : (
+                                  currentIcon || '📝'
+                                )}
+                              </span>
+                              <input
+                                type="text"
+                                value={option}
+                                onChange={(e) => handleOptionChange(selectedQuestionIndex, optIndex, e.target.value)}
+                                placeholder={t('surveyEditor.optionPlaceholder', { number: optIndex + 1 })}
+                                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-50"
+                              />
+                              {selectedQuestion.options.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveOption(selectedQuestionIndex, optIndex)}
+                                  className="px-2 text-red-600 hover:text-red-800 dark:text-red-400"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                            {/* Icon Selection */}
+                            <div className="flex gap-2 items-center">
+                              <label className="text-xs text-gray-500 dark:text-gray-400 min-w-[40px]">İkon:</label>
+                              
+                              {/* Current Icon Display */}
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 flex items-center justify-center border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700">
+                                  {isImageIcon ? (
+                                    <img src={currentIcon} alt="" className="w-6 h-6 object-contain" />
+                                  ) : (
+                                    <span className="text-lg">{currentIcon || '📝'}</span>
+                                  )}
+                                </div>
+                                
+                                {/* Open Emoji Picker Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => openEmojiPicker(selectedQuestionIndex, optIndex, e)}
+                                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  İkon Seç
+                                </button>
+                                
+                                {/* Clear Icon Button */}
+                                {currentIcon && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOptionIconChange(selectedQuestionIndex, optIndex, '')}
+                                    className="px-2 py-1 text-xs text-red-600 hover:text-red-800 dark:text-red-400"
+                                    title="İkonu temizle"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                              
+                              {/* Quick Access Emojis */}
+                              <div className="flex gap-1 ml-2">
+                                {['💆', '🧘', '✨', '💪', '🌿', '🔥'].map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => handleOptionIconChange(selectedQuestionIndex, optIndex, emoji)}
+                                    className={`w-6 h-6 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${currentIcon === emoji ? 'bg-sky-100 dark:bg-sky-900 ring-1 ring-sky-500' : ''}`}
+                                    title={`Hızlı seçim: ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                     <button
                       type="button"
@@ -934,6 +1125,18 @@ export default function SurveyEditorPage() {
 
         </div>
       </div>
+      
+      {/* Advanced Emoji Picker */}
+      <EmojiPicker
+        isOpen={emojiPickerState.isOpen}
+        onClose={closeEmojiPicker}
+        onSelect={handleEmojiSelect}
+        currentIcon={emojiPickerState.questionIndex >= 0 && emojiPickerState.optionIndex >= 0 
+          ? formData.questions[emojiPickerState.questionIndex]?.optionIcons?.[emojiPickerState.optionIndex] || ''
+          : ''
+        }
+        position={emojiPickerState.position}
+      />
     </AdminLayout>
   );
 }

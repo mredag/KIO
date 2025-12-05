@@ -4,13 +4,14 @@
  * Main container for the Showcase theme - a video-centric four-column layout.
  * Displays featured massages with smooth expand/collapse animations and auto-cycling.
  * 
- * Requirements:
- * - 1.1, 5.1: Four-column layout with dark navy/charcoal gradient background
- * - 3.1, 3.2: Column selection state management
- * - 6.5: Staggered entrance animations
+ * Features:
+ * - Four-column layout with smooth transitions
+ * - Detail view with 70/30 split (animated transition)
+ * - Auto-cycling with pause on interaction
+ * - 60-second auto-close for detail view
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Massage } from '../../types';
 import ShowcaseColumn from './ShowcaseColumn';
 import GlassDetailCard from './GlassDetailCard';
@@ -20,199 +21,296 @@ interface ShowcaseModeProps {
   massages: Massage[];
 }
 
+// Animation duration in ms
+const TRANSITION_DURATION = 500;
+
 export default function ShowcaseMode({ massages }: ShowcaseModeProps) {
-  // Select exactly 4 massages for display (Requirement 1.2)
-  // Cast to compatible type for selection algorithm
   const displayMassages = selectDisplayMassages(massages as any) as unknown as Massage[];
   
-  // Column selection state (Requirement 3.1, 3.2)
+  // State
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [showCard, setShowCard] = useState(true);
+  const [isDetailView, setIsDetailView] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const detailTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Auto-cycling state (Requirements 8.1, 8.2, 8.3, 8.4, 8.5)
+  // Auto-cycling state
   const [isPaused, setIsPaused] = useState(false);
   const [pauseUntil, setPauseUntil] = useState<number | null>(null);
   
-  // Swipe navigation state (Requirement 10.3)
+  // Swipe state
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   
-  // Ensure selectedIndex is valid when massages change
+  // Video ref for detail view
+  const detailVideoRef = useRef<HTMLVideoElement>(null);
+  
+  // Ensure selectedIndex is valid
   useEffect(() => {
     if (selectedIndex >= displayMassages.length && displayMassages.length > 0) {
       setSelectedIndex(0);
     }
   }, [displayMassages.length, selectedIndex]);
   
-  // Auto-advance timer (Requirements 8.1, 8.2, 8.3)
+  // Auto-advance timer
   useEffect(() => {
-    // Don't auto-cycle if paused or no massages
-    if (isPaused || displayMassages.length === 0) {
-      return;
-    }
+    if (isPaused || displayMassages.length === 0 || isDetailView) return;
     
-    // Set up 10-second interval to advance to next column
     const intervalId = setInterval(() => {
-      setSelectedIndex((prevIndex) => {
-        // Wrap from index 3 back to 0 (Requirement 8.3)
-        return (prevIndex + 1) % displayMassages.length;
-      });
+      setSelectedIndex((prev) => (prev + 1) % displayMassages.length);
     }, SHOWCASE_ANIMATION_CONFIG.autoCycleInterval);
     
     return () => clearInterval(intervalId);
-  }, [isPaused, displayMassages.length]);
+  }, [isPaused, displayMassages.length, isDetailView]);
   
-  // Resume auto-cycling after pause duration (Requirement 8.5)
+  // Resume auto-cycling after pause
   useEffect(() => {
-    if (!pauseUntil) {
-      return;
-    }
+    if (!pauseUntil) return;
     
-    const now = Date.now();
-    const remainingPause = pauseUntil - now;
-    
-    if (remainingPause <= 0) {
-      // Pause duration has already elapsed
+    const remaining = pauseUntil - Date.now();
+    if (remaining <= 0) {
       setIsPaused(false);
       setPauseUntil(null);
       return;
     }
     
-    // Set timeout to resume after remaining pause duration
     const timeoutId = setTimeout(() => {
       setIsPaused(false);
       setPauseUntil(null);
-    }, remainingPause);
+    }, remaining);
     
     return () => clearTimeout(timeoutId);
   }, [pauseUntil]);
   
-  // Handle column tap to change selection (Requirement 3.2, 8.4)
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (detailTimeoutRef.current) clearTimeout(detailTimeoutRef.current);
+    };
+  }, []);
+  
+  const pauseAutoCycle = useCallback(() => {
+    setIsPaused(true);
+    setPauseUntil(Date.now() + SHOWCASE_ANIMATION_CONFIG.pauseDuration);
+  }, []);
+  
   const handleColumnSelect = useCallback((index: number) => {
+    if (isAnimating) return;
     setSelectedIndex(index);
-    setShowCard(true); // Show card when column selected
+    pauseAutoCycle();
+  }, [isAnimating, pauseAutoCycle]);
+  
+  // Open detail view with smooth animation
+  const handleShowDetails = useCallback(() => {
+    if (isAnimating || isDetailView) return;
     
-    // Pause auto-cycling for 60 seconds on user interaction (Requirement 8.4)
-    setIsPaused(true);
-    setPauseUntil(Date.now() + SHOWCASE_ANIMATION_CONFIG.pauseDuration);
-  }, []);
-  
-  // Handle glass card close (Requirement 10.5)
-  const handleCardClose = useCallback(() => {
-    // Hide card when dismissed (tapping outside card area)
-    setShowCard(false);
+    setIsAnimating(true);
+    setIsDetailView(true);
+    pauseAutoCycle();
     
-    // Pause auto-cycling on user interaction
-    setIsPaused(true);
-    setPauseUntil(Date.now() + SHOWCASE_ANIMATION_CONFIG.pauseDuration);
-  }, []);
+    // Clear any existing timeout
+    if (detailTimeoutRef.current) clearTimeout(detailTimeoutRef.current);
+    
+    // Auto-close after 60 seconds
+    detailTimeoutRef.current = setTimeout(() => {
+      handleCloseDetails();
+    }, 60000);
+    
+    // Animation complete
+    setTimeout(() => setIsAnimating(false), TRANSITION_DURATION);
+  }, [isAnimating, isDetailView, pauseAutoCycle]);
   
-  // Swipe navigation handlers (Requirement 10.3)
-  const minSwipeDistance = 50; // Minimum distance for a swipe
+  // Close detail view with smooth animation
+  const handleCloseDetails = useCallback(() => {
+    if (isAnimating || !isDetailView) return;
+    
+    setIsAnimating(true);
+    setIsDetailView(false);
+    
+    if (detailTimeoutRef.current) {
+      clearTimeout(detailTimeoutRef.current);
+      detailTimeoutRef.current = null;
+    }
+    
+    pauseAutoCycle();
+    setTimeout(() => setIsAnimating(false), TRANSITION_DURATION);
+  }, [isAnimating, isDetailView, pauseAutoCycle]);
   
+  // Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isDetailView) return;
     setTouchEnd(null);
     setTouchStart(e.targetTouches[0].clientX);
   };
   
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (isDetailView) return;
     setTouchEnd(e.targetTouches[0].clientX);
   };
   
   const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
+    if (isDetailView || !touchStart || !touchEnd) return;
     
     const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      // Left swipe: next column (increment index)
-      setSelectedIndex((prevIndex) => (prevIndex + 1) % displayMassages.length);
-      setShowCard(true); // Show card when swiping
-      
-      // Pause auto-cycling on user interaction
-      setIsPaused(true);
-      setPauseUntil(Date.now() + SHOWCASE_ANIMATION_CONFIG.pauseDuration);
-    } else if (isRightSwipe) {
-      // Right swipe: previous column (decrement index)
-      setSelectedIndex((prevIndex) => 
-        prevIndex === 0 ? displayMassages.length - 1 : prevIndex - 1
-      );
-      setShowCard(true); // Show card when swiping
-      
-      // Pause auto-cycling on user interaction
-      setIsPaused(true);
-      setPauseUntil(Date.now() + SHOWCASE_ANIMATION_CONFIG.pauseDuration);
+    if (Math.abs(distance) > 50) {
+      if (distance > 0) {
+        setSelectedIndex((prev) => (prev + 1) % displayMassages.length);
+      } else {
+        setSelectedIndex((prev) => prev === 0 ? displayMassages.length - 1 : prev - 1);
+      }
+      pauseAutoCycle();
     }
   };
   
-  // Don't render if no massages available
   if (displayMassages.length === 0) {
     return (
       <div
         className="h-full w-full flex items-center justify-center"
-        style={{
-          background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)`,
-        }}
+        style={{ background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)` }}
       >
         <div className="text-center">
           <div className="text-6xl mb-4 opacity-50">🎥</div>
-          <p
-            className="text-2xl font-semibold"
-            style={{ color: SHOWCASE_COLORS.text.primary }}
-          >
+          <p className="text-2xl font-semibold" style={{ color: SHOWCASE_COLORS.text.primary }}>
             No massages available
-          </p>
-          <p
-            className="text-lg mt-2"
-            style={{ color: SHOWCASE_COLORS.text.secondary }}
-          >
-            Please add featured massages to display
           </p>
         </div>
       </div>
     );
   }
   
-  // Get selected massage for glass card
   const selectedMassage = displayMassages[selectedIndex] || null;
   
   return (
     <div
       className="h-full w-full relative overflow-hidden"
       style={{
-        // Dark navy to charcoal gradient background (Requirements 1.1, 5.1)
         background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)`,
-        // GPU acceleration for smooth rendering (Requirements 9.1, 9.2, 9.3)
         transform: 'translateZ(0)',
-        willChange: 'transform',
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Four-column layout container (Requirement 1.1) */}
-      <div className="h-full w-full flex gap-0 p-4">
-        {displayMassages.map((massage, index) => (
-          <ShowcaseColumn
-            key={massage.id}
-            massage={massage}
-            isMain={index === selectedIndex}
-            index={index}
-            onSelect={() => handleColumnSelect(index)}
-            // Staggered entrance animation (Requirement 6.5)
-            animationDelay={index * SHOWCASE_ANIMATION_CONFIG.entranceStagger}
-          />
-        ))}
+      {/* Main container with animated layout */}
+      <div className="h-full w-full flex relative">
+        
+        {/* Left side: Columns / Expanded Media */}
+        <div
+          className="h-full relative overflow-hidden"
+          style={{
+            width: isDetailView ? '70%' : '100%',
+            transition: `width ${TRANSITION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+          }}
+        >
+          {/* Column grid - fades out in detail view */}
+          <div
+            className="absolute inset-0 flex gap-0 p-4"
+            style={{
+              opacity: isDetailView ? 0 : 1,
+              transform: isDetailView ? 'scale(1.05)' : 'scale(1)',
+              transition: `opacity ${TRANSITION_DURATION}ms ease, transform ${TRANSITION_DURATION}ms ease`,
+              pointerEvents: isDetailView ? 'none' : 'auto',
+            }}
+          >
+            {displayMassages.map((massage, index) => (
+              <ShowcaseColumn
+                key={massage.id}
+                massage={massage}
+                isMain={index === selectedIndex}
+                index={index}
+                onSelect={() => handleColumnSelect(index)}
+                onShowDetails={index === selectedIndex ? handleShowDetails : undefined}
+                animationDelay={index * SHOWCASE_ANIMATION_CONFIG.entranceStagger}
+              />
+            ))}
+          </div>
+          
+          {/* Expanded media - fades in during detail view */}
+          <div
+            className="absolute inset-0"
+            style={{
+              opacity: isDetailView ? 1 : 0,
+              transform: isDetailView ? 'scale(1)' : 'scale(0.95)',
+              transition: `opacity ${TRANSITION_DURATION}ms ease, transform ${TRANSITION_DURATION}ms ease`,
+              pointerEvents: isDetailView ? 'auto' : 'none',
+            }}
+          >
+            {selectedMassage && selectedMassage.mediaType === 'video' ? (
+              <video
+                ref={detailVideoRef}
+                key={`detail-video-${selectedMassage.id}`}
+                className="w-full h-full object-cover"
+                src={selectedMassage.mediaUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                style={{ transform: 'translateZ(0)' }}
+              />
+            ) : selectedMassage ? (
+              <div
+                className="w-full h-full flex items-center justify-center"
+                style={{ background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)` }}
+              >
+                <div className="text-center">
+                  <div className="text-8xl mb-4 opacity-50">🧘</div>
+                  <p className="text-3xl font-semibold" style={{ color: SHOWCASE_COLORS.text.primary }}>
+                    {selectedMassage.name}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            
+            {/* Close button */}
+            <button
+              onClick={handleCloseDetails}
+              className="absolute top-6 left-6 p-3 rounded-full hover:scale-110"
+              style={{
+                background: 'rgba(0, 0, 0, 0.5)',
+                backdropFilter: 'blur(10px)',
+                color: SHOWCASE_COLORS.text.primary,
+                opacity: isDetailView ? 1 : 0,
+                transform: isDetailView ? 'translateY(0)' : 'translateY(-20px)',
+                transition: `opacity ${TRANSITION_DURATION}ms ease, transform ${TRANSITION_DURATION}ms ease`,
+                transitionDelay: isDetailView ? '200ms' : '0ms',
+              }}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        {/* Right side: Detail panel - slides in from right */}
+        <div
+          className="h-full overflow-hidden"
+          style={{
+            width: isDetailView ? '30%' : '0%',
+            opacity: isDetailView ? 1 : 0,
+            transition: `width ${TRANSITION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1), opacity ${TRANSITION_DURATION}ms ease`,
+          }}
+        >
+          <div
+            className="h-full w-full overflow-y-auto"
+            style={{
+              background: SHOWCASE_COLORS.glass.background,
+              backdropFilter: `blur(${SHOWCASE_COLORS.glass.blur})`,
+              borderLeft: `1px solid ${SHOWCASE_COLORS.glass.border}`,
+              transform: isDetailView ? 'translateX(0)' : 'translateX(100%)',
+              transition: `transform ${TRANSITION_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+            }}
+          >
+            {selectedMassage && (
+              <GlassDetailCard
+                massage={selectedMassage}
+                isVisible={true}
+                onClose={handleCloseDetails}
+                isInlineMode={true}
+              />
+            )}
+          </div>
+        </div>
       </div>
-      
-      {/* Glass Detail Card (Requirement 3.2, 10.5) */}
-      <GlassDetailCard
-        massage={selectedMassage}
-        isVisible={selectedMassage !== null && showCard}
-        onClose={handleCardClose}
-      />
     </div>
   );
 }

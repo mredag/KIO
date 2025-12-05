@@ -52,6 +52,7 @@ export interface Question {
   text: string;
   type: 'rating' | 'single-choice';
   options: string[];
+  optionIcons?: string[]; // Custom icons for each option (emoji)
   isRequired: boolean;
   trackImportant?: boolean;
   conditionalOn?: {

@@ -1,38 +1,27 @@
 /**
- * SurveyMode Component - Premium Survey UI
+ * PremiumSurveyMode Component
  * 
- * Elegant, animated survey experience for kiosk screens.
- * Features: emoji-based ratings, animated backgrounds, smooth transitions.
+ * Main component that orchestrates the premium survey experience.
+ * Integrates all sub-components with smooth transitions and animations.
  * 
- * Requirements: All premium survey UI requirements
- * - 1.x: Premium Visual Design Foundation
- * - 2.x: Emoji-Based Rating Questions
- * - 3.x: Icon-Enhanced Single Choice Options
- * - 4.x: Animated Progress Indicator
- * - 5.x: Animated Question Decorations
- * - 6.x: Smooth Question Transitions
- * - 7.x: Premium Thank You Screen
- * - 8.x: Touch-Optimized Interactions
- * - 9.x: Dynamic Content Rendering
- * - 10.x: Accessibility and Localization
- * - 11.x: Performance Optimization
+ * Requirements: 6.1, 6.2, 6.3, 6.4, 9.1, 9.2, 9.3, 10.1, 10.2, 10.3, 10.4, 8.1, 8.3
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useKioskStore } from '../../stores/kioskStore';
-import { useSurveyTemplate, useSubmitSurveyResponse } from '../../hooks/useKioskApi';
+import { useKioskStore } from '../../../stores/kioskStore';
+import { useSurveyTemplate, useSubmitSurveyResponse } from '../../../hooks/useKioskApi';
 
 // Premium survey sub-components
-import AnimatedBackground from './premium-survey/AnimatedBackground';
-import EmojiRating from './premium-survey/EmojiRating';
-import OptionCard from './premium-survey/OptionCard';
-import AnimatedQuestionEmoji from './premium-survey/AnimatedQuestionEmoji';
-import ProgressIndicator from './premium-survey/ProgressIndicator';
-import ThankYouScreen from './premium-survey/ThankYouScreen';
+import AnimatedBackground from './AnimatedBackground';
+import EmojiRating from './EmojiRating';
+import OptionCard from './OptionCard';
+import AnimatedQuestionEmoji from './AnimatedQuestionEmoji';
+import ProgressIndicator from './ProgressIndicator';
+import ThankYouScreen from './ThankYouScreen';
 
-// Import premium survey styles (Requirement 1.1, 1.2)
-import '../../styles/premium-survey.css';
+// Import premium survey styles
+import '../../../styles/premium-survey.css';
 
 /**
  * Survey state interface
@@ -55,7 +44,7 @@ const ANIMATION_CONFIG = {
   questionTimeout: 30000, // 30 seconds per question
 };
 
-export default function SurveyMode() {
+export default function PremiumSurveyMode() {
   const { t } = useTranslation('kiosk');
   const activeSurveyId = useKioskStore((state) => state.activeSurveyId);
   const setUserActive = useKioskStore((state) => state.setUserActive);
@@ -102,7 +91,8 @@ export default function SurveyMode() {
     }
   }, [survey?.id, resetSurvey]);
 
-  // Reset inactivity timer on any interaction (Requirement 7.4 from original)
+
+  // Reset inactivity timer on any interaction
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
@@ -155,7 +145,7 @@ export default function SurveyMode() {
     // Prevent selection during transitions (Requirement 6.4)
     if (state.isTransitioning) return;
 
-    // ✅ CRITICAL: Create new answers object first (async setState bug fix)
+    // Create new answers object
     const newAnswers = { ...state.answers, [questionId]: value };
     setState(prev => ({ ...prev, answers: newAnswers }));
     resetInactivityTimer();
@@ -204,11 +194,9 @@ export default function SurveyMode() {
   const submitSurvey = useCallback((finalAnswers: Record<string, any>) => {
     if (!survey) return;
 
-    // Log survey submission for debugging (works in production too)
-    console.log('[Survey] Submitting response:', {
+    console.log('[PremiumSurvey] Submitting response:', {
       surveyId: survey.id,
       answersCount: Object.keys(finalAnswers).length,
-      answerKeys: Object.keys(finalAnswers),
     });
 
     // Check if any question triggered Google Review
@@ -228,8 +216,8 @@ export default function SurveyMode() {
       timestamp: new Date(),
       answers: finalAnswers,
     }, {
-      onSuccess: () => console.log('[Survey] Response submitted successfully'),
-      onError: (error: any) => console.error('[Survey] Submission failed:', error?.message || error),
+      onSuccess: () => console.log('[PremiumSurvey] Response submitted successfully'),
+      onError: (error: any) => console.error('[PremiumSurvey] Submission failed:', error?.message || error),
     });
 
     // Show thank you screen
@@ -238,17 +226,16 @@ export default function SurveyMode() {
     // Handle post-submission navigation
     setTimeout(() => {
       if (shouldShowGoogleReview) {
-        // Set flag so GoogleQRMode knows to return to survey
         sessionStorage.setItem('returnToSurvey', 'true');
         useKioskStore.getState().setMode('google-qr');
       } else {
-        // Reset after thank you duration
         resetSurvey();
       }
     }, ANIMATION_CONFIG.thankYouDuration);
   }, [survey, submitResponse, resetSurvey]);
 
-  // Handle previous question navigation (Requirement 6.3)
+
+  // Handle previous question navigation
   const handlePrevious = useCallback(() => {
     if (!survey || state.isTransitioning || state.currentQuestionIndex === 0) return;
 
@@ -287,7 +274,7 @@ export default function SurveyMode() {
     };
   }, []);
 
-  // Loading state with premium styling
+  // Loading state
   if (isLoading || !survey) {
     return (
       <div className="premium-survey">
@@ -305,7 +292,7 @@ export default function SurveyMode() {
   const currentQuestion = survey.questions[state.currentQuestionIndex];
   const shouldShowTimer = survey.questions.length > 1 && state.currentQuestionIndex > 0;
 
-  // Thank you screen (Requirement 7.x)
+  // Thank you screen
   if (state.showThankYou) {
     return (
       <div className="premium-survey">
@@ -326,7 +313,7 @@ export default function SurveyMode() {
       onClick={resetInactivityTimer}
       onTouchStart={resetInactivityTimer}
     >
-      {/* Animated Background (Requirement 1.1, 11.5) */}
+      {/* Animated Background */}
       <AnimatedBackground particleCount={20} glowIntensity="medium" />
 
       {/* Timer Display */}
@@ -341,14 +328,13 @@ export default function SurveyMode() {
       )}
 
       <div className="premium-survey-content">
-        {/* Survey Header - Only on first question (Requirement 1.2, 1.3, 1.5, 4.4) */}
+        {/* Survey Header - Only on first question */}
         {state.currentQuestionIndex === 0 && (
           <header className="survey-header">
             <div className="survey-badge" aria-label={t('aria.quickSurvey', 'Hızlı Anket')}>
               <span className="survey-badge__sparkle" aria-hidden="true">✨</span>
               <span>{t('survey.quickSurvey', 'Hızlı Anket')}</span>
             </div>
-            {/* Title from database (Requirement 9.1) */}
             <h1 className="survey-title">{survey.title}</h1>
             {survey.description && (
               <p className="survey-description">{survey.description}</p>
@@ -356,7 +342,7 @@ export default function SurveyMode() {
           </header>
         )}
 
-        {/* Progress Indicator (Requirement 4.x) */}
+        {/* Progress Indicator */}
         <ProgressIndicator
           currentIndex={state.currentQuestionIndex}
           totalQuestions={survey.questions.length}
@@ -372,7 +358,7 @@ export default function SurveyMode() {
             role="group"
             aria-labelledby="question-text"
           >
-            {/* Animated Question Emoji (Requirement 5.x) */}
+            {/* Animated Question Emoji */}
             <AnimatedQuestionEmoji
               questionText={currentQuestion.text}
               questionType={currentQuestion.type}
@@ -388,7 +374,7 @@ export default function SurveyMode() {
               )}
             </h2>
 
-            {/* Rating Question (Requirement 2.x) */}
+            {/* Rating Question */}
             {currentQuestion.type === 'rating' && (
               <EmojiRating
                 options={currentQuestion.options}
@@ -398,7 +384,7 @@ export default function SurveyMode() {
               />
             )}
 
-            {/* Single Choice Question - Options from database (Requirement 3.x, 9.3) */}
+            {/* Single Choice Question - Options from database (Requirement 9.3) */}
             {currentQuestion.type === 'single-choice' && (
               <div 
                 className="option-cards" 
@@ -409,6 +395,7 @@ export default function SurveyMode() {
                   <OptionCard
                     key={option}
                     option={option}
+                    icon={currentQuestion.optionIcons?.[index]}
                     isSelected={state.answers[currentQuestion.id] === option}
                     onSelect={() => handleAnswerSelect(currentQuestion.id, option, 'single-choice')}
                     animationIndex={index}

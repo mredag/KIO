@@ -21,12 +21,14 @@ interface GlassDetailCardProps {
   massage: Massage | null;
   isVisible: boolean;
   onClose: () => void;
+  isInlineMode?: boolean; // When true, renders inline instead of fixed overlay
 }
 
 export default function GlassDetailCard({
   massage,
   isVisible,
   onClose,
+  isInlineMode = false,
 }: GlassDetailCardProps) {
   const { t } = useTranslation('kiosk');
   const [showPricing, setShowPricing] = useState(false);
@@ -56,6 +58,139 @@ export default function GlassDetailCard({
     }).format(price);
   };
 
+  // Inline mode - renders as part of the layout, not as overlay
+  if (isInlineMode) {
+    return (
+      <div className="h-full flex flex-col">
+        {/* Card Header - no close button in inline mode, it's on the media side */}
+        <div className="p-8 pb-4">
+          {/* Massage Title */}
+          <h2
+            className="leading-tight mb-2"
+            style={{
+              color: SHOWCASE_COLORS.text.primary,
+              fontSize: '28px',
+              fontFamily: '"Playfair Display", Georgia, "Times New Roman", serif',
+              fontWeight: 600,
+              letterSpacing: '0.01em',
+            }}
+          >
+            {massage.name}
+          </h2>
+
+          {/* Duration */}
+          <div
+            className="flex items-center gap-2"
+            style={{
+              color: SHOWCASE_COLORS.text.secondary,
+              fontSize: '16px',
+              fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
+            }}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{massage.duration}</span>
+          </div>
+        </div>
+
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto px-8 pb-8">
+          <p
+            className="mb-6 leading-relaxed"
+            style={{
+              color: SHOWCASE_COLORS.text.primary,
+              fontSize: '16px',
+              lineHeight: '1.7',
+              fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
+            }}
+          >
+            {massage.longDescription}
+          </p>
+
+          {massage.shortDescription && (
+            <div
+              className="mb-6 p-4 rounded-lg"
+              style={{
+                background: 'rgba(20, 184, 166, 0.1)',
+                border: `1px solid ${SHOWCASE_COLORS.accent}40`,
+              }}
+            >
+              <p style={{ color: SHOWCASE_COLORS.accent, fontSize: '14px', lineHeight: '1.5' }}>
+                {massage.shortDescription}
+              </p>
+            </div>
+          )}
+
+          {massage.purposeTags && massage.purposeTags.length > 0 && (
+            <div className="mb-6 flex flex-wrap gap-2">
+              {massage.purposeTags.map((tag, index) => (
+                <span
+                  key={index}
+                  className="px-3 py-1 rounded-full text-sm"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    color: SHOWCASE_COLORS.text.secondary,
+                    border: `1px solid ${SHOWCASE_COLORS.glass.border}`,
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Pricing */}
+          {hasPricing && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowPricing(!showPricing)}
+                className="w-full py-3 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02]"
+                style={{
+                  background: SHOWCASE_COLORS.accent,
+                  color: 'white',
+                  fontSize: '15px',
+                  fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
+                  fontWeight: 500,
+                }}
+              >
+                {showPricing ? t('menu.hidePricing') : t('menu.showPricing')}
+              </button>
+
+              {showPricing && (
+                <div
+                  className="mt-4 rounded-lg overflow-hidden"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: `1px solid ${SHOWCASE_COLORS.glass.border}`,
+                  }}
+                >
+                  <div className="max-h-64 overflow-y-auto">
+                    {massage.sessions.map((session, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-4 border-b last:border-b-0"
+                        style={{ borderColor: SHOWCASE_COLORS.glass.border }}
+                      >
+                        <span style={{ color: SHOWCASE_COLORS.text.primary, fontSize: '15px' }}>
+                          {session.name}
+                        </span>
+                        <span style={{ color: SHOWCASE_COLORS.accent, fontSize: '16px', fontWeight: 'bold' }}>
+                          {formatPrice(session.price)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Overlay mode (original behavior)
   return (
     <>
       {/* Backdrop overlay for click-outside dismissal */}
@@ -98,12 +233,15 @@ export default function GlassDetailCard({
         {/* Card Header with Close Button */}
         <div className="flex items-start justify-between p-8 pb-4">
           <div className="flex-1 pr-4">
-            {/* Massage Title - 24px white text (Requirement 4.1) */}
+            {/* Massage Title - Elegant serif font (Requirement 4.1) */}
             <h2
-              className="font-bold leading-tight mb-2"
+              className="leading-tight mb-2"
               style={{
                 color: SHOWCASE_COLORS.text.primary,
-                fontSize: '24px',
+                fontSize: '26px',
+                fontFamily: '"Playfair Display", Georgia, "Times New Roman", serif',
+                fontWeight: 600,
+                letterSpacing: '0.01em',
               }}
             >
               {massage.name}
@@ -114,7 +252,8 @@ export default function GlassDetailCard({
               className="flex items-center gap-2"
               style={{
                 color: SHOWCASE_COLORS.text.secondary,
-                fontSize: '16px',
+                fontSize: '15px',
+                fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
               }}
             >
               <svg
@@ -162,13 +301,15 @@ export default function GlassDetailCard({
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto px-8 pb-8">
-          {/* Full Description - 16px, line-height 1.6 (Requirement 4.2) */}
+          {/* Full Description - Clean sans-serif (Requirement 4.2) */}
           <p
             className="mb-6 leading-relaxed"
             style={{
               color: SHOWCASE_COLORS.text.primary,
-              fontSize: '16px',
-              lineHeight: '1.6',
+              fontSize: '15px',
+              lineHeight: '1.7',
+              fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
+              fontWeight: 400,
             }}
           >
             {massage.longDescription}
@@ -222,11 +363,13 @@ export default function GlassDetailCard({
               {/* Show/Hide Prices Button (Requirement 4.4, 11.1, 11.4) */}
               <button
                 onClick={() => setShowPricing(!showPricing)}
-                className="w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 hover:scale-[1.02]"
+                className="w-full py-3 px-4 rounded-lg transition-all duration-200 hover:scale-[1.02]"
                 style={{
                   background: SHOWCASE_COLORS.accent,
                   color: 'white',
-                  fontSize: '16px',
+                  fontSize: '15px',
+                  fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
+                  fontWeight: 500,
                 }}
               >
                 {showPricing ? t('menu.hidePricing') : t('menu.showPricing')}

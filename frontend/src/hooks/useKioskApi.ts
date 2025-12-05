@@ -131,9 +131,9 @@ export function useMassageMenu() {
         throw error;
       }
     },
-    staleTime: 30 * 1000, // 30 seconds - shorter for faster updates
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    staleTime: 5 * 60 * 1000, // 5 minutes - longer to prevent video reloads
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes (SSE handles real-time updates)
+    refetchOnWindowFocus: false, // Don't refetch on focus - causes video reload
     retry: isOffline ? false : 2,
   });
 }

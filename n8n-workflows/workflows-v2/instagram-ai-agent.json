@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\n\n// Webhook verification (GET request from Meta)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\n// Check if it's Instagram webhook\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\n// Parse Instagram messaging webhook\nconst entry = body.entry?.[0];\nif (!entry) {\n  return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n}\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) {\n  return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n}\n\n// Check for message (not read receipt or other events)\nconst message = messaging.message;\nif (!message || !message.text) {\n  return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n}\n\n// Extract sender ID (Instagram-scoped user ID)\nconst senderId = messaging.sender?.id;\nif (!senderId) {\n  return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n}\n\nreturn [{ \n  json: { \n    route: 'process', \n    senderId: senderId,\n    text: message.text.trim(),\n    messageId: message.mid,\n    timestamp: messaging.timestamp\n  } \n}];"
+        "jsCode": "const input = $input.first().json;\n\n// Webhook verification (GET request from Meta)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\n// Check if it's Instagram webhook\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\n// Parse Instagram messaging webhook\nconst entry = body.entry?.[0];\nif (!entry) {\n  return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n}\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) {\n  return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n}\n\n// Check for message (not read receipt or other events)\nconst message = messaging.message;\nif (!message || !message.text) {\n  return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n}\n\n// IMPORTANT: Ignore echo messages (messages sent by the bot itself)\nif (message.is_echo === true) {\n  return [{ json: { route: 'ignore', reason: 'echo_message' } }];\n}\n\n// Extract sender ID (Instagram-scoped user ID)\nconst senderId = messaging.sender?.id;\nif (!senderId) {\n  return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n}\n\nreturn [{ \n  json: { \n    route: 'process', \n    senderId: senderId,\n    text: message.text.trim(),\n    messageId: message.mid,\n    timestamp: messaging.timestamp\n  } \n}];"
       },
       "id": "parse",
       "name": "Parse Instagram",
@@ -139,14 +139,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://graph.facebook.com/v18.0/me/messages",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Authorization", "value": "Bearer IGAATRkaY1kWFBZAGFvTnZACd0ZAMUy1peklsTUtWczVISjBRWjN0a2s2RnlIcUFreEM5WkRrT3VSNi13VHpUYzc0TUJnaHR2MTNvMTRsUXVpS1MxaWRBSlFvMEQwTENkVkhwRC1kUjQ1ZAUtzOEtqN083cmltYnRwUjN3b2I4WmgxUQZDZD" }
-          ]
-        },
+        "url": "https://graph.instagram.com/v21.0/17841400730256913/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"recipient\":{\"id\":\"{{ $json.senderId }}\"},\"message\":{\"text\":\"{{ $json.message }}\"}}",
@@ -156,7 +151,13 @@
       "name": "Send Instagram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1300, 400]
+      "position": [1300, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instagram-business-api",
+          "name": "Instagram Business API"
+        }
+      }
     },
     {
       "parameters": { "respondWith": "text", "responseBody": "OK" },

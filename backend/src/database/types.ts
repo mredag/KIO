@@ -257,3 +257,134 @@ export interface CouponRateLimit {
   count: number;
   resetAt: Date;
 }
+
+// ==================== DYNAMIC AUTOMATION MANAGEMENT TYPES ====================
+
+// Database types (snake_case - as stored in SQLite)
+export interface WhatsAppInteractionDb {
+  id: string;
+  phone: string;
+  direction: 'inbound' | 'outbound';
+  message_text: string;
+  intent: string | null;
+  sentiment: string | null;
+  ai_response: string | null;
+  response_time_ms: number | null;
+  created_at: string;
+}
+
+export interface ServiceSettingsDb {
+  service_name: string;
+  enabled: number; // SQLite boolean (0 or 1)
+  config: string | null; // JSON
+  last_activity: string | null;
+  updated_at: string;
+}
+
+export interface KnowledgeBaseDb {
+  id: string;
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  key_name: string;
+  value: string;
+  description: string | null;
+  is_active: number; // SQLite boolean (0 or 1)
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UnifiedInteractionDb {
+  id: string;
+  platform: 'whatsapp' | 'instagram';
+  customer_id: string;
+  direction: 'inbound' | 'outbound';
+  message_text: string;
+  intent: string | null;
+  sentiment: string | null;
+  ai_response: string | null;
+  response_time_ms: number | null;
+  created_at: string;
+}
+
+// Application types (camelCase - for use in services/routes)
+export interface WhatsAppInteraction {
+  id: string;
+  phone: string;
+  direction: 'inbound' | 'outbound';
+  messageText: string;
+  intent?: string;
+  sentiment?: string;
+  aiResponse?: string;
+  responseTimeMs?: number;
+  createdAt: Date;
+}
+
+export interface ServiceSettings {
+  serviceName: 'whatsapp' | 'instagram';
+  enabled: boolean;
+  config?: Record<string, any>;
+  lastActivity?: Date;
+  updatedAt: Date;
+}
+
+export interface ServiceStatus {
+  serviceName: 'whatsapp' | 'instagram';
+  enabled: boolean;
+  lastActivity?: Date;
+  messageCount24h: number;
+  config?: Record<string, any>;
+  updatedAt: Date;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  key: string;
+  value: string;
+  description?: string;
+  isActive: boolean;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface KnowledgeEntryInput {
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  key: string;
+  value: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UnifiedInteraction {
+  id: string;
+  platform: 'whatsapp' | 'instagram';
+  customerId: string;
+  direction: 'inbound' | 'outbound';
+  messageText: string;
+  intent?: string;
+  sentiment?: string;
+  aiResponse?: string;
+  responseTimeMs?: number;
+  createdAt: Date;
+}
+
+export interface InteractionFilters {
+  platform?: 'whatsapp' | 'instagram' | 'all';
+  startDate?: Date;
+  endDate?: Date;
+  customerId?: string;
+  intent?: string;
+  sentiment?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface InteractionAnalytics {
+  totalCount: number;
+  uniqueCustomers: number;
+  avgResponseTimeMs: number;
+  intentBreakdown: Record<string, number>;
+  sentimentBreakdown: Record<string, number>;
+  dailyTrends: Array<{ date: string; count: number }>;
+}

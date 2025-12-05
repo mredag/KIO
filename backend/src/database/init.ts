@@ -104,6 +104,43 @@ export function initializeDatabase(dbPath: string): Database.Database {
     }
     console.log('Coupon tables created successfully');
   }
+
+  // Check for dynamic automation management tables (for existing installations)
+  const automationTables = [
+    'whatsapp_interactions',
+    'service_settings',
+    'knowledge_base'
+  ];
+  
+  const missingAutomationTables = automationTables.filter(table => !tableNames.includes(table));
+  
+  if (missingAutomationTables.length > 0) {
+    console.log(`Creating missing automation tables: ${missingAutomationTables.join(', ')}`);
+    // Re-run schema to create missing tables
+    for (const statement of statements) {
+      if (statement.includes('whatsapp_interactions') || 
+          statement.includes('service_settings') || 
+          statement.includes('knowledge_base') ||
+          statement.includes('unified_interactions')) {
+        db.exec(statement);
+      }
+    }
+    console.log('Automation management tables created successfully');
+  }
+
+  // Check if unified_interactions view exists
+  const views = db.prepare("SELECT name FROM sqlite_master WHERE type='view'").all() as Array<{ name: string }>;
+  const viewNames = views.map(v => v.name);
+  
+  if (!viewNames.includes('unified_interactions')) {
+    console.log('Creating unified_interactions view...');
+    for (const statement of statements) {
+      if (statement.includes('unified_interactions')) {
+        db.exec(statement);
+      }
+    }
+    console.log('unified_interactions view created successfully');
+  }
   
   // Seed default data
   seedDatabase(db);

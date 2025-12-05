@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
  * - Initial admin user
  * - Default kiosk state
  * - Default system settings
+ * - Knowledge base entries (Turkish content)
  */
 export function seedDatabase(db: Database.Database): void {
   // Check if data already exists
@@ -145,6 +146,286 @@ export function seedDatabase(db: Database.Database): void {
     defaultPasswordHash
   );
 
+  // Seed service settings (for dynamic automation management)
+  const existingServices = db.prepare('SELECT COUNT(*) as count FROM service_settings').get() as { count: number };
+  
+  if (existingServices.count === 0) {
+    db.prepare(`
+      INSERT INTO service_settings (service_name, enabled, config, last_activity, updated_at)
+      VALUES 
+        ('whatsapp', 1, NULL, NULL, CURRENT_TIMESTAMP),
+        ('instagram', 1, NULL, NULL, CURRENT_TIMESTAMP)
+    `).run();
+    console.log('Service settings seeded (WhatsApp and Instagram enabled)');
+  }
+
+  // Seed knowledge base entries (Turkish content)
+  const knowledgeEntries = [
+    // Services category
+    {
+      id: randomUUID(),
+      category: 'services',
+      key_name: 'massage_types',
+      value: 'İsveç masajı, derin doku masajı, aromaterapi masajı, sıcak taş masajı, refleksoloji',
+      description: 'Sunulan masaj türleri',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'services',
+      key_name: 'spa_facilities',
+      value: 'Sauna, buhar odası, jakuzi, dinlenme alanı, soyunma odaları',
+      description: 'SPA tesisleri',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'services',
+      key_name: 'special_packages',
+      value: 'Çift masajı paketi, gün spa paketi, romantik paket, detoks paketi',
+      description: 'Özel paketler',
+      is_active: 1,
+      version: 1
+    },
+    
+    // Pricing category
+    {
+      id: randomUUID(),
+      category: 'pricing',
+      key_name: 'massage_60min',
+      value: '500 TL - 60 dakikalık masaj seansı',
+      description: '60 dakikalık masaj fiyatı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'pricing',
+      key_name: 'massage_90min',
+      value: '700 TL - 90 dakikalık masaj seansı',
+      description: '90 dakikalık masaj fiyatı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'pricing',
+      key_name: 'couple_package',
+      value: '1.800 TL - Çift masajı paketi (2 kişi, 90 dakika)',
+      description: 'Çift paketi fiyatı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'pricing',
+      key_name: 'day_spa',
+      value: '1.200 TL - Gün spa paketi (masaj + sauna + jakuzi)',
+      description: 'Gün spa paketi fiyatı',
+      is_active: 1,
+      version: 1
+    },
+    
+    // Hours category
+    {
+      id: randomUUID(),
+      category: 'hours',
+      key_name: 'weekdays',
+      value: 'Pazartesi-Cumartesi: 10:00-22:00',
+      description: 'Hafta içi çalışma saatleri',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'hours',
+      key_name: 'sunday',
+      value: 'Pazar: 11:00-20:00',
+      description: 'Pazar günü çalışma saatleri',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'hours',
+      key_name: 'holidays',
+      value: 'Resmi tatil günlerinde kapalıyız',
+      description: 'Tatil günleri durumu',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'hours',
+      key_name: 'last_appointment',
+      value: 'Son randevu kapanıştan 1 saat önce',
+      description: 'Son randevu saati',
+      is_active: 1,
+      version: 1
+    },
+    
+    // Policies category
+    {
+      id: randomUUID(),
+      category: 'policies',
+      key_name: 'cancellation',
+      value: '24 saat önceden iptal ücretsizdir. Daha geç iptallerde %50 ücret alınır.',
+      description: 'İptal politikası',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'policies',
+      key_name: 'late_arrival',
+      value: '15 dakikadan fazla geç kalınırsa seans süresi kısalır',
+      description: 'Geç kalma politikası',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'policies',
+      key_name: 'payment_methods',
+      value: 'Nakit, kredi kartı, banka kartı kabul edilir',
+      description: 'Ödeme yöntemleri',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'policies',
+      key_name: 'age_requirement',
+      value: '18 yaş altı müşteriler veli eşliğinde kabul edilir',
+      description: 'Yaş sınırı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'policies',
+      key_name: 'health_conditions',
+      value: 'Hamilelik, kalp rahatsızlığı veya cilt hastalığı varsa lütfen önceden bildiriniz',
+      description: 'Sağlık durumu bildirimi',
+      is_active: 1,
+      version: 1
+    },
+    
+    // Contact category
+    {
+      id: randomUUID(),
+      category: 'contact',
+      key_name: 'phone',
+      value: '+90 XXX XXX XXXX',
+      description: 'Ana iletişim telefonu',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'contact',
+      key_name: 'whatsapp',
+      value: '+90 XXX XXX XXXX',
+      description: 'WhatsApp numarası',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'contact',
+      key_name: 'email',
+      value: 'info@spa-merkezi.com',
+      description: 'E-posta adresi',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'contact',
+      key_name: 'address',
+      value: 'Örnek Mahallesi, Spa Sokak No:1, İstanbul',
+      description: 'Fiziksel adres',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'contact',
+      key_name: 'instagram',
+      value: '@spa_merkezi',
+      description: 'Instagram hesabı',
+      is_active: 1,
+      version: 1
+    },
+    
+    // General category
+    {
+      id: randomUUID(),
+      category: 'general',
+      key_name: 'welcome_message',
+      value: 'Hoş geldiniz! Size nasıl yardımcı olabilirim?',
+      description: 'Karşılama mesajı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'general',
+      key_name: 'parking',
+      value: 'Ücretsiz otopark mevcuttur',
+      description: 'Otopark bilgisi',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'general',
+      key_name: 'wifi',
+      value: 'Ücretsiz WiFi: SPA_Guest / Şifre: welcome2024',
+      description: 'WiFi bilgileri',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'general',
+      key_name: 'loyalty_program',
+      value: 'Her 4 masajda 1 masaj ücretsiz! Kupon sistemi hakkında bilgi için resepsiyona sorunuz.',
+      description: 'Sadakat programı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'general',
+      key_name: 'gift_certificates',
+      value: 'Hediye çekleri mevcuttur. Sevdiklerinize özel bir hediye!',
+      description: 'Hediye çeki bilgisi',
+      is_active: 1,
+      version: 1
+    }
+  ];
+
+  const insertKnowledge = db.prepare(`
+    INSERT INTO knowledge_base (id, category, key_name, value, description, is_active, version, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+
+  for (const entry of knowledgeEntries) {
+    insertKnowledge.run(
+      entry.id,
+      entry.category,
+      entry.key_name,
+      entry.value,
+      entry.description,
+      entry.is_active,
+      entry.version
+    );
+  }
+
   console.log('Database seeded successfully!');
   console.log('Default admin password: admin123 (please change this)');
+  console.log(`Seeded ${knowledgeEntries.length} knowledge base entries`);
 }

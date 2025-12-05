@@ -301,6 +301,33 @@ if (r.isNew === false) {
 
 ---
 
+## 📸 Instagram DM Integration
+
+### Workflow Versions
+| Version | File | Use Case |
+|---------|------|----------|
+| v1 | `instagram-ai-agent.json` | Basic AI |
+| v3 | `instagram-ai-agent-v3.json` | **Production** - Customer data + Analytics |
+
+### Key API Endpoints
+```
+GET  /api/integrations/instagram/customer/:id     - Customer data
+POST /api/integrations/instagram/interaction      - Log interaction
+GET  /api/integrations/instagram/analytics        - Marketing stats
+GET  /api/integrations/instagram/export?format=csv - Export to Sheets
+```
+
+### V3 Features
+- **Customer Enrichment**: Fetches history before AI responds
+- **Intent Detection**: pricing, hours, booking, coupon, greeting
+- **Interaction Logging**: All messages logged for marketing
+- **Response Time Tracking**: Measures AI latency
+
+**Files:** `instagramIntegrationRoutes.ts`, `instagram-ai-agent-v3.json`  
+**Docs:** `n8n-workflows/docs/instagram-setup.md`
+
+---
+
 ## ✨ Success Metrics
 
 This guide has solved:
@@ -316,6 +343,32 @@ This guide has solved:
 
 ---
 
-**Last Updated:** 2025-12-01  
+## 🗄️ Database Seeding
+
+### Knowledge Base Auto-Seeding
+The database automatically seeds 26 Turkish knowledge base entries on first initialization:
+
+**Categories:**
+- **Services** (3): Massage types, spa facilities, packages
+- **Pricing** (4): 60/90min massages, couple/day spa packages
+- **Hours** (4): Weekday/Sunday hours, holidays, last appointment
+- **Policies** (5): Cancellation, late arrival, payment, age, health
+- **Contact** (5): Phone, WhatsApp, email, address, Instagram
+- **General** (5): Welcome, parking, WiFi, loyalty, gift certificates
+
+**Service Settings:**
+- WhatsApp and Instagram services enabled by default
+- Configured in `service_settings` table
+
+**Location:** `backend/src/database/seed.ts`
+
+**Usage:**
+- Runs automatically on `initializeDatabase()`
+- Idempotent (won't duplicate on re-run)
+- Used by n8n workflows via `/api/integrations/knowledge/context`
+
+---
+
+**Last Updated:** 2025-12-05  
 **Status:** ✅ Active and tested  
 **Coverage:** All critical patterns documented

@@ -1,0 +1,361 @@
+{
+  "name": "Instagram SPA AI Agent Dynamic",
+  "versionId": "instagram-dynamic-v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "instagram-spa-dynamic"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst startTime = Date.now();\n\n// Webhook verification (GET request from Meta)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\n// Check if it's Instagram webhook\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\n// Parse Instagram messaging webhook\nconst entry = body.entry?.[0];\nif (!entry) {\n  return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n}\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) {\n  return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n}\n\n// Check for message (not read receipt or other events)\nconst message = messaging.message;\nif (!message || !message.text) {\n  return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n}\n\n// IMPORTANT: Ignore echo messages (messages sent by the bot itself)\nif (message.is_echo === true) {\n  return [{ json: { route: 'ignore', reason: 'echo_message' } }];\n}\n\n// Extract sender ID (Instagram-scoped user ID)\nconst senderId = messaging.sender?.id;\nif (!senderId) {\n  return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n}\n\nreturn [{ \n  json: { \n    route: 'process', \n    senderId: senderId,\n    text: message.text.trim(),\n    messageId: message.mid,\n    timestamp: messaging.timestamp,\n    startTime: startTime\n  } \n}];"
+      },
+      "id": "parse",
+      "name": "Parse Instagram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "v", "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Verify"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "p", "leftValue": "={{ $json.route }}", "rightValue": "process", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Process"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "i", "leftValue": "={{ $json.route }}", "rightValue": "ignore", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ignore"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "router",
+      "name": "Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [600, 400]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" },
+      "id": "resp-verify",
+      "name": "Verify Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ignore",
+      "name": "Ignore Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 600]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://192.168.1.5:3001/api/integrations/services/instagram/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "check-service-status",
+      "name": "Check Service Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const statusResponse = $input.first().json;\nconst parseData = $('Parse Instagram').first().json;\n\n// Check if service is enabled\nconst isEnabled = statusResponse.enabled === true;\n\nif (!isEnabled) {\n  // Service is disabled - return maintenance message\n  return [{ \n    json: { \n      route: 'maintenance',\n      senderId: parseData.senderId,\n      message: '🔧 Sistem bakımda. Lütfen daha sonra tekrar deneyin.',\n      startTime: parseData.startTime\n    } \n  }];\n}\n\n// Service is enabled - continue with normal processing\nreturn [{ \n  json: { \n    ...parseData,\n    serviceEnabled: true\n  } \n}];"
+      },
+      "id": "check-enabled",
+      "name": "Check Enabled",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [{ "id": "m", "leftValue": "={{ $json.route }}", "rightValue": "maintenance", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Maintenance"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "continue" }
+      },
+      "id": "maintenance-check",
+      "name": "Maintenance Check",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ \n  json: { \n    senderId: data.senderId,\n    message: data.message,\n    intent: 'maintenance',\n    sentiment: 'neutral',\n    responseTime: Date.now() - data.startTime\n  } \n}];"
+      },
+      "id": "fmt-maintenance",
+      "name": "Format Maintenance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://192.168.1.5:3001/api/integrations/instagram/customer/{{ $json.senderId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 5000 }
+      },
+      "id": "fetch-customer",
+      "name": "Fetch Customer Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1450, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://192.168.1.5:3001/api/integrations/knowledge/context",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "fetch-knowledge",
+      "name": "Fetch Knowledge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseData = $('Check Enabled').first().json;\nconst customerData = $('Fetch Customer Data').first().json;\nconst knowledge = $input.first().json;\n\n// Determine customer context\nconst isNewCustomer = customerData.isNewCustomer !== false;\nconst interactionCount = customerData.interactionCount || 0;\nconst couponBalance = customerData.couponBalance || 0;\nconst totalEarned = customerData.totalEarned || 0;\n\n// Classify intent based on message\nconst text = parseData.text.toLowerCase();\nlet intent = 'general';\n\nif (text.match(/fiyat|ucret|ne kadar|kac para|price/i)) {\n  intent = 'pricing';\n} else if (text.match(/saat|acik|kapali|calisma|when|open|close/i)) {\n  intent = 'hours';\n} else if (text.match(/adres|nerede|konum|location|where/i)) {\n  intent = 'location';\n} else if (text.match(/randevu|rezervasyon|appointment|book/i)) {\n  intent = 'booking';\n} else if (text.match(/kupon|indirim|kampanya|coupon|discount/i)) {\n  intent = 'coupon';\n} else if (text.match(/merhaba|selam|hey|hi|hello/i)) {\n  intent = 'greeting';\n} else if (text.match(/tesekkur|sagol|thanks|thank/i)) {\n  intent = 'thanks';\n}\n\n// Build customer context string for AI\nlet customerContext = '';\nif (isNewCustomer) {\n  customerContext = 'Bu musteri ilk kez mesaj atiyor. Sicak karsilama yap.';\n} else {\n  customerContext = `Geri donen musteri (${interactionCount} onceki etkilesim).`;\n  if (couponBalance > 0) {\n    customerContext += ` Kupon bakiyesi: ${couponBalance}/4.`;\n    if (couponBalance >= 4) {\n      customerContext += ' Ucretsiz masaj hakki var!';\n    }\n  }\n}\n\n// Build knowledge context for AI system prompt\nlet knowledgeContext = '';\n\nif (knowledge.services) {\n  knowledgeContext += '\\n### Hizmetler\\n';\n  Object.entries(knowledge.services).forEach(([key, value]) => {\n    knowledgeContext += `- ${value}\\n`;\n  });\n}\n\nif (knowledge.pricing) {\n  knowledgeContext += '\\n### Fiyatlar\\n';\n  Object.entries(knowledge.pricing).forEach(([key, value]) => {\n    knowledgeContext += `- ${value}\\n`;\n  });\n}\n\nif (knowledge.hours) {\n  knowledgeContext += '\\n### Çalışma Saatleri\\n';\n  Object.entries(knowledge.hours).forEach(([key, value]) => {\n    knowledgeContext += `- ${value}\\n`;\n  });\n}\n\nif (knowledge.policies) {\n  knowledgeContext += '\\n### Politikalar\\n';\n  Object.entries(knowledge.policies).forEach(([key, value]) => {\n    knowledgeContext += `- ${value}\\n`;\n  });\n}\n\nif (knowledge.contact) {\n  knowledgeContext += '\\n### İletişim\\n';\n  Object.entries(knowledge.contact).forEach(([key, value]) => {\n    knowledgeContext += `- ${value}\\n`;\n  });\n}\n\nreturn [{\n  json: {\n    senderId: parseData.senderId,\n    text: parseData.text,\n    messageId: parseData.messageId,\n    startTime: parseData.startTime,\n    customer: {\n      isNew: isNewCustomer,\n      interactionCount,\n      couponBalance,\n      totalEarned,\n      phone: customerData.phone\n    },\n    intent,\n    customerContext,\n    knowledgeContext\n  }\n}];"
+      },
+      "id": "enrich-context",
+      "name": "Enrich Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.5:3001/api/integrations/instagram/interaction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"instagramId\":\"{{ $json.senderId }}\",\"direction\":\"inbound\",\"messageText\":\"{{ $json.text }}\",\"intent\":\"{{ $json.intent }}\"}",
+        "options": { "timeout": 3000 }
+      },
+      "id": "log-inbound",
+      "name": "Log Inbound",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2050, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Musteri Mesaji: ' + $json.text + '\\n\\nMusteri Bilgisi: ' + $json.customerContext }}",
+        "options": {
+          "systemMessage": "={{ 'Sen Eform SPA merkezinin Instagram asistanisin. Turkce yanit ver, samimi ve yardimci ol.\\n\\n## SPA BILGILERI\\n' + $json.knowledgeContext + '\\n\\n## YANITLAMA KURALLARI\\n1. Kisa ve oz yanit ver (max 3-4 cumle)\\n2. Emoji kullan ama asiri degil (1-2 emoji yeterli)\\n3. Fiyat sorarlarsa guncel fiyatlari ver\\n4. Randevu icin telefon numarasini ver\\n5. Kupon sorusu gelirse WhatsApp\\'a yonlendir\\n6. Yeni musterilere ozel sicak karsilama yap\\n7. Geri donen musterilere sadakatlerini takdir et\\n\\n## ONEMLI\\n- Musteri bilgisi verilmisse bunu kullan\\n- Kupon bakiyesi varsa hatirlatabilirsin\\n- Samimi ama profesyonel ol' }}"
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [2250, 500]
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "models/gemini-2.0-flash", "mode": "list", "cachedResultName": "models/gemini-2.0-flash" },
+        "options": { "temperature": 0.4 }
+      },
+      "id": "gemini-model",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [2050, 650],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8vCTje6QjWsq6I98",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'ig_' + $('Parse Instagram').first().json.senderId }}",
+        "contextWindowLength": 10
+      },
+      "id": "chat-memory",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [2150, 650]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst enrichedData = $('Enrich Context').first().json;\nconst startTime = enrichedData.startTime || Date.now();\nconst responseTime = Date.now() - startTime;\n\nconst aiOutput = input.output || input.text || 'Bir hata olustu. Lutfen tekrar deneyin.';\n\n// Clean up response for Instagram (remove markdown, limit length)\nlet cleanMessage = aiOutput\n  .replace(/\\*\\*/g, '')  // Remove bold markdown\n  .replace(/\\*/g, '')    // Remove italic markdown\n  .replace(/#{1,6}\\s/g, '')  // Remove headers\n  .substring(0, 1000);   // Instagram message limit\n\n// Detect sentiment from AI response\nlet sentiment = 'neutral';\nif (cleanMessage.match(/tesekkur|memnun|harika|super|guzel/i)) {\n  sentiment = 'positive';\n} else if (cleanMessage.match(/uzgun|maalesef|sorun|hata/i)) {\n  sentiment = 'negative';\n}\n\nreturn [{ \n  json: { \n    senderId: enrichedData.senderId, \n    message: cleanMessage,\n    intent: enrichedData.intent,\n    sentiment,\n    responseTime,\n    originalText: enrichedData.text\n  } \n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.5:3001/api/integrations/instagram/interaction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"instagramId\":\"{{ $json.senderId }}\",\"direction\":\"outbound\",\"messageText\":\"{{ $json.originalText }}\",\"intent\":\"{{ $json.intent }}\",\"sentiment\":\"{{ $json.sentiment }}\",\"aiResponse\":\"{{ $json.message.substring(0, 500) }}\",\"responseTime\":{{ $json.responseTime }}}",
+        "options": { "timeout": 3000 }
+      },
+      "id": "log-outbound",
+      "name": "Log Outbound",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2650, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.instagram.com/v21.0/17841400730256913/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"recipient\":{\"id\":\"{{ $json.senderId }}\"},\"message\":{\"text\":\"{{ $json.message }}\"}}",
+        "options": {}
+      },
+      "id": "send-instagram",
+      "name": "Send Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2850, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instagram-business-api",
+          "name": "Instagram Business API"
+        }
+      }
+    },
+    {
+      "parameters": { "respondWith": "text", "responseBody": "OK" },
+      "id": "resp-ok",
+      "name": "OK Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3050, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Parse Instagram", "type": "main", "index": 0 }]] },
+    "Parse Instagram": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
+    "Router": { "main": [
+      [{ "node": "Verify Response", "type": "main", "index": 0 }],
+      [{ "node": "Check Service Status", "type": "main", "index": 0 }],
+      [{ "node": "Ignore Response", "type": "main", "index": 0 }]
+    ]},
+    "Check Service Status": { "main": [[{ "node": "Check Enabled", "type": "main", "index": 0 }]] },
+    "Check Enabled": { "main": [[{ "node": "Maintenance Check", "type": "main", "index": 0 }]] },
+    "Maintenance Check": { "main": [
+      [{ "node": "Format Maintenance", "type": "main", "index": 0 }],
+      [{ "node": "Fetch Customer Data", "type": "main", "index": 0 }]
+    ]},
+    "Format Maintenance": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Fetch Customer Data": { "main": [[{ "node": "Fetch Knowledge", "type": "main", "index": 0 }]] },
+    "Fetch Knowledge": { "main": [[{ "node": "Enrich Context", "type": "main", "index": 0 }]] },
+    "Enrich Context": { "main": [[{ "node": "Log Inbound", "type": "main", "index": 0 }]] },
+    "Log Inbound": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "Gemini Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Log Outbound", "type": "main", "index": 0 }]] },
+    "Log Outbound": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Send Instagram": { "main": [[{ "node": "OK Response", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" }
+}

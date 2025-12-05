@@ -26,6 +26,11 @@ import { createAdminPolicyRoutes } from './routes/adminPolicyRoutes.js';
 import { createIntegrationCouponRoutes } from './routes/integrationCouponRoutes.js';
 import { createWhatsappWebhookRoutes } from './routes/whatsappWebhookRoutes.js';
 import { createInstagramWebhookRoutes } from './routes/instagramWebhookRoutes.js';
+import { createInstagramIntegrationRoutes } from './routes/instagramIntegrationRoutes.js';
+import { createAdminKnowledgeBaseRoutes } from './routes/adminKnowledgeBaseRoutes.js';
+import { createAdminServiceControlRoutes } from './routes/adminServiceControlRoutes.js';
+import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.js';
+import { createIntegrationRoutes } from './routes/integrationRoutes.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -234,10 +239,15 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 app.use('/api/admin', createAdminRoutes(dbService, authService, backupService, mediaService, googleSheetsService));
 app.use('/api/admin/coupons', createAdminCouponRoutes(dbService, couponService, eventLogService));
 app.use('/api/admin/policy', createAdminPolicyRoutes(dbService, couponPolicyService));
+app.use('/api/admin/knowledge-base', createAdminKnowledgeBaseRoutes(dbService));
+app.use('/api/admin/services', createAdminServiceControlRoutes(dbService));
+app.use('/api/admin/interactions', createAdminInteractionsRoutes(dbService));
 app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
+app.use('/api/integrations', createIntegrationRoutes(dbService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
 app.use('/webhook/instagram', createInstagramWebhookRoutes());
+app.use('/api/integrations/instagram', createInstagramIntegrationRoutes(db));
 
 // Serve frontend static files in production - use centralized config
 if (process.env.NODE_ENV === 'production') {

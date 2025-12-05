@@ -53,6 +53,8 @@ Only 2 additional files for specific scenarios:
 - Always use SSH: `ssh eform-kio@192.168.1.5`
 - Use n8n CLI commands, not browser automation
 - See `n8n-development.md` for full details
+- **WhatsApp:** `whatsapp-final.json`
+- **Instagram:** `instagram-ai-agent-v3.json` (with customer data + analytics)
 
 ---
 
@@ -64,10 +66,11 @@ Only 2 additional files for specific scenarios:
 ├── README.md                  📖 This file
 ├── ui-ux-testing.md          🎨 Puppeteer testing (when needed)
 ├── deployment-raspberry-pi.md 🚀 Pi deployment (when needed)
-└── n8n-development.md        🤖 n8n workflow development (WhatsApp coupon system)
+├── n8n-development.md        🤖 n8n workflows (WhatsApp + Instagram)
+└── n8n-ai-development.md     🤖 AI/OpenRouter patterns
 ```
 
-**That's it!** Just 5 files total. Everything else is consolidated into ULTIMATE_GUIDE.md.
+**That's it!** Just 6 files total. Everything else is consolidated into ULTIMATE_GUIDE.md.
 
 ---
 
@@ -112,12 +115,14 @@ These steering files have solved:
 - ✅ Database persistence problems
 - ✅ UI/UX regressions
 - ✅ Deployment issues (Pi)
+- ✅ WhatsApp coupon system (2025-12-01)
+- ✅ Instagram DM integration with analytics (2025-12-05)
 
 **Result:** 100% test pass rate, production-ready system
 
 ---
 
-**Last Updated:** 2025-11-29  
+**Last Updated:** 2025-12-05  
 **Status:** ✅ Streamlined and optimized  
-**Total Files:** 5 (1 ultimate + 3 specialized + 1 readme)  
+**Total Files:** 6 (1 ultimate + 4 specialized + 1 readme)  
 **Coverage:** All critical patterns consolidated

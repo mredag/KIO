@@ -167,3 +167,119 @@ CREATE TABLE IF NOT EXISTS whatsapp_processed_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_processed ON whatsapp_processed_messages(processed_at);
+
+-- Instagram customers table
+CREATE TABLE IF NOT EXISTS instagram_customers (
+  instagram_id TEXT PRIMARY KEY,
+  phone TEXT,
+  name TEXT,
+  last_visit DATETIME,
+  last_interaction_at DATETIME,
+  interaction_count INTEGER DEFAULT 0,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_instagram_customers_phone ON instagram_customers(phone);
+CREATE INDEX IF NOT EXISTS idx_instagram_customers_last_interaction ON instagram_customers(last_interaction_at);
+
+-- Instagram interactions table (for marketing analytics)
+CREATE TABLE IF NOT EXISTS instagram_interactions (
+  id TEXT PRIMARY KEY,
+  instagram_id TEXT NOT NULL,
+  direction TEXT CHECK(direction IN ('inbound', 'outbound')) NOT NULL,
+  message_text TEXT NOT NULL,
+  intent TEXT,
+  sentiment TEXT,
+  ai_response TEXT,
+  response_time_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (instagram_id) REFERENCES instagram_customers(instagram_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_instagram_interactions_user ON instagram_interactions(instagram_id);
+CREATE INDEX IF NOT EXISTS idx_instagram_interactions_created ON instagram_interactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_instagram_interactions_intent ON instagram_interactions(intent);
+CREATE INDEX IF NOT EXISTS idx_instagram_interactions_sentiment ON instagram_interactions(sentiment);
+
+-- WhatsApp interactions table (mirrors instagram_interactions schema)
+-- Requirements: 8.1, 8.2
+CREATE TABLE IF NOT EXISTS whatsapp_interactions (
+  id TEXT PRIMARY KEY,
+  phone TEXT NOT NULL,
+  direction TEXT CHECK(direction IN ('inbound', 'outbound')) NOT NULL,
+  message_text TEXT NOT NULL,
+  intent TEXT,
+  sentiment TEXT,
+  ai_response TEXT,
+  response_time_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_interactions_phone ON whatsapp_interactions(phone);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_interactions_created ON whatsapp_interactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_interactions_intent ON whatsapp_interactions(intent);
+
+-- Service settings table for automation control
+-- Requirements: 2.1, 2.2, 2.3
+CREATE TABLE IF NOT EXISTS service_settings (
+  service_name TEXT PRIMARY KEY,
+  enabled INTEGER DEFAULT 1,
+  config TEXT, -- JSON
+  last_activity DATETIME,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default service settings
+INSERT OR IGNORE INTO service_settings (service_name, enabled, updated_at)
+VALUES 
+  ('whatsapp', 1, CURRENT_TIMESTAMP),
+  ('instagram', 1, CURRENT_TIMESTAMP);
+
+-- Knowledge base table for dynamic AI context
+-- Requirements: 3.1, 3.2, 4.1
+CREATE TABLE IF NOT EXISTS knowledge_base (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL CHECK(category IN ('services', 'pricing', 'hours', 'policies', 'contact', 'general')),
+  key_name TEXT NOT NULL,
+  value TEXT NOT NULL,
+  description TEXT,
+  is_active INTEGER DEFAULT 1,
+  version INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(category, key_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_category ON knowledge_base(category);
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_active ON knowledge_base(is_active);
+
+-- Unified interactions view combining WhatsApp and Instagram
+-- Requirements: 1.1, 8.3
+CREATE VIEW IF NOT EXISTS unified_interactions AS
+SELECT 
+  id,
+  'whatsapp' as platform,
+  phone as customer_id,
+  direction,
+  message_text,
+  intent,
+  sentiment,
+  ai_response,
+  response_time_ms,
+  created_at
+FROM whatsapp_interactions
+UNION ALL
+SELECT 
+  id,
+  'instagram' as platform,
+  instagram_id as customer_id,
+  direction,
+  message_text,
+  intent,
+  sentiment,
+  ai_response,
+  response_time_ms,
+  created_at
+FROM instagram_interactions;

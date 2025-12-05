@@ -315,7 +315,19 @@ Works on any network without changes!
 
 ## Status: ✅ Tested and Working
 
-Last deployment: 2025-11-28  
+## Database Seeding
+
+The database automatically seeds initial data on first run:
+- Survey templates (Turkish)
+- System settings
+- Service settings (WhatsApp, Instagram)
+- **26 Knowledge base entries** (Turkish content for AI workflows)
+
+No manual seeding required. The seed script is idempotent.
+
+---
+
+Last deployment: 2025-12-05  
 Platform: Raspberry Pi 5, Debian 13 (Trixie)  
 Node.js: 20.19.6  
 Status: Production-ready

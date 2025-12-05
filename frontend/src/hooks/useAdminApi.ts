@@ -617,3 +617,199 @@ export function useRejectRedemption() {
     },
   });
 }
+
+// Unified Interactions
+
+export function useUnifiedInteractions(filters?: {
+  platform?: 'whatsapp' | 'instagram' | 'all';
+  startDate?: string;
+  endDate?: string;
+  customerId?: string;
+  intent?: string;
+  sentiment?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return useQuery({
+    queryKey: ['admin', 'interactions', filters],
+    queryFn: async () => {
+      const response = await api.get('/admin/interactions', { params: filters });
+      return response.data.map((interaction: any) => ({
+        id: interaction.id,
+        platform: interaction.platform,
+        customerId: interaction.customer_id,
+        direction: interaction.direction,
+        messageText: interaction.message_text,
+        intent: interaction.intent,
+        sentiment: interaction.sentiment,
+        aiResponse: interaction.ai_response,
+        responseTimeMs: interaction.response_time_ms,
+        createdAt: new Date(interaction.created_at),
+      }));
+    },
+  });
+}
+
+export function useInteractionsAnalytics(filters?: {
+  platform?: 'whatsapp' | 'instagram' | 'all';
+  startDate?: string;
+  endDate?: string;
+}) {
+  return useQuery({
+    queryKey: ['admin', 'interactions', 'analytics', filters],
+    queryFn: async () => {
+      const response = await api.get('/admin/interactions/analytics', { params: filters });
+      return response.data;
+    },
+  });
+}
+
+export function useExportInteractions() {
+  return useMutation({
+    mutationFn: async (filters?: {
+      platform?: 'whatsapp' | 'instagram' | 'all';
+      startDate?: string;
+      endDate?: string;
+    }) => {
+      const response = await api.get('/admin/interactions/export', {
+        params: filters,
+        responseType: 'blob',
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `interactions-${new Date().toISOString()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      
+      return response.data;
+    },
+  });
+}
+
+// Service Control
+
+export function useServices() {
+  return useQuery({
+    queryKey: ['admin', 'services'],
+    queryFn: async () => {
+      const response = await api.get('/admin/services');
+      return response.data.map((service: any) => ({
+        serviceName: service.service_name,
+        enabled: service.enabled,
+        lastActivity: service.last_activity ? new Date(service.last_activity) : null,
+        messageCount24h: service.message_count_24h || 0,
+        config: service.config,
+        updatedAt: new Date(service.updated_at),
+      }));
+    },
+    refetchInterval: 30000, // Auto-refresh every 30 seconds
+  });
+}
+
+export function useToggleService() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (serviceName: string) => {
+      const response = await api.post(`/admin/services/${serviceName}/toggle`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'services'] });
+    },
+  });
+}
+
+// Knowledge Base
+
+export function useKnowledgeBase() {
+  return useQuery({
+    queryKey: ['admin', 'knowledge-base'],
+    queryFn: async () => {
+      const response = await api.get('/admin/knowledge-base');
+      return response.data.map((entry: any) => ({
+        id: entry.id,
+        category: entry.category,
+        keyName: entry.key_name,
+        value: entry.value,
+        description: entry.description,
+        isActive: entry.is_active,
+        version: entry.version,
+        createdAt: new Date(entry.created_at),
+        updatedAt: new Date(entry.updated_at),
+      }));
+    },
+  });
+}
+
+export function useCreateKnowledgeEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      category: string;
+      keyName: string;
+      value: string;
+      description?: string;
+      isActive?: boolean;
+    }) => {
+      const response = await api.post('/admin/knowledge-base', {
+        category: data.category,
+        key_name: data.keyName,
+        value: data.value,
+        description: data.description,
+        is_active: data.isActive !== false,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
+    },
+  });
+}
+
+export function useUpdateKnowledgeEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, data }: {
+      id: string;
+      data: {
+        category?: string;
+        keyName?: string;
+        value?: string;
+        description?: string;
+        isActive?: boolean;
+      };
+    }) => {
+      const response = await api.put(`/admin/knowledge-base/${id}`, {
+        category: data.category,
+        key_name: data.keyName,
+        value: data.value,
+        description: data.description,
+        is_active: data.isActive,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
+    },
+  });
+}
+
+export function useDeleteKnowledgeEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/admin/knowledge-base/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'knowledge-base'] });
+    },
+  });
+}

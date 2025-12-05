@@ -1103,17 +1103,19 @@ Environment=GENERIC_TIMEZONE=Europe/Istanbul
 ```
 n8n-workflows/
 ├── workflows-v2/
-│   ├── whatsapp-final.json      ✅ Production workflow
-│   ├── whatsapp-debug.json      🔧 Debug version
-│   └── *.json                   📦 Legacy/test workflows
+│   ├── whatsapp-final.json         ✅ WhatsApp production
+│   ├── instagram-ai-agent-v3.json  ✅ Instagram production (with analytics)
+│   ├── instagram-ai-agent.json     📦 Instagram basic (v1)
+│   └── *.json                      📦 Legacy/test workflows
 ├── docs/
-│   ├── TROUBLESHOOTING.md       📖 Detailed troubleshooting
-│   ├── MESSAGE_FILTERING.md     📖 Webhook filtering guide
-│   └── turkish-message-templates.md  📖 Turkish messages
+│   ├── instagram-setup.md          📖 Instagram setup guide
+│   ├── TROUBLESHOOTING.md          📖 Detailed troubleshooting
+│   ├── MESSAGE_FILTERING.md        📖 Webhook filtering guide
+│   └── turkish-message-templates.md 📖 Turkish messages
 ├── deployment/
-│   ├── DEPLOYMENT.md            📖 Deployment guide
-│   └── BACKUP.md                📖 Backup procedures
-└── README.md                    📖 Overview
+│   ├── DEPLOYMENT.md               📖 Deployment guide
+│   └── BACKUP.md                   📖 Backup procedures
+└── README.md                       📖 Overview
 ```
 
 ---
@@ -1164,8 +1166,75 @@ This prevents confusion when customers say "kupon kullan" multiple times.
 
 ---
 
-**Last Updated:** 2025-12-01  
-**Status:** ✅ Production-ready workflow documented  
-**Working Workflow:** `n8n-workflows/workflows-v2/whatsapp-final.json`  
-**Applies to:** WhatsApp Coupon System feature
+## 📸 Instagram DM Integration (2025-12-05)
+
+### Overview
+
+Instagram DM AI Agent with customer data enrichment and interaction logging for marketing analytics.
+
+### Workflow Versions
+
+| Version | File | Features |
+|---------|------|----------|
+| v1 | `instagram-ai-agent.json` | Basic AI responses |
+| v3 | `instagram-ai-agent-v3.json` | **Recommended** - Customer data + Logging |
+
+### Backend API Endpoints
+
+```
+GET  /api/integrations/instagram/customer/:instagramId  - Fetch customer data
+POST /api/integrations/instagram/interaction            - Log interaction
+POST /api/integrations/instagram/customer/:id/link-phone - Link phone to IG
+GET  /api/integrations/instagram/analytics              - Marketing analytics
+GET  /api/integrations/instagram/export?format=csv      - Export for Sheets
+```
+
+### Database Tables
+
+```sql
+instagram_customers (instagram_id, phone, interaction_count, last_interaction_at)
+instagram_interactions (id, instagram_id, direction, message_text, intent, sentiment, ai_response, response_time_ms)
+```
+
+### V3 Workflow Flow
+
+```
+Webhook → Parse → Router → Fetch Customer → Enrich Context → Log Inbound → AI Agent → Format → Log Outbound → Send IG → OK
+```
+
+### Key Features
+
+1. **Customer Enrichment**: Fetches customer history before AI responds
+2. **Intent Detection**: Classifies messages (pricing, hours, booking, coupon, etc.)
+3. **Sentiment Analysis**: Tracks positive/neutral/negative responses
+4. **Response Time Tracking**: Measures AI latency
+5. **Marketing Export**: CSV export for Google Sheets
+
+### Deploy V3
+
+```bash
+scp n8n-workflows/workflows-v2/instagram-ai-agent-v3.json eform-kio@192.168.1.5:~/instagram-v3.json
+ssh eform-kio@192.168.1.5 "n8n import:workflow --input=~/instagram-v3.json"
+ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=true"
+ssh eform-kio@192.168.1.5 "sudo systemctl restart n8n"
+```
+
+### Required Credentials
+
+1. **Google Gemini API** - For AI responses
+2. **Instagram Business API** - Header Auth with access token
+3. **N8N API Key** - Header Auth: `Authorization: Bearer <N8N_API_KEY>`
+
+### Documentation
+
+Full setup guide: `n8n-workflows/docs/instagram-setup.md`
+
+---
+
+**Last Updated:** 2025-12-05  
+**Status:** ✅ Production-ready workflows documented  
+**Working Workflows:** 
+- WhatsApp: `n8n-workflows/workflows-v2/whatsapp-final.json`
+- Instagram: `n8n-workflows/workflows-v2/instagram-ai-agent-v3.json`  
+**Applies to:** WhatsApp Coupon System, Instagram DM Integration
 

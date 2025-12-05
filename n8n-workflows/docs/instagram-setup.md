@@ -2,6 +2,17 @@
 
 ## 📋 Overview
 
+### Workflow Versions
+
+| Version | File | Features |
+|---------|------|----------|
+| v1 | `instagram-ai-agent.json` | Basic AI responses |
+| v3 | `instagram-ai-agent-v3.json` | **Recommended** - Customer data + Interaction logging |
+
+**Use v3 for production** - includes customer enrichment and marketing analytics.
+
+---
+
 This workflow creates an AI-powered Instagram DM chatbot that can:
 - Answer questions about your SPA (location, prices, hours)
 - Provide service information
@@ -229,6 +240,109 @@ Tüm hizmetler için bizi arayın: 0532 XXX XX XX
 
 ---
 
+## 🆕 V3 Features: Customer Data & Analytics
+
+### New Backend API Endpoints
+
+The v3 workflow uses these new API endpoints:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/integrations/instagram/customer/:id` | GET | Fetch customer data |
+| `/api/integrations/instagram/interaction` | POST | Log interactions |
+| `/api/integrations/instagram/analytics` | GET | Marketing analytics |
+| `/api/integrations/instagram/export` | GET | Export to CSV |
+
+### Customer Enrichment Flow
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  Message    │────▶│ Fetch Customer   │────▶│ Enrich Context  │
+│  Received   │     │ Data from DB     │     │ for AI          │
+└─────────────┘     └──────────────────┘     └─────────────────┘
+                           │
+                           ▼
+                    ┌──────────────────┐
+                    │ Customer Info:   │
+                    │ - isNewCustomer  │
+                    │ - couponBalance  │
+                    │ - interactionCnt │
+                    └──────────────────┘
+```
+
+### Interaction Logging
+
+Every message is logged with:
+- `instagramId` - User's Instagram ID
+- `direction` - inbound/outbound
+- `messageText` - Original message
+- `intent` - Detected intent (pricing, hours, booking, etc.)
+- `sentiment` - positive/neutral/negative
+- `aiResponse` - What the AI replied
+- `responseTime` - Response latency in ms
+
+### Marketing Analytics Dashboard
+
+Access analytics via API:
+
+```bash
+# Get summary stats
+curl http://192.168.1.5:3001/api/integrations/instagram/analytics \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Export to CSV for Google Sheets
+curl "http://192.168.1.5:3001/api/integrations/instagram/export?format=csv" \
+  -H "Authorization: Bearer YOUR_API_KEY" > instagram_data.csv
+```
+
+Response includes:
+- Total interactions & unique users
+- Intent breakdown (what customers ask about most)
+- Sentiment analysis
+- Daily interaction trends
+- Average response time
+
+### Database Tables (Auto-created)
+
+```sql
+-- Customer profiles
+instagram_customers (
+  instagram_id, phone, name, last_visit,
+  interaction_count, created_at
+)
+
+-- Interaction logs
+instagram_interactions (
+  id, instagram_id, direction, message_text,
+  intent, sentiment, ai_response, response_time_ms
+)
+```
+
+### Deploy V3 Workflow
+
+```bash
+# Copy v3 workflow to Pi
+scp n8n-workflows/workflows-v2/instagram-ai-agent-v3.json eform-kio@192.168.1.5:~/instagram-v3.json
+
+# SSH and import
+ssh eform-kio@192.168.1.5
+n8n import:workflow --input=~/instagram-v3.json
+n8n update:workflow --all --active=true
+sudo systemctl restart n8n
+```
+
+### Credential Requirements for V3
+
+1. **Google Gemini API** (same as v1)
+2. **Instagram Business API** (same as v1)
+3. **N8N API Key** (new) - For backend API calls:
+   - Name: `N8N API Key`
+   - Type: Header Auth
+   - Header: `Authorization`
+   - Value: `Bearer YOUR_N8N_API_KEY` (from backend .env)
+
+---
+
 **Last Updated:** 2025-12-05
 **Status:** Ready for deployment
-**Workflow:** `instagram-ai-agent.json`
+**Recommended Workflow:** `instagram-ai-agent-v3.json`

@@ -33,6 +33,11 @@ export const CouponRedemptionsPage = lazy(() => import('../pages/admin/CouponRed
 export const CouponWalletLookupPage = lazy(() => import('../pages/admin/CouponWalletLookupPage'));
 export const CouponSettingsPage = lazy(() => import('../pages/admin/CouponSettingsPage'));
 
+// Admin - Automation
+export const InteractionsPage = lazy(() => import('../pages/admin/InteractionsPage'));
+export const ServicesPage = lazy(() => import('../pages/admin/ServicesPage'));
+export const KnowledgeBasePage = lazy(() => import('../pages/admin/KnowledgeBasePage'));
+
 // Admin - System
 export const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));
 export const BackupPage = lazy(() => import('../pages/admin/BackupPage'));

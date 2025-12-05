@@ -133,6 +133,30 @@ function App() {
               }
             />
             <Route
+              path="/admin/interactions"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.InteractionsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/services"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.ServicesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/knowledge-base"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.KnowledgeBasePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/settings"
               element={
                 <ProtectedRoute>

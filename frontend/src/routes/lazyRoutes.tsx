@@ -37,6 +37,7 @@ export const CouponSettingsPage = lazy(() => import('../pages/admin/CouponSettin
 export const InteractionsPage = lazy(() => import('../pages/admin/InteractionsPage'));
 export const ServicesPage = lazy(() => import('../pages/admin/ServicesPage'));
 export const KnowledgeBasePage = lazy(() => import('../pages/admin/KnowledgeBasePage'));
+export const AIPromptsPage = lazy(() => import('../pages/admin/AIPromptsPage'));
 
 // Admin - System
 export const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));

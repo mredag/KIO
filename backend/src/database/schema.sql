@@ -255,6 +255,23 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_category ON knowledge_base(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_active ON knowledge_base(is_active);
 
+-- AI system prompts table for dynamic workflow configuration
+CREATE TABLE IF NOT EXISTS ai_system_prompts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  system_message TEXT NOT NULL,
+  workflow_type TEXT CHECK(workflow_type IN ('whatsapp', 'instagram', 'general')) DEFAULT 'general',
+  is_active INTEGER DEFAULT 1,
+  version INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_prompts_workflow_type ON ai_system_prompts(workflow_type);
+CREATE INDEX IF NOT EXISTS idx_ai_prompts_active ON ai_system_prompts(is_active);
+CREATE INDEX IF NOT EXISTS idx_ai_prompts_name ON ai_system_prompts(name);
+
 -- Unified interactions view combining WhatsApp and Instagram
 -- Requirements: 1.1, 8.3
 CREATE VIEW IF NOT EXISTS unified_interactions AS

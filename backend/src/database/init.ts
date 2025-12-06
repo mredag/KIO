@@ -108,6 +108,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
   // Check for dynamic automation management tables (for existing installations)
   const automationTables = [
     'whatsapp_interactions',
+    'instagram_interactions',
     'service_settings',
     'knowledge_base'
   ];
@@ -119,6 +120,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
     // Re-run schema to create missing tables
     for (const statement of statements) {
       if (statement.includes('whatsapp_interactions') || 
+          statement.includes('instagram_interactions') ||
           statement.includes('service_settings') || 
           statement.includes('knowledge_base') ||
           statement.includes('unified_interactions')) {
@@ -140,6 +142,20 @@ export function initializeDatabase(dbPath: string): Database.Database {
       }
     }
     console.log('unified_interactions view created successfully');
+  }
+
+  // Check for AI system prompts table (for existing installations)
+  const updatedTables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
+  const updatedTableNames = updatedTables.map(t => t.name);
+  
+  if (!updatedTableNames.includes('ai_system_prompts')) {
+    console.log('Creating ai_system_prompts table...');
+    for (const statement of statements) {
+      if (statement.includes('ai_system_prompts')) {
+        db.exec(statement);
+      }
+    }
+    console.log('ai_system_prompts table created successfully');
   }
   
   // Seed default data

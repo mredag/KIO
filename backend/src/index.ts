@@ -31,6 +31,8 @@ import { createAdminKnowledgeBaseRoutes } from './routes/adminKnowledgeBaseRoute
 import { createAdminServiceControlRoutes } from './routes/adminServiceControlRoutes.js';
 import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.js';
 import { createIntegrationRoutes } from './routes/integrationRoutes.js';
+import { createAIPromptsRoutes } from './routes/aiPromptsRoutes.js';
+import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsRoutes.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -242,7 +244,9 @@ app.use('/api/admin/policy', createAdminPolicyRoutes(dbService, couponPolicyServ
 app.use('/api/admin/knowledge-base', createAdminKnowledgeBaseRoutes(dbService));
 app.use('/api/admin/services', createAdminServiceControlRoutes(dbService));
 app.use('/api/admin/interactions', createAdminInteractionsRoutes(dbService));
+app.use('/api/admin/ai-prompts', createAIPromptsRoutes(db));
 app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
+app.use('/api/integrations/ai', createIntegrationAIPromptsRoutes(db));
 app.use('/api/integrations', createIntegrationRoutes(dbService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());

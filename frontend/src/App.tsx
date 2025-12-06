@@ -141,6 +141,14 @@ function App() {
               }
             />
             <Route
+              path="/admin/ai-prompts"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.AIPromptsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/services"
               element={
                 <ProtectedRoute>

@@ -1,6 +1,6 @@
 {
   "name": "WhatsApp Kupon Dynamic Automation",
-  "versionId": "dynamic-automation-v1",
+  "versionId": "dynamic-automation-v2-fixed",
   "nodes": [
     {
       "parameters": {
@@ -100,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg;\nlet intent = 'coupon_submit';\nlet sentiment = 'neutral';\n\nif (r.error) {\n  // Turkish error messages based on error code\n  const code = r.error.code;\n  if (code === 'INVALID_TOKEN') {\n    msg = '❌ Bu kupon kodu gecersiz. Lutfen kodu kontrol edin.';\n    sentiment = 'negative';\n  } else if (code === 'ALREADY_USED') {\n    msg = '❌ Bu kupon daha once kullanilmis.';\n    sentiment = 'negative';\n  } else if (code === 'EXPIRED_TOKEN') {\n    msg = '❌ Bu kuponun suresi dolmus.';\n    sentiment = 'negative';\n  } else {\n    msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n    sentiment = 'negative';\n  }\n} else {\n  msg = `✅ Kupon eklendi! Bakiye: ${r.balance || 0}/4`;\n  sentiment = 'positive';\n}\n\nreturn [{ json: { phone: p, message: msg, intent, sentiment, originalText, direction: 'outbound' } }];"
+        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg;\nlet intent = 'coupon_submit';\nlet sentiment = 'neutral';\n\nif (r.error) {\n  // Turkish error messages based on error code\n  const code = r.error.code;\n  if (code === 'INVALID_TOKEN') {\n    msg = '❌ Bu kupon kodu gecersiz. Lutfen kodu kontrol edin.';\n    sentiment = 'negative';\n  } else if (code === 'ALREADY_USED') {\n    msg = '❌ Bu kupon daha once kullanilmis.';\n    sentiment = 'negative';\n  } else if (code === 'EXPIRED_TOKEN') {\n    msg = '❌ Bu kuponun suresi dolmus.';\n    sentiment = 'negative';\n  } else {\n    msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n    sentiment = 'negative';\n  }\n} else {\n  msg = `✅ Kupon eklendi! Bakiye: ${r.balance || 0}/4`;\n  sentiment = 'positive';\n}\n\nreturn [{ json: { phone: p, message: msg, intent, sentiment, inboundText: originalText } }];"
       },
       "id": "fmt-coupon",
       "name": "Fmt Coupon",
@@ -125,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r=$input.first().json;\nconst p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg=r.error?'📊 Henüz kuponunuz yok.':`📊 Bakiye: ${r.couponCount||0}/4`;\nreturn [{json:{phone:p,message:msg,intent:'balance_check',sentiment:'neutral',originalText,direction:'outbound'}}];"
+        "jsCode": "const r=$input.first().json;\nconst p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg=r.error?'📊 Henüz kuponunuz yok.':`📊 Bakiye: ${r.couponCount||0}/4`;\nreturn [{json:{phone:p,message:msg,intent:'balance_check',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-balance",
       "name": "Fmt Balance",
@@ -153,7 +153,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst err = r.error;\nlet msg;\nlet sentiment = 'neutral';\n\nif (err) {\n  const bal = err.balance || 0;\n  const needed = err.needed || (4 - bal);\n  const threshold = err.threshold || 4;\n  msg = `❌ Yeterli kupon yok. Mevcut: ${bal}/${threshold}. ${needed} kupon daha gerekiyor.`;\n  sentiment = 'negative';\n} else if (r.ok && r.redemptionId) {\n  if (r.isNew === false) {\n    // Existing pending - remind user\n    msg = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;\n    sentiment = 'neutral';\n  } else {\n    msg = `🎉 Tebrikler! Ucretsiz masaj hakkiniz onaylandi!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n    sentiment = 'positive';\n  }\n} else {\n  msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n  sentiment = 'negative';\n}\n\nreturn [{ json: { phone: p, message: msg, intent: 'redemption', sentiment, originalText, direction: 'outbound' } }];"
+        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst err = r.error;\nlet msg;\nlet sentiment = 'neutral';\n\nif (err) {\n  const bal = err.balance || 0;\n  const needed = err.needed || (4 - bal);\n  const threshold = err.threshold || 4;\n  msg = `❌ Yeterli kupon yok. Mevcut: ${bal}/${threshold}. ${needed} kupon daha gerekiyor.`;\n  sentiment = 'negative';\n} else if (r.ok && r.redemptionId) {\n  if (r.isNew === false) {\n    // Existing pending - remind user\n    msg = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;\n    sentiment = 'neutral';\n  } else {\n    msg = `🎉 Tebrikler! Ucretsiz masaj hakkiniz onaylandi!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n    sentiment = 'positive';\n  }\n} else {\n  msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n  sentiment = 'negative';\n}\n\nreturn [{ json: { phone: p, message: msg, intent: 'redemption', sentiment, inboundText: originalText } }];"
       },
       "id": "fmt-claim",
       "name": "Fmt Claim",
@@ -178,7 +178,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst knowledge=$input.first().json;\n\n// Build help message from knowledge base\nlet msg = '🎫 Kupon Sistemi Yardım\\n\\n';\n\n// Add services info if available\nif (knowledge.services) {\n  const services = Object.values(knowledge.services);\n  if (services.length > 0) {\n    msg += '📌 Hizmetler:\\n';\n    services.slice(0, 3).forEach(s => msg += `• ${s}\\n`);\n    msg += '\\n';\n  }\n}\n\n// Add hours if available\nif (knowledge.hours) {\n  msg += '🕐 Çalışma Saatleri:\\n';\n  Object.values(knowledge.hours).forEach(h => msg += `• ${h}\\n`);\n  msg += '\\n';\n}\n\n// Add commands\nmsg += '📱 Komutlar:\\n';\nmsg += '• DURUM - Bakiye sorgula\\n';\nmsg += '• KUPON <KOD> - Kupon ekle\\n';\nmsg += '• KUPON KULLAN - Hediye al\\n';\nmsg += '• IPTAL - Bildirimleri kapat';\n\n// Add contact if available\nif (knowledge.contact && knowledge.contact.phone) {\n  msg += `\\n\\n📞 İletişim: ${knowledge.contact.phone}`;\n}\n\nreturn [{json:{phone:p,message:msg,intent:'help',sentiment:'neutral',originalText,direction:'outbound'}}];"
+        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst knowledge=$input.first().json;\n\n// Build help message from knowledge base\nlet msg = '🎫 Kupon Sistemi Yardım\\n\\n';\n\n// Add services info if available\nif (knowledge.services) {\n  const services = Object.values(knowledge.services);\n  if (services.length > 0) {\n    msg += '📌 Hizmetler:\\n';\n    services.slice(0, 3).forEach(s => msg += `• ${s}\\n`);\n    msg += '\\n';\n  }\n}\n\n// Add hours if available\nif (knowledge.hours) {\n  msg += '🕐 Çalışma Saatleri:\\n';\n  Object.values(knowledge.hours).forEach(h => msg += `• ${h}\\n`);\n  msg += '\\n';\n}\n\n// Add commands\nmsg += '📱 Komutlar:\\n';\nmsg += '• DURUM - Bakiye sorgula\\n';\nmsg += '• KUPON <KOD> - Kupon ekle\\n';\nmsg += '• KUPON KULLAN - Hediye al\\n';\nmsg += '• IPTAL - Bildirimleri kapat';\n\n// Add contact if available\nif (knowledge.contact && knowledge.contact.phone) {\n  msg += `\\n\\n📞 İletişim: ${knowledge.contact.phone}`;\n}\n\nreturn [{json:{phone:p,message:msg,intent:'help',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-help",
       "name": "Fmt Help",
@@ -188,7 +188,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nreturn [{json:{phone:p,message:'✅ Bildirimler kapatıldı.',intent:'optout',sentiment:'neutral',originalText,direction:'outbound'}}];"
+        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nreturn [{json:{phone:p,message:'✅ Bildirimler kapatıldı.',intent:'optout',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-optout",
       "name": "Fmt OptOut",
@@ -198,13 +198,38 @@
     },
     {
       "parameters": {
-        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst msg=$('Check Enabled').first().json.message;\nreturn [{json:{phone:p,message:msg,intent:'maintenance',sentiment:'neutral',direction:'outbound'}}];"
+        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst msg=$('Check Enabled').first().json.message;\nreturn [{json:{phone:p,message:msg,intent:'maintenance',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-maintenance",
       "name": "Fmt Maintenance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst phone = data.phone;\nconst inboundText = data.inboundText;\nconst outboundMessage = data.message;\nconst intent = data.intent;\nconst sentiment = data.sentiment;\n\n// Return both inbound and outbound logs, plus the message data for Send WA\nreturn [\n  // Log inbound message\n  { json: { phone, direction: 'inbound', messageText: inboundText, intent, sentiment: 'neutral', logType: 'inbound' } },\n  // Log outbound message\n  { json: { phone, direction: 'outbound', messageText: outboundMessage, intent, sentiment, logType: 'outbound' } },\n  // Pass message data to Send WA\n  { json: { phone, message: outboundMessage, forSending: true } }\n];"
+      },
+      "id": "prepare-logs",
+      "name": "Prepare Logs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1700, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [{ "id": "filter-log", "leftValue": "={{ $json.logType }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-for-log",
+      "name": "Filter For Log",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1900, 300]
     },
     {
       "parameters": {
@@ -215,14 +240,29 @@
         "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"phone\":\"{{ $json.phone }}\",\"direction\":\"{{ $json.direction }}\",\"messageText\":\"{{ $json.originalText || $json.message }}\",\"intent\":\"{{ $json.intent }}\",\"sentiment\":\"{{ $json.sentiment }}\"}",
+        "jsonBody": "={\"phone\":\"{{ $json.phone }}\",\"direction\":\"{{ $json.direction }}\",\"messageText\":\"{{ $json.messageText }}\",\"intent\":\"{{ $json.intent }}\",\"sentiment\":\"{{ $json.sentiment }}\"}",
         "options": { "response": { "response": { "neverError": true } }, "timeout": 2000 }
       },
       "id": "log-interaction",
       "name": "Log Interaction",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1700, 400]
+      "position": [2100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [{ "id": "filter-send", "leftValue": "={{ $json.forSending }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-for-send",
+      "name": "Filter For Send",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1900, 500]
     },
     {
       "parameters": {
@@ -240,7 +280,7 @@
       "name": "Send WA",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1900, 400]
+      "position": [2100, 500]
     },
     {
       "parameters": { "respondWith": "text", "responseBody": "OK" },
@@ -275,16 +315,24 @@
       [{ "node": "Ignore", "type": "main", "index": 0 }]
     ]},
     "API Coupon": { "main": [[{ "node": "Fmt Coupon", "type": "main", "index": 0 }]] },
-    "Fmt Coupon": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
+    "Fmt Coupon": { "main": [[{ "node": "Prepare Logs", "type": "main", "index": 0 }]] },
     "API Balance": { "main": [[{ "node": "Fmt Balance", "type": "main", "index": 0 }]] },
-    "Fmt Balance": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
+    "Fmt Balance": { "main": [[{ "node": "Prepare Logs", "type": "main", "index": 0 }]] },
     "API Claim": { "main": [[{ "node": "Fmt Claim", "type": "main", "index": 0 }]] },
-    "Fmt Claim": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
+    "Fmt Claim": { "main": [[{ "node": "Prepare Logs", "type": "main", "index": 0 }]] },
     "Fetch Knowledge": { "main": [[{ "node": "Fmt Help", "type": "main", "index": 0 }]] },
-    "Fmt Help": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
-    "Fmt OptOut": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
-    "Fmt Maintenance": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
-    "Log Interaction": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
+    "Fmt Help": { "main": [[{ "node": "Prepare Logs", "type": "main", "index": 0 }]] },
+    "Fmt OptOut": { "main": [[{ "node": "Prepare Logs", "type": "main", "index": 0 }]] },
+    "Fmt Maintenance": { "main": [[{ "node": "Prepare Logs", "type": "main", "index": 0 }]] },
+    "Prepare Logs": { "main": [
+      [
+        { "node": "Filter For Log", "type": "main", "index": 0 },
+        { "node": "Filter For Send", "type": "main", "index": 0 }
+      ]
+    ]},
+    "Filter For Log": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
+    "Log Interaction": { "main": [[{ "node": "OK", "type": "main", "index": 0 }]] },
+    "Filter For Send": { "main": [[{ "node": "Send WA", "type": "main", "index": 0 }]] },
     "Send WA": { "main": [[{ "node": "OK", "type": "main", "index": 0 }]] }
   },
   "active": true,

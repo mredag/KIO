@@ -11,6 +11,7 @@
 3. **Transform at API boundary** - Backend (snake_case) → Frontend (camelCase)
 4. **Test UI changes** - Run Puppeteer after UI/UX work
 5. **Minimal documentation** - Code speaks, brief summaries only
+6. **Knowledge Base for AI** - Use dynamic knowledge base for n8n workflows, not hardcoded prompts
 
 ---
 
@@ -235,6 +236,45 @@ grep NODE_ENV ~/spa-kiosk/backend/.env  # NODE_ENV=production
 - Brief 2-3 sentence summary after feature
 - Update steering files for new patterns only
 - Update README for major changes only
+
+---
+
+## 📚 Knowledge Base System
+
+### Database-Driven AI Context
+- Knowledge base entries stored in `knowledge_base` table
+- 6 categories: services, pricing, hours, policies, contact, general
+- All content in Turkish for AI workflows
+- Seeded automatically on database initialization
+
+### API Endpoints
+```
+GET /api/integrations/knowledge/context  - Get formatted knowledge for AI
+GET /api/admin/knowledge-base            - List all entries
+POST /api/admin/knowledge-base           - Create entry
+PUT /api/admin/knowledge-base/:id        - Update entry
+DELETE /api/admin/knowledge-base/:id     - Delete entry
+```
+
+### n8n Integration
+```javascript
+// In n8n workflow - fetch dynamic context
+const response = await fetch('http://localhost:3001/api/integrations/knowledge/context');
+const knowledge = await response.json();
+
+// Use in AI prompt
+const systemPrompt = `Sen bir spa asistanısın.
+
+Hizmetler: ${knowledge.services.massage_types}
+Fiyatlar: ${knowledge.pricing.massage_60min}
+Çalışma Saatleri: ${knowledge.hours.weekdays}
+...`;
+```
+
+### Updating Knowledge
+- Use admin panel: http://localhost:3001/admin/knowledge-base
+- Changes immediately available to n8n workflows
+- No workflow JSON editing needed
 
 ---
 

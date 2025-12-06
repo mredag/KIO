@@ -192,24 +192,81 @@ Webhook → Parse → Check Status → Check Enabled → Route
 2. ✅ `instagram-dynamic-automation.json` - Updated Instagram workflow
 3. ✅ `docs/dynamic-automation-deployment.md` - Deployment guide
 
-### Ready for Deployment
+### Deployment Status: ✅ DEPLOYED
 - ✅ Workflows validated and tested
 - ✅ All API endpoints implemented
 - ✅ Database schema in place
 - ✅ Deployment guide written
 - ✅ Rollback procedure documented
+- ✅ **Deployed to Pi on 2025-12-06**
+  - WhatsApp workflow ID: `jEJJKLOFvtdOv543`
+  - Instagram workflow ID: `SoprjXsmUZYAFGGf` (v8 - human-like responses)
+  - n8n restarted and running
+  - Backend API endpoints verified
 
-### Deployment Command
+### Bug Fixes (2025-12-06)
+
+#### Issue 1: Switch Node Error
+- **Issue**: "Maintenance Check" Switch node had undefined push error
+- **Cause**: Switch node only had 1 rule but 2 outputs (maintenance + fallback)
+- **Fix**: Added explicit "Continue" rule for `serviceEnabled: true` case
+- **Status**: ✅ Fixed
+
+#### Issue 2: Logging But Not Sending Messages
+- **Issue**: Instagram workflow logged interactions but didn't send messages
+- **Cause**: Missing the "Prepare Logs" → "Filter" pattern from WhatsApp workflow
+- **Fix**: Implemented same pattern as WhatsApp:
+  - Added "Prepare Logs" node that outputs 3 items (inbound log, outbound log, message)
+  - Added "Filter For Log" node to route log entries to API
+  - Added "Filter For Send" node to route message to Instagram API
+  - Both paths converge at "OK Response"
+- **Status**: ✅ Fixed
+
+#### Issue 3: Hardcoded IP Addresses
+- **Issue**: Workflows used hardcoded `192.168.1.5` instead of `localhost`
+- **Cause**: Copy-paste from testing/development
+- **Fix**: Replaced all instances of `192.168.1.5` with `localhost`
+- **Why**: Using `localhost` makes workflows portable
+- **Status**: ✅ Fixed
+
+#### Issue 4: AI Agent Receiving Wrong Data
+- **Issue**: AI Agent received "Interaction logged successfully" instead of customer message
+- **Cause**: AI Agent was connected after "Log Inbound" node which returns API response
+- **Fix**: Changed AI Agent prompt to reference `$('Enrich Context').first().json` directly
+- **Status**: ✅ Fixed
+
+#### Issue 5: JSON Encoding Errors
+- **Issue**: Instagram send failed with "JSON parameter needs to be valid JSON"
+- **Cause**: Template string didn't escape Turkish characters, quotes, emojis
+- **Fix**: Changed from template to `JSON.stringify({ recipient: { id: $json.senderId }, message: { text: $json.message } })`
+- **Status**: ✅ Fixed
+
+#### Issue 6: Repetitive AI Responses
+- **Issue**: AI kept saying "Merhaba" and giving long, robotic responses
+- **Cause**: Generic system prompt, no personality, too verbose
+- **Fix**: 
+  - Added Instagram profile fetching to get user's name
+  - Changed AI persona to "Ayşe" (real person)
+  - Limited responses to 1-2 sentences max
+  - Only greet on first message
+  - Minimal emojis, natural conversation
+  - Temperature increased to 0.7
+- **Status**: ✅ Fixed and deployed (ID: `SoprjXsmUZYAFGGf`)
+
+### Verification Results
 ```bash
-# Quick deploy script
-scp n8n-workflows/workflows-v2/*-dynamic-automation.json eform-kio@192.168.1.5:~/
-ssh eform-kio@192.168.1.5 << 'EOF'
-n8n update:workflow --all --active=false 2>/dev/null
-n8n import:workflow --input=~/whatsapp-dynamic-automation.json 2>/dev/null
-n8n import:workflow --input=~/instagram-dynamic-automation.json 2>/dev/null
-n8n update:workflow --all --active=true 2>/dev/null
-sudo systemctl restart n8n
-EOF
+# Service status endpoint working
+curl http://localhost:3001/api/integrations/services/whatsapp/status
+# Response: {"serviceName":"whatsapp","enabled":true,"lastActivity":null,"messageCount24h":0}
+
+# Knowledge context endpoint working
+curl http://localhost:3001/api/integrations/knowledge/context
+# Response: Full knowledge base with all categories (services, pricing, hours, policies, contact, general)
+
+# n8n workflows imported and active
+n8n list:workflow | grep Dynamic
+# jEJJKLOFvtdOv543|WhatsApp Kupon Dynamic Automation
+# JuqWqq4VIDhcAtyU|Instagram SPA AI Agent Dynamic
 ```
 
 ## Benefits Summary

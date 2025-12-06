@@ -68,10 +68,13 @@ const validateKnowledgeEntryUpdate = [
 
 /**
  * Validation middleware for ID parameter
+ * Note: Accepts any non-empty string to support both UUID and custom IDs (e.g., kb-services-1)
  */
 const validateIdParam = [
   param('id')
-    .isUUID()
+    .isString()
+    .trim()
+    .notEmpty()
     .withMessage('Invalid ID format'),
 ];
 

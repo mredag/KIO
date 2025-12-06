@@ -80,9 +80,10 @@ export default function KnowledgeBasePage() {
       await createMutation.mutateAsync(formData);
       setShowCreateForm(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create entry:', error);
-      alert(t('admin:knowledgeBase.createError'));
+      const errorMessage = error?.response?.data?.error || error?.message || t('admin:knowledgeBase.createError');
+      alert(`${t('admin:knowledgeBase.createError')}: ${errorMessage}`);
     }
   };
   
@@ -91,9 +92,10 @@ export default function KnowledgeBasePage() {
       await updateMutation.mutateAsync({ id, data: formData });
       setEditingEntry(null);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update entry:', error);
-      alert(t('admin:knowledgeBase.updateError'));
+      const errorMessage = error?.response?.data?.error || error?.message || t('admin:knowledgeBase.updateError');
+      alert(`${t('admin:knowledgeBase.updateError')}: ${errorMessage}`);
     }
   };
   
@@ -101,9 +103,10 @@ export default function KnowledgeBasePage() {
     try {
       await deleteMutation.mutateAsync(id);
       setDeleteConfirm(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete entry:', error);
-      alert(t('admin:knowledgeBase.deleteError'));
+      const errorMessage = error?.response?.data?.error || error?.message || t('admin:knowledgeBase.deleteError');
+      alert(`${t('admin:knowledgeBase.deleteError')}: ${errorMessage}`);
     }
   };
   

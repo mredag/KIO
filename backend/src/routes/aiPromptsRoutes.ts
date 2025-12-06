@@ -6,17 +6,17 @@ export function createAIPromptsRoutes(db: Database.Database) {
   const router = Router();
 
 // Get all AI prompts
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const prompts = db.prepare(`
       SELECT * FROM ai_system_prompts 
       ORDER BY workflow_type, name
     `).all();
 
-    res.json(prompts);
+    return res.json(prompts);
   } catch (error) {
     console.error('Error fetching AI prompts:', error);
-    res.status(500).json({ error: 'Failed to fetch AI prompts' });
+    return res.status(500).json({ error: 'Failed to fetch AI prompts' });
   }
 });
 
@@ -31,10 +31,10 @@ router.get('/active/:workflowType', async (req: Request, res: Response) => {
       ORDER BY name
     `).all(workflowType);
 
-    res.json(prompts);
+    return res.json(prompts);
   } catch (error) {
     console.error('Error fetching active prompts:', error);
-    res.status(500).json({ error: 'Failed to fetch active prompts' });
+    return res.status(500).json({ error: 'Failed to fetch active prompts' });
   }
 });
 
@@ -51,10 +51,10 @@ router.get('/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Prompt not found' });
     }
 
-    res.json(prompt);
+    return res.json(prompt);
   } catch (error) {
     console.error('Error fetching prompt:', error);
-    res.status(500).json({ error: 'Failed to fetch prompt' });
+    return res.status(500).json({ error: 'Failed to fetch prompt' });
   }
 });
 
@@ -72,10 +72,10 @@ router.get('/by-name/:name', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Prompt not found or inactive' });
     }
 
-    res.json(prompt);
+    return res.json(prompt);
   } catch (error) {
     console.error('Error fetching prompt by name:', error);
-    res.status(500).json({ error: 'Failed to fetch prompt' });
+    return res.status(500).json({ error: 'Failed to fetch prompt' });
   }
 });
 
@@ -107,13 +107,13 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     const newPrompt = db.prepare('SELECT * FROM ai_system_prompts WHERE id = ?').get(id);
-    res.status(201).json(newPrompt);
+    return res.status(201).json(newPrompt);
   } catch (error: any) {
     console.error('Error creating AI prompt:', error);
     if (error.message?.includes('UNIQUE constraint')) {
       return res.status(409).json({ error: 'Prompt name already exists' });
     }
-    res.status(500).json({ error: 'Failed to create AI prompt' });
+    return res.status(500).json({ error: 'Failed to create AI prompt' });
   }
 });
 
@@ -123,7 +123,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, description, system_message, workflow_type, is_active } = req.body;
 
-    const existing = db.prepare('SELECT * FROM ai_system_prompts WHERE id = ?').get(id);
+    const existing = db.prepare('SELECT * FROM ai_system_prompts WHERE id = ?').get(id) as any;
     if (!existing) {
       return res.status(404).json({ error: 'Prompt not found' });
     }
@@ -152,13 +152,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
 
     const updated = db.prepare('SELECT * FROM ai_system_prompts WHERE id = ?').get(id);
-    res.json(updated);
+    return res.json(updated);
   } catch (error: any) {
     console.error('Error updating AI prompt:', error);
     if (error.message?.includes('UNIQUE constraint')) {
       return res.status(409).json({ error: 'Prompt name already exists' });
     }
-    res.status(500).json({ error: 'Failed to update AI prompt' });
+    return res.status(500).json({ error: 'Failed to update AI prompt' });
   }
 });
 
@@ -173,10 +173,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 
     db.prepare('DELETE FROM ai_system_prompts WHERE id = ?').run(id);
-    res.json({ message: 'Prompt deleted successfully' });
+    return res.json({ message: 'Prompt deleted successfully' });
   } catch (error) {
     console.error('Error deleting AI prompt:', error);
-    res.status(500).json({ error: 'Failed to delete AI prompt' });
+    return res.status(500).json({ error: 'Failed to delete AI prompt' });
   }
 });
 

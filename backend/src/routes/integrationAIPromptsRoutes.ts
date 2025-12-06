@@ -14,7 +14,7 @@ router.get('/prompt/:name', async (req: Request, res: Response) => {
       SELECT system_message, workflow_type, version, updated_at 
       FROM ai_system_prompts 
       WHERE name = ? AND is_active = 1
-    `).get(name);
+    `).get(name) as any;
 
     if (!prompt) {
       return res.status(404).json({ 
@@ -23,7 +23,7 @@ router.get('/prompt/:name', async (req: Request, res: Response) => {
       });
     }
 
-    res.json({
+    return res.json({
       systemMessage: prompt.system_message,
       workflowType: prompt.workflow_type,
       version: prompt.version,
@@ -31,7 +31,7 @@ router.get('/prompt/:name', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching prompt for integration:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: 'Failed to fetch prompt',
       fallback: 'You are a helpful AI assistant.'
     });
@@ -50,10 +50,10 @@ router.get('/prompts/:workflowType', async (req: Request, res: Response) => {
       ORDER BY name
     `).all(workflowType);
 
-    res.json(prompts);
+    return res.json(prompts);
   } catch (error) {
     console.error('Error fetching prompts for workflow type:', error);
-    res.status(500).json({ error: 'Failed to fetch prompts' });
+    return res.status(500).json({ error: 'Failed to fetch prompts' });
   }
 });
 

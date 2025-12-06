@@ -530,6 +530,5 @@ KURALLAR:
   if (shouldSeedMain) {
     console.log('Database seeded successfully!');
     console.log('Default admin password: admin123 (please change this)');
-    console.log(`Seeded ${knowledgeEntries.length} knowledge base entries`);
   }
 }

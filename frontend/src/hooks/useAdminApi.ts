@@ -733,6 +733,19 @@ export function useToggleService() {
 
 // Knowledge Base
 
+function parseDate(value: any): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toBoolean(value: any): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') return value === '1' || value.toLowerCase() === 'true';
+  return false;
+}
+
 export function useKnowledgeBase() {
   return useQuery({
     queryKey: ['admin', 'knowledge-base'],
@@ -741,13 +754,13 @@ export function useKnowledgeBase() {
       return response.data.map((entry: any) => ({
         id: entry.id,
         category: entry.category,
-        keyName: entry.key_name,
+        keyName: entry.keyName ?? entry.key_name,
         value: entry.value,
         description: entry.description,
-        isActive: entry.is_active,
+        isActive: toBoolean(entry.isActive ?? entry.is_active),
         version: entry.version,
-        createdAt: new Date(entry.created_at),
-        updatedAt: new Date(entry.updated_at),
+        createdAt: parseDate(entry.createdAt ?? entry.created_at),
+        updatedAt: parseDate(entry.updatedAt ?? entry.updated_at),
       }));
     },
   });

@@ -8,6 +8,7 @@ import {
   useDeleteKnowledgeEntry,
 } from '../../hooks/useAdminApi';
 import { formatDateTime } from '../../lib/dateFormatter';
+import { getErrorMessage } from '../../lib/errorHandler';
 
 interface KnowledgeEntry {
   id: string;
@@ -17,8 +18,8 @@ interface KnowledgeEntry {
   description?: string;
   isActive: boolean;
   version: number;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date | null;
+  updatedAt: Date | null;
 }
 
 type Category = 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
@@ -27,7 +28,7 @@ const CATEGORIES: Category[] = ['services', 'pricing', 'hours', 'policies', 'con
 
 export default function KnowledgeBasePage() {
   const { t } = useTranslation(['admin', 'common']);
-  const { data: entries, isLoading, error } = useKnowledgeBase();
+  const { data: entries, isLoading, error, refetch } = useKnowledgeBase();
   const createMutation = useCreateKnowledgeEntry();
   const updateMutation = useUpdateKnowledgeEntry();
   const deleteMutation = useDeleteKnowledgeEntry();
@@ -155,10 +156,30 @@ export default function KnowledgeBasePage() {
   };
   
   if (error) {
+    const errorMessage = getErrorMessage(error);
     return (
       <AdminLayout>
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 space-y-2">
           <p className="text-red-800 dark:text-red-300">{t('admin:knowledgeBase.loadError')}</p>
+          {errorMessage && (
+            <p className="text-sm text-red-700 dark:text-red-400 break-words">
+              {errorMessage}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => refetch()}
+              className="px-3 py-1.5 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors"
+            >
+              {t('common:actions.retry')}
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              {t('common:actions.refresh')}
+            </button>
+          </div>
         </div>
       </AdminLayout>
     );
@@ -496,7 +517,7 @@ export default function KnowledgeBasePage() {
                                       </p>
                                     )}
                                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                                      {t('admin:knowledgeBase.lastUpdated', { date: formatDateTime(entry.updatedAt) })}
+                                      {t('admin:knowledgeBase.lastUpdated', { date: entry.updatedAt ? formatDateTime(entry.updatedAt) : '-' })}
                                     </p>
                                   </div>
                                   

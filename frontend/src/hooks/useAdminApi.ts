@@ -634,17 +634,24 @@ export function useUnifiedInteractions(filters?: {
     queryKey: ['admin', 'interactions', filters],
     queryFn: async () => {
       const response = await api.get('/admin/interactions', { params: filters });
+      
+      // Ensure response.data is an array
+      if (!Array.isArray(response.data)) {
+        console.error('Invalid response data:', response.data);
+        throw new Error('Invalid response format: expected array');
+      }
+      
       return response.data.map((interaction: any) => ({
         id: interaction.id,
         platform: interaction.platform,
-        customerId: interaction.customer_id,
+        customerId: interaction.customerId || interaction.customer_id,
         direction: interaction.direction,
-        messageText: interaction.message_text,
+        messageText: interaction.messageText || interaction.message_text,
         intent: interaction.intent,
         sentiment: interaction.sentiment,
-        aiResponse: interaction.ai_response,
-        responseTimeMs: interaction.response_time_ms,
-        createdAt: new Date(interaction.created_at),
+        aiResponse: interaction.aiResponse || interaction.ai_response,
+        responseTimeMs: interaction.responseTimeMs || interaction.response_time_ms,
+        createdAt: new Date(interaction.createdAt || interaction.created_at),
       }));
     },
   });

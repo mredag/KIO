@@ -160,10 +160,55 @@ export default function InteractionsPage() {
   ];
   
   if (error) {
+    const isAuthError = (error as any)?.response?.status === 401;
+    const errorMessage = isAuthError 
+      ? t('common:messages.unauthorized', 'Your session has expired. Redirecting to login...')
+      : (error as any)?.response?.data?.error || t('common:messages.error');
+    
     return (
       <AdminLayout>
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-red-800 dark:text-red-300">{t('common:messages.error')}</p>
+        <div className={`rounded-lg p-6 ${
+          isAuthError 
+            ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
+            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              {isAuthError ? (
+                <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+            </div>
+            <div className="flex-1">
+              <h3 className={`text-sm font-medium ${
+                isAuthError 
+                  ? 'text-yellow-800 dark:text-yellow-300'
+                  : 'text-red-800 dark:text-red-300'
+              }`}>
+                {isAuthError ? t('common:messages.authenticationRequired', 'Authentication Required') : t('common:messages.errorOccurred', 'An Error Occurred')}
+              </h3>
+              <p className={`mt-1 text-sm ${
+                isAuthError 
+                  ? 'text-yellow-700 dark:text-yellow-400'
+                  : 'text-red-700 dark:text-red-400'
+              }`}>
+                {errorMessage}
+              </p>
+              {!isAuthError && (
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {t('common:actions.retry', 'Try Again')}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </AdminLayout>
     );

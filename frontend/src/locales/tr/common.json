@@ -56,6 +56,29 @@
     "noData": "Veri bulunamadı",
     "error": "Bir hata oluştu",
     "tryAgain": "Tekrar deneyin",
-    "confirmAction": "Bu işlemi yapmak istediğinizden emin misiniz?"
+    "confirmAction": "Bu işlemi yapmak istediğinizden emin misiniz?",
+    "unauthorized": "Oturumunuzun süresi doldu. Giriş sayfasına yönlendiriliyorsunuz...",
+    "authenticationRequired": "Kimlik Doğrulama Gerekli",
+    "errorOccurred": "Bir Hata Oluştu"
+  },
+  "actions": {
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "add": "Ekle",
+    "update": "Güncelle",
+    "submit": "Gönder",
+    "close": "Kapat",
+    "confirm": "Onayla",
+    "back": "Geri",
+    "next": "İleri",
+    "download": "İndir",
+    "upload": "Yükle",
+    "search": "Ara",
+    "filter": "Filtrele",
+    "reset": "Sıfırla",
+    "refresh": "Yenile",
+    "retry": "Tekrar Dene"
   }
 }

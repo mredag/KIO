@@ -132,10 +132,10 @@ See [n8n-workflows/README.md](n8n-workflows/README.md) for setup instructions.
 
 ```bash
 # 1. Transfer files to Pi
-scp -r . eform-kio@192.168.1.5:~/spa-kiosk/
+scp -r . pi-user@pi-hostname:~/spa-kiosk/
 
 # 2. SSH to Pi
-ssh eform-kio@192.168.1.5
+ssh pi-user@pi-hostname
 
 # 3. Install dependencies
 cd ~/spa-kiosk
@@ -378,7 +378,7 @@ spa-digital-kiosk/
 - Password: `admin123`
 
 **n8n (if deployed):**
-- URL: `http://192.168.1.5:5678`
+- URL: `http://your-pi-ip:5678`
 - Email: `admin@spa-kiosk.local`
 - Password: (set during installation)
 

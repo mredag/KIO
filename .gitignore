@@ -78,6 +78,11 @@ backend/screenshots/
 # Kiro settings (local)
 .kiro/settings/
 
+# Credentials (sensitive)
+n8n-workflows/CREDENTIALS.md
+**/credentials.json
+**/credentials-*.json
+
 # Test backups
 backend/test-backups/
 backend/test-uploads/

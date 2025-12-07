@@ -12,6 +12,7 @@
 4. **Test UI changes** - Run Puppeteer after UI/UX work
 5. **Minimal documentation** - Code speaks, brief summaries only
 6. **Knowledge Base for AI** - Use dynamic knowledge base for n8n workflows, not hardcoded prompts
+7. **Dynamic AI Prompts** - Use AI system prompts from database, not hardcoded in n8n workflows
 
 ---
 
@@ -247,6 +248,97 @@ grep NODE_ENV ~/spa-kiosk/backend/.env  # NODE_ENV=production
 - All content in Turkish for AI workflows
 - Seeded automatically on database initialization
 
+---
+
+## 🤖 AI System Prompts (Dynamic) ✅ DEPLOYED
+
+### Overview
+- **Table**: `ai_system_prompts` - stores AI prompts for n8n workflows
+- **Admin Panel**: `/admin/ai-prompts` - manage prompts via UI
+- **Integration API**: `/api/integrations/ai/prompt/:name` - fetch prompts in n8n
+- **Benefits**: Edit prompts without redeploying workflows, version tracking, A/B testing
+- **Status**: ✅ Instagram workflow deployed with dynamic prompts (2025-12-06)
+
+### Default Prompts (3 seeded)
+1. **whatsapp-coupon-assistant** - WhatsApp kupon sistemi
+2. **instagram-spa-assistant** - Instagram DM asistan ✅ IN USE
+3. **general-customer-service** - Genel müşteri hizmetleri
+
+### Usage in n8n Workflows
+
+**Add HTTP Request node before AI Agent:**
+```json
+{
+  "method": "GET",
+  "url": "http://localhost:3001/api/integrations/ai/prompt/instagram-spa-assistant"
+}
+```
+
+**Update AI Agent system message:**
+```
+{{ $('Fetch AI Prompt').first().json.systemMessage + '\n\nBILGILER:' + $('Enrich Context').first().json.knowledgeContext }}
+```
+
+### Admin Panel Features
+- ✅ Create/Edit/Delete prompts
+- ✅ Copy prompt names for n8n
+- ✅ Active/Inactive toggle
+- ✅ Version tracking (auto-increments)
+- ✅ Workflow type badges (WhatsApp/Instagram/General)
+
+### API Endpoints
+
+**Admin Routes** (requires auth):
+- `GET /api/admin/ai-prompts` - List all
+- `POST /api/admin/ai-prompts` - Create
+- `PUT /api/admin/ai-prompts/:id` - Update
+- `DELETE /api/admin/ai-prompts/:id` - Delete
+
+**Integration Routes** (no auth - for n8n):
+- `GET /api/integrations/ai/prompt/:name` - Get by name
+- `GET /api/integrations/ai/prompts/:workflowType` - List by type
+
+### Key Pattern: Dynamic vs Hardcoded
+
+```javascript
+// ❌ WRONG - Hardcoded in n8n workflow
+systemMessage: "Sen bir SPA asistanısın..."
+
+// ✅ CORRECT - Dynamic from database
+// 1. Add HTTP Request node
+GET /api/integrations/ai/prompt/instagram-spa-assistant
+
+// 2. Use in AI Agent
+systemMessage: {{ $('Fetch AI Prompt').first().json.systemMessage }}
+```
+
+### Benefits
+- **No Redeploy**: Edit prompts in admin panel, changes apply immediately
+- **Version Control**: Track changes with auto-incrementing version numbers
+- **A/B Testing**: Easy to test different prompts
+- **Central Management**: All prompts in one place
+- **Network Portable**: Uses relative URLs, works on any network
+
+### Current Deployment Status (2025-12-07)
+
+**Instagram Workflow:**
+- ✅ Deployed: `instagram-dynamic-automation.json`
+- ✅ Features: Dynamic AI prompts + Knowledge base + Customer data
+- ✅ Using: `instagram-spa-assistant` prompt (editable in admin panel)
+- ✅ Status: Active on Pi
+
+**WhatsApp Workflow:**
+- ✅ Deployed: `whatsapp-dynamic-automation.json`
+- ✅ Features: Keyword routing + Signature verification + Interaction logging
+- ✅ Using: `whatsapp-coupon-assistant` prompt (optional, not connected)
+- ✅ Status: Active on Pi
+
+### Documentation
+- Full guide: `n8n-workflows/AI_PROMPTS_SYSTEM.md`
+- Implementation: `AI_PROMPTS_IMPLEMENTATION_SUMMARY.md`
+- Integration: `n8n-workflows/AI_PROMPTS_INTEGRATION_GUIDE.md`
+- Deployment: `n8n-workflows/AI_PROMPTS_DEPLOYMENT_COMPLETE.md`
+
 ### API Endpoints
 ```
 GET /api/integrations/knowledge/context  - Get formatted knowledge for AI
@@ -324,6 +416,16 @@ node test-my-app-now.js
 
 ## 🔄 n8n/WhatsApp Patterns
 
+### Current Production Workflow
+**File:** `whatsapp-dynamic-automation.json`  
+**Status:** ✅ Active on Pi (2025-12-07)
+
+### Key Features
+- **Signature Verification**: Validates `x-hub-signature-256` header
+- **Keyword Routing**: Reliable command detection (KUPON, DURUM, KULLAN)
+- **Interaction Logging**: All messages logged to `whatsapp_interactions`
+- **Dynamic AI Prompts**: Optional (not connected, keyword routing works well)
+
 ### Pending Redemption Handling
 **Symptom:** Customer says "kupon kullan" multiple times, gets same code  
 **Solution:** API returns `isNew` flag, workflow shows different messages
@@ -337,34 +439,72 @@ if (r.isNew === false) {
 }
 ```
 
-**Files:** `CouponService.ts`, `integrationCouponRoutes.ts`, `whatsapp-final.json`
+### Security (2025-12-07)
+**CRITICAL:** Signature verification prevents unauthorized webhook access
+
+```javascript
+// Verify Signature node
+const crypto = require('crypto');
+const signature = headers['x-hub-signature-256'];
+const appSecret = 'YOUR_APP_SECRET';
+const expectedSignature = 'sha256=' + crypto
+  .createHmac('sha256', appSecret)
+  .update(JSON.stringify(body))
+  .digest('hex');
+
+if (signature !== expectedSignature) {
+  throw new Error('Invalid signature');
+}
+```
+
+**Files:** `CouponService.ts`, `integrationCouponRoutes.ts`, `whatsapp-dynamic-automation.json`  
+**Docs:** `n8n-workflows/WHATSAPP_SECURITY_HARDENING.md`
 
 ---
 
-## 📸 Instagram DM Integration
+## 📸 Instagram DM Integration (Dynamic Automation)
 
-### Workflow Versions
-| Version | File | Use Case |
-|---------|------|----------|
-| v1 | `instagram-ai-agent.json` | Basic AI |
-| v3 | `instagram-ai-agent-v3.json` | **Production** - Customer data + Analytics |
+### Current Production Workflow
+**File:** `instagram-dynamic-automation.json`  
+**Status:** ✅ Active on Pi (2025-12-07)
 
-### Key API Endpoints
-```
-GET  /api/integrations/instagram/customer/:id     - Customer data
-POST /api/integrations/instagram/interaction      - Log interaction
-GET  /api/integrations/instagram/analytics        - Marketing stats
-GET  /api/integrations/instagram/export?format=csv - Export to Sheets
-```
-
-### V3 Features
+### Key Features
+- **Dynamic AI Prompts**: Editable in admin panel (`/admin/ai-prompts`)
+- **Knowledge Base**: Business info from database (`/admin/knowledge-base`)
 - **Customer Enrichment**: Fetches history before AI responds
 - **Intent Detection**: pricing, hours, booking, coupon, greeting
 - **Interaction Logging**: All messages logged for marketing
 - **Response Time Tracking**: Measures AI latency
 
-**Files:** `instagramIntegrationRoutes.ts`, `instagram-ai-agent-v3.json`  
-**Docs:** `n8n-workflows/docs/instagram-setup.md`
+### Workflow Flow
+```
+Webhook → Parse → Check Service → Fetch Profile → Fetch Customer → 
+Fetch Knowledge → Fetch AI Prompt → Enrich Context → Log Inbound → 
+AI Agent → Format → Log Outbound → Send IG
+```
+
+### Key API Endpoints
+```
+# Dynamic Content
+GET  /api/integrations/ai/prompt/:name            - AI system prompt
+GET  /api/integrations/knowledge/context          - Business info
+
+# Customer Data
+GET  /api/integrations/instagram/customer/:id     - Customer data
+POST /api/integrations/instagram/interaction      - Log interaction
+
+# Analytics
+GET  /api/integrations/instagram/analytics        - Marketing stats
+GET  /api/integrations/instagram/export?format=csv - Export to Sheets
+```
+
+### Admin Panel Management
+- **AI Prompts:** `/admin/ai-prompts` - Edit `instagram-spa-assistant`
+- **Knowledge Base:** `/admin/knowledge-base` - Update business info
+- **Interactions:** `/admin/interactions` - View message logs
+
+**Files:** `instagramIntegrationRoutes.ts`, `instagram-dynamic-automation.json`  
+**Docs:** `n8n-workflows/DYNAMIC_AUTOMATION_INTEGRATION.md`
 
 ---
 
@@ -378,6 +518,7 @@ This guide has solved:
 - ✅ Database persistence problems
 - ✅ UI/UX regressions
 - ✅ Duplicate redemption message confusion (2025-12-01)
+- ✅ Dynamic AI prompts management (2025-12-06)
 
 **Result:** 100% test pass rate, production-ready system
 
@@ -398,6 +539,11 @@ The database automatically seeds 26 Turkish knowledge base entries on first init
 
 **Service Settings:**
 - WhatsApp and Instagram services enabled by default
+
+**AI System Prompts:**
+- 3 default prompts seeded (WhatsApp, Instagram, General)
+- Managed via `/admin/ai-prompts`
+- Used by n8n workflows via integration API
 - Configured in `service_settings` table
 
 **Location:** `backend/src/database/seed.ts`
@@ -409,6 +555,7 @@ The database automatically seeds 26 Turkish knowledge base entries on first init
 
 ---
 
-**Last Updated:** 2025-12-05  
+**Last Updated:** 2025-12-06  
 **Status:** ✅ Active and tested  
-**Coverage:** All critical patterns documented
+**Coverage:** All critical patterns documented including AI prompts management  
+**Latest:** Instagram workflow deployed with dynamic AI prompts (2025-12-06)

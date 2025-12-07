@@ -1013,11 +1013,43 @@ curl -X POST http://192.168.1.5:5678/webhook/whatsapp \
 
 ## 📊 Current Workflow Status
 
-### Production Workflow
-| Workflow | File | Status |
-|----------|------|--------|
-| WhatsApp Kupon AI Agent v6 | `n8n-workflows/workflows-v2/whatsapp-ai-code-tools.json` | ✅ AI-Powered (Gemini) |
-| WhatsApp Kupon Final | `n8n-workflows/workflows-v2/whatsapp-final.json` | ✅ Keyword-based fallback |
+### Production Workflows (2025-12-07)
+
+| Workflow | File | Status | Features |
+|----------|------|--------|----------|
+| **WhatsApp** | `whatsapp-dynamic-automation.json` | ✅ Production | Keyword routing + Dynamic AI prompts + Security |
+| **Instagram** | `instagram-dynamic-automation.json` | ✅ Production | AI Agent + Knowledge Base + Customer Data + Dynamic Prompts |
+
+### WhatsApp Workflow Architecture
+
+```
+Webhook → Verify Signature → Parse → Router (Switch) → [Balance/Coupon/Claim/Help] → Format → Send WA
+```
+
+**Key Features:**
+- ✅ Signature verification (security)
+- ✅ Keyword-based routing (reliable)
+- ✅ Dynamic AI prompts (optional, not connected)
+- ✅ Interaction logging
+- ✅ Turkish messages
+
+**File:** `n8n-workflows/workflows-v2/whatsapp-dynamic-automation.json`
+
+### Instagram Workflow Architecture
+
+```
+Webhook → Parse → Check Service → Fetch Profile → Fetch Customer → Fetch Knowledge → Fetch AI Prompt → Enrich Context → Log Inbound → AI Agent → Format → Log Outbound → Send IG
+```
+
+**Key Features:**
+- ✅ Dynamic AI prompts from database
+- ✅ Knowledge base integration
+- ✅ Customer data enrichment
+- ✅ Interaction logging
+- ✅ Intent detection
+- ✅ Response time tracking
+
+**File:** `n8n-workflows/workflows-v2/instagram-dynamic-automation.json`
 
 ### ⚠️ CRITICAL: Gemini + n8n Tool Compatibility
 
@@ -1166,75 +1198,232 @@ This prevents confusion when customers say "kupon kullan" multiple times.
 
 ---
 
-## 📸 Instagram DM Integration (2025-12-05)
+## 📸 Instagram DM Integration (2025-12-07)
 
 ### Overview
 
-Instagram DM AI Agent with customer data enrichment and interaction logging for marketing analytics.
+Instagram DM AI Agent with **dynamic automation** - combines AI prompts from database, knowledge base integration, and customer data enrichment.
 
-### Workflow Versions
+### Current Production Workflow
 
-| Version | File | Features |
-|---------|------|----------|
-| v1 | `instagram-ai-agent.json` | Basic AI responses |
-| v3 | `instagram-ai-agent-v3.json` | **Recommended** - Customer data + Logging |
+**File:** `instagram-dynamic-automation.json`  
+**Status:** ✅ Active on Pi  
+**Workflow ID:** Check with `n8n list:workflow`
+
+### Workflow Flow
+
+```
+Webhook → Parse → Check Service → Fetch IG Profile → Fetch Customer → Fetch Knowledge → Fetch AI Prompt → Enrich Context → Log Inbound → AI Agent → Format → Log Outbound → Send IG
+```
+
+### Key Features
+
+1. **Dynamic AI Prompts**: Fetches system message from `/api/integrations/ai/prompt/instagram-spa-assistant`
+2. **Knowledge Base Integration**: Fetches business info from `/api/integrations/knowledge/context`
+3. **Customer Enrichment**: Fetches customer history from `/api/integrations/instagram/customer/:id`
+4. **Interaction Logging**: Logs all messages to `instagram_interactions` table
+5. **Intent Detection**: Classifies messages (pricing, hours, booking, coupon, greeting)
+6. **Response Time Tracking**: Measures AI latency
 
 ### Backend API Endpoints
 
 ```
-GET  /api/integrations/instagram/customer/:instagramId  - Fetch customer data
-POST /api/integrations/instagram/interaction            - Log interaction
-POST /api/integrations/instagram/customer/:id/link-phone - Link phone to IG
-GET  /api/integrations/instagram/analytics              - Marketing analytics
-GET  /api/integrations/instagram/export?format=csv      - Export for Sheets
+# AI Prompts (Dynamic)
+GET  /api/integrations/ai/prompt/:name           - Get AI system prompt
+
+# Knowledge Base (Dynamic)
+GET  /api/integrations/knowledge/context         - Get business info
+
+# Customer Data
+GET  /api/integrations/instagram/customer/:id    - Fetch customer data
+POST /api/integrations/instagram/interaction     - Log interaction
+POST /api/integrations/instagram/customer/:id/link-phone - Link phone
+
+# Analytics
+GET  /api/integrations/instagram/analytics       - Marketing stats
+GET  /api/integrations/instagram/export?format=csv - Export to Sheets
 ```
 
 ### Database Tables
 
 ```sql
+-- AI Prompts (managed in admin panel)
+ai_system_prompts (id, name, system_message, workflow_type, version)
+
+-- Knowledge Base (managed in admin panel)
+knowledge_base (id, category, key, value_tr, value_en)
+
+-- Customer Data
 instagram_customers (instagram_id, phone, interaction_count, last_interaction_at)
 instagram_interactions (id, instagram_id, direction, message_text, intent, sentiment, ai_response, response_time_ms)
 ```
 
-### V3 Workflow Flow
-
-```
-Webhook → Parse → Router → Fetch Customer → Enrich Context → Log Inbound → AI Agent → Format → Log Outbound → Send IG → OK
-```
-
-### Key Features
-
-1. **Customer Enrichment**: Fetches customer history before AI responds
-2. **Intent Detection**: Classifies messages (pricing, hours, booking, coupon, etc.)
-3. **Sentiment Analysis**: Tracks positive/neutral/negative responses
-4. **Response Time Tracking**: Measures AI latency
-5. **Marketing Export**: CSV export for Google Sheets
-
-### Deploy V3
+### Deploy Instagram Workflow
 
 ```bash
-scp n8n-workflows/workflows-v2/instagram-ai-agent-v3.json eform-kio@192.168.1.5:~/instagram-v3.json
-ssh eform-kio@192.168.1.5 "n8n import:workflow --input=~/instagram-v3.json"
-ssh eform-kio@192.168.1.5 "n8n update:workflow --all --active=true"
-ssh eform-kio@192.168.1.5 "sudo systemctl restart n8n"
+# Copy workflow to Pi
+scp n8n-workflows/workflows-v2/instagram-dynamic-automation.json eform-kio@192.168.1.5:~/instagram-dynamic.json
+
+# Import and activate
+ssh eform-kio@192.168.1.5 << 'EOF'
+n8n update:workflow --all --active=false 2>/dev/null
+n8n import:workflow --input=~/instagram-dynamic.json 2>/dev/null
+n8n update:workflow --all --active=true 2>/dev/null
+sudo systemctl restart n8n
+sleep 10
+systemctl status n8n --no-pager | head -5
+EOF
 ```
 
 ### Required Credentials
 
 1. **Google Gemini API** - For AI responses
 2. **Instagram Business API** - Header Auth with access token
-3. **N8N API Key** - Header Auth: `Authorization: Bearer <N8N_API_KEY>`
+3. **Backend API Key** - Header Auth: `Authorization: Bearer <N8N_API_KEY>`
+
+### Admin Panel Management
+
+**AI Prompts:** `http://192.168.1.5:3001/admin/ai-prompts`
+- Edit `instagram-spa-assistant` prompt
+- Changes apply immediately (no workflow redeploy!)
+
+**Knowledge Base:** `http://192.168.1.5:3001/admin/knowledge-base`
+- Update business info (prices, hours, policies)
+- Changes apply immediately to AI responses
 
 ### Documentation
 
-Full setup guide: `n8n-workflows/docs/instagram-setup.md`
+- Full guide: `n8n-workflows/DYNAMIC_AUTOMATION_INTEGRATION.md`
+- AI Prompts: `n8n-workflows/AI_PROMPTS_SYSTEM.md`
+- Architecture: `n8n-workflows/ARCHITECTURE.md`
 
 ---
 
-**Last Updated:** 2025-12-05  
-**Status:** ✅ Production-ready workflows documented  
+## 🔐 WhatsApp Security (2025-12-07)
+
+### Signature Verification
+
+**CRITICAL:** WhatsApp webhooks MUST verify `x-hub-signature-256` header to prevent unauthorized access.
+
+### Implementation in Workflow
+
+**File:** `whatsapp-dynamic-automation.json`
+
+**Verify Signature Node (Code):**
+```javascript
+const crypto = require('crypto');
+const body = $input.item.json.body;
+const signature = $input.item.json.headers['x-hub-signature-256'];
+
+if (!signature) {
+  return [{ json: { error: 'Missing signature', verified: false } }];
+}
+
+const appSecret = 'YOUR_APP_SECRET'; // From Meta Developer Console
+const expectedSignature = 'sha256=' + crypto
+  .createHmac('sha256', appSecret)
+  .update(JSON.stringify(body))
+  .digest('hex');
+
+if (signature !== expectedSignature) {
+  return [{ json: { error: 'Invalid signature', verified: false } }];
+}
+
+return [{ json: { ...body, verified: true } }];
+```
+
+### Security Checklist
+
+- [ ] Signature verification enabled in workflow
+- [ ] App Secret stored securely (not in workflow JSON)
+- [ ] Webhook URL uses HTTPS
+- [ ] Rate limiting enabled in backend
+- [ ] PII masking in logs
+
+### Documentation
+
+- Security guide: `n8n-workflows/WHATSAPP_SECURITY_HARDENING.md`
+- Deployment: `n8n-workflows/WHATSAPP_SECURITY_DEPLOYMENT.md`
+
+---
+
+## 🤖 Dynamic AI Prompts System (2025-12-07)
+
+### Overview
+
+Manage AI system prompts from admin panel instead of hardcoding in workflows.
+
+### Benefits
+
+- ✅ Edit prompts without redeploying workflows
+- ✅ Version tracking (auto-increments)
+- ✅ A/B testing different prompts
+- ✅ Central management for all workflows
+
+### Usage in n8n
+
+**Step 1: Add HTTP Request Node**
+```json
+{
+  "name": "Fetch AI Prompt",
+  "type": "n8n-nodes-base.httpRequest",
+  "parameters": {
+    "method": "GET",
+    "url": "http://localhost:3001/api/integrations/ai/prompt/instagram-spa-assistant",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth"
+  }
+}
+```
+
+**Step 2: Use in AI Agent**
+```
+System Message: {{ $('Fetch AI Prompt').first().json.systemMessage + '\n\nBILGILER:' + $('Enrich Context').first().json.knowledgeContext }}
+```
+
+### Available Prompts (Seeded)
+
+| Name | Workflow Type | Description |
+|------|---------------|-------------|
+| `instagram-spa-assistant` | Instagram | Natural conversation assistant |
+| `whatsapp-coupon-assistant` | WhatsApp | Intent classification |
+| `general-customer-service` | General | Generic customer service |
+
+### Admin Panel
+
+**URL:** `http://192.168.1.5:3001/admin/ai-prompts`
+
+**Features:**
+- Create/Edit/Delete prompts
+- Copy prompt names for n8n
+- Active/Inactive toggle
+- Version tracking
+
+### API Endpoints
+
+```
+# Integration API (no auth - for n8n)
+GET /api/integrations/ai/prompt/:name
+
+# Admin API (requires auth)
+GET    /api/admin/ai-prompts
+POST   /api/admin/ai-prompts
+PUT    /api/admin/ai-prompts/:id
+DELETE /api/admin/ai-prompts/:id
+```
+
+### Documentation
+
+- Full guide: `n8n-workflows/AI_PROMPTS_SYSTEM.md`
+- Integration: `n8n-workflows/AI_PROMPTS_INTEGRATION_GUIDE.md`
+- Deployment: `n8n-workflows/AI_PROMPTS_DEPLOYMENT_COMPLETE.md`
+
+---
+
+**Last Updated:** 2025-12-07  
+**Status:** ✅ Production-ready with dynamic automation  
 **Working Workflows:** 
-- WhatsApp: `n8n-workflows/workflows-v2/whatsapp-final.json`
-- Instagram: `n8n-workflows/workflows-v2/instagram-ai-agent-v3.json`  
+- WhatsApp: `n8n-workflows/workflows-v2/whatsapp-dynamic-automation.json`
+- Instagram: `n8n-workflows/workflows-v2/instagram-dynamic-automation.json`  
 **Applies to:** WhatsApp Coupon System, Instagram DM Integration
 

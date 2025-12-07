@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Edit2, Trash2, Copy, Check } from 'lucide-react';
+import AdminLayout from '../../layouts/AdminLayout';
 import {
   useAIPrompts,
   useCreateAIPrompt,
@@ -100,18 +101,21 @@ export default function AIPromptsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Yükleniyor...</div>
-      </div>
+      <AdminLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500 dark:text-gray-400">Yükleniyor...</div>
+        </div>
+      </AdminLayout>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <AdminLayout>
+      <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AI System Prompts</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI System Prompts</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             n8n workflow'larında kullanılacak AI sistem mesajlarını yönetin
           </p>
         </div>
@@ -128,21 +132,21 @@ export default function AIPromptsPage() {
         {prompts?.map((prompt) => (
           <div
             key={prompt.id}
-            className="bg-white rounded-lg shadow p-6 border border-gray-200"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700"
           >
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                     {prompt.name}
                   </h3>
                   <button
                     onClick={() => handleCopyName(prompt.name, prompt.id)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                     title="İsmi kopyala"
                   >
                     {copiedId === prompt.id ? (
-                      <Check className="w-4 h-4 text-green-600" />
+                      <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                     ) : (
                       <Copy className="w-4 h-4" />
                     )}
@@ -155,24 +159,24 @@ export default function AIPromptsPage() {
                     {prompt.workflow_type}
                   </span>
                   {prompt.is_active === 1 ? (
-                    <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                    <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                       Aktif
                     </span>
                   ) : (
-                    <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-800">
+                    <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
                       Pasif
                     </span>
                   )}
                 </div>
                 {prompt.description && (
-                  <p className="text-gray-600 text-sm mb-3">{prompt.description}</p>
+                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">{prompt.description}</p>
                 )}
-                <div className="bg-gray-50 rounded p-3 border border-gray-200">
-                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+                <div className="bg-gray-50 dark:bg-gray-900 rounded p-3 border border-gray-200 dark:border-gray-700">
+                  <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">
                     {prompt.system_message}
                   </pre>
                 </div>
-                <div className="mt-3 text-xs text-gray-500">
+                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                   Versiyon: {prompt.version} | Son güncelleme:{' '}
                   {new Date(prompt.updated_at).toLocaleString('tr-TR')}
                 </div>
@@ -180,14 +184,14 @@ export default function AIPromptsPage() {
               <div className="flex gap-2 ml-4">
                 <button
                   onClick={() => handleOpenModal(prompt)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                  className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                   title="Düzenle"
                 >
                   <Edit2 className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => handleDelete(prompt.id)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                  className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
                   title="Sil"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -198,11 +202,11 @@ export default function AIPromptsPage() {
         ))}
 
         {prompts?.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-            <p className="text-gray-500">Henüz AI prompt eklenmemiş</p>
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <p className="text-gray-500 dark:text-gray-400">Henüz AI prompt eklenmemiş</p>
             <button
               onClick={() => handleOpenModal()}
-              className="mt-4 text-blue-600 hover:text-blue-700"
+              className="mt-4 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
             >
               İlk promptu ekle
             </button>
@@ -213,15 +217,15 @@ export default function AIPromptsPage() {
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
-              <h2 className="text-xl font-bold mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
                 {editingPrompt ? 'Prompt Düzenle' : 'Yeni Prompt Ekle'}
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     İsim (n8n'de kullanılacak) *
                   </label>
                   <input
@@ -230,17 +234,17 @@ export default function AIPromptsPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                     placeholder="whatsapp-coupon-assistant"
                     required
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     n8n workflow'unda bu isimle çağrılacak
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Açıklama
                   </label>
                   <input
@@ -249,13 +253,13 @@ export default function AIPromptsPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, description: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                     placeholder="Bu promptun ne için kullanıldığını açıklayın"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Workflow Tipi *
                   </label>
                   <select
@@ -266,7 +270,7 @@ export default function AIPromptsPage() {
                         workflow_type: e.target.value as any,
                       })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="general">Genel</option>
                     <option value="whatsapp">WhatsApp</option>
@@ -275,7 +279,7 @@ export default function AIPromptsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     System Message *
                   </label>
                   <textarea
@@ -283,7 +287,7 @@ export default function AIPromptsPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, system_message: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                     rows={12}
                     placeholder="Sen bir yardımsever AI asistanısın..."
                     required
@@ -300,7 +304,7 @@ export default function AIPromptsPage() {
                     }
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
-                  <label htmlFor="is_active" className="text-sm text-gray-700">
+                  <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">
                     Aktif
                   </label>
                 </div>
@@ -320,7 +324,7 @@ export default function AIPromptsPage() {
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100"
                   >
                     İptal
                   </button>
@@ -330,6 +334,7 @@ export default function AIPromptsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AdminLayout>
   );
 }

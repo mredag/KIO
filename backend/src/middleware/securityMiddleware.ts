@@ -17,11 +17,11 @@ export const securityHeaders = helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for React
-      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for Tailwind
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], // Allow inline styles for Tailwind and Google Fonts
       imgSrc: ["'self'", 'data:', 'blob:'], // Allow data URIs for QR codes
       mediaSrc: ["'self'", 'blob:'], // Allow media from uploads
       connectSrc: ["'self'"], // API calls to same origin
-      fontSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'], // Allow Google Fonts
       objectSrc: ["'none'"],
       frameSrc: ["'self'"], // Allow iframes from same origin
       baseUri: ["'self'"],

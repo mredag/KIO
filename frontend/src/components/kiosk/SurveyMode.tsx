@@ -341,52 +341,23 @@ export default function SurveyMode() {
       )}
 
       <div className="premium-survey-content">
-        {/* Survey Header - Only on first question (Requirement 1.2, 1.3, 1.5, 4.4) */}
-        {state.currentQuestionIndex === 0 && (
-          <header className="survey-header">
-            <div className="survey-badge" aria-label={t('aria.quickSurvey', 'Hızlı Anket')}>
-              <span className="survey-badge__sparkle" aria-hidden="true">✨</span>
-              <span>{t('survey.quickSurvey', 'Hızlı Anket')}</span>
-            </div>
-            {/* Title from database (Requirement 9.1) */}
-            <h1 className="survey-title">{survey.title}</h1>
-            {survey.description && (
-              <p className="survey-description">{survey.description}</p>
-            )}
-          </header>
-        )}
+        {/* Survey Header - Compact design, always visible */}
+        <header className="survey-header">
+          <div className="survey-badge" aria-label={t('aria.quickSurvey', 'Hızlı Anket')}>
+            <span className="survey-badge__sparkle" aria-hidden="true">✨</span>
+            <span>{t('survey.quickSurvey', 'Hızlı Anket')}</span>
+          </div>
+          {/* Title from database (Requirement 9.1) */}
+          <h1 className="survey-title">{survey.title}</h1>
+        </header>
 
-        {/* Progress Indicator (Requirement 4.x) */}
-        <ProgressIndicator
-          currentIndex={state.currentQuestionIndex}
-          totalQuestions={survey.questions.length}
-          showProgressBar={true}
-          showDots={survey.questions.length <= 10}
-          showCounter={true}
-        />
-
-        {/* Question Card */}
+        {/* Question Card - Compact design without progress bar, emoji, or repeated question */}
         {currentQuestion && (
           <div 
             className={`question-card ${state.isTransitioning ? 'question-card--transitioning' : ''}`}
             role="group"
             aria-labelledby="question-text"
           >
-            {/* Animated Question Emoji (Requirement 5.x) */}
-            <AnimatedQuestionEmoji
-              questionText={currentQuestion.text}
-              questionType={currentQuestion.type}
-              isEntering={!state.isTransitioning}
-              isExiting={state.isTransitioning}
-            />
-
-            {/* Question Text - Rendered from database (Requirement 9.2) */}
-            <h2 id="question-text" className="question-text">
-              {currentQuestion.text}
-              {currentQuestion.isRequired && (
-                <span className="text-red-400 ml-2" aria-label={t('aria.required', 'Zorunlu')}>*</span>
-              )}
-            </h2>
 
             {/* Rating Question (Requirement 2.x) */}
             {currentQuestion.type === 'rating' && (

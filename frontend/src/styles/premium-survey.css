@@ -565,7 +565,7 @@
 
 /* Option card text */
 .option-card__text {
-  font-size: 32px;
+  font-size: 96px;
   font-weight: 500;
   text-align: center;
   color: var(--premium-text-primary);
@@ -729,9 +729,9 @@
 }
 
 .question-text {
-  font-size: 28px;
+  font-size: 56px;
   font-weight: 600;
-  margin-bottom: 24px;
+  margin-bottom: 48px;
   line-height: 1.4;
 }
 

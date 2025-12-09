@@ -476,12 +476,13 @@
    ============================================ */
 .option-cards {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 16px;
+  gap: 20px;
   width: 100%;
-  max-width: 90%;
+  max-width: 95%;
   padding: 0;
+  overflow-x: auto;
 }
 
 .option-card {
@@ -500,7 +501,7 @@
   transition: all var(--transition-normal) ease;
   will-change: transform, border-color, box-shadow;
   overflow: hidden;
-  flex: 1 1 calc(50% - 12px);
+  flex: 0 1 auto;
   max-width: 420px;
 }
 

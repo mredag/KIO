@@ -67,7 +67,7 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 32px;
+  padding: 16px;
 }
 
 /* ============================================
@@ -208,7 +208,7 @@
    ============================================ */
 .survey-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   animation: fadeInDown var(--transition-slow) ease-out;
 }
 
@@ -230,9 +230,9 @@
 }
 
 .survey-title {
-  font-size: 42px;
+  font-size: 48px;
   font-weight: 700;
-  margin: 0 0 12px 0;
+  margin: 0;
   text-shadow: 0 0 40px var(--premium-glow);
   animation: glowPulse 3s ease-in-out infinite;
 }
@@ -476,9 +476,9 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--gap-options);
+  gap: 20px;
   width: 100%;
-  max-width: 800px;
+  max-width: 1000px;
 }
 
 .option-card {
@@ -487,9 +487,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: var(--touch-target-min);
-  min-height: var(--touch-target-min);
-  padding: 24px 32px;
+  min-width: 140px;
+  min-height: 100px;
+  padding: 20px 28px;
   background: var(--premium-card-bg);
   border: 2px solid var(--premium-card-border);
   border-radius: 16px;
@@ -497,6 +497,8 @@
   transition: all var(--transition-normal) ease;
   will-change: transform, border-color, box-shadow;
   overflow: hidden;
+  flex: 1 1 auto;
+  max-width: 280px;
 }
 
 /* Glowing border effect on hover */
@@ -540,8 +542,8 @@
 
 /* Option card icon */
 .option-card__icon {
-  font-size: 36px;
-  margin-bottom: 8px;
+  font-size: 42px;
+  margin-bottom: 12px;
   transition: transform var(--transition-normal) ease;
 }
 
@@ -560,7 +562,7 @@
 
 /* Option card text */
 .option-card__text {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 500;
   text-align: center;
   color: var(--premium-text-primary);
@@ -726,7 +728,7 @@
 .question-text {
   font-size: 28px;
   font-weight: 600;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
   line-height: 1.4;
 }
 

@@ -1136,29 +1136,29 @@
   }
   
   .question-emoji {
-    font-size: 72px;
+    font-size: 56px;
   }
   
   .option-card {
-    padding: 40px 48px;
-    min-width: 300px;
-    min-height: 220px;
+    padding: 24px 32px;
+    min-width: 200px;
+    min-height: 140px;
   }
   
   .option-card__icon {
-    font-size: 72px;
+    font-size: 48px;
   }
   
   .option-card__text {
-    font-size: 80px;
+    font-size: 28px;
   }
   
   .emoji-rating {
-    gap: 24px;
+    gap: 20px;
   }
   
   .emoji-rating__emoji {
-    font-size: 64px;
+    font-size: 56px;
   }
   
   .thank-you-message {
@@ -1200,21 +1200,21 @@
   }
   
   .option-card {
-    min-width: 350px;
-    min-height: 250px;
-    padding: 50px 60px;
+    min-width: 220px;
+    min-height: 150px;
+    padding: 28px 36px;
   }
   
   .option-card__icon {
-    font-size: 88px;
+    font-size: 56px;
   }
   
   .option-card__text {
-    font-size: 96px;
+    font-size: 32px;
   }
   
   .emoji-rating__emoji {
-    font-size: 80px;
+    font-size: 64px;
   }
 }
 

@@ -210,7 +210,7 @@
    ============================================ */
 .survey-header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 60px;
   animation: fadeInDown var(--transition-slow) ease-out;
 }
 
@@ -232,7 +232,7 @@
 }
 
 .survey-title {
-  font-size: 80px;
+  font-size: 96px;
   font-weight: 700;
   margin: 0;
   text-shadow: 0 0 40px var(--premium-glow);
@@ -478,9 +478,10 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 40px;
+  gap: 48px;
   width: 100%;
-  max-width: 1600px;
+  max-width: 100%;
+  padding: 0 40px;
 }
 
 .option-card {
@@ -489,18 +490,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 280px;
-  min-height: 200px;
-  padding: 40px 50px;
+  min-width: 350px;
+  min-height: 250px;
+  padding: 50px 60px;
   background: var(--premium-card-bg);
   border: 3px solid var(--premium-card-border);
-  border-radius: 24px;
+  border-radius: 28px;
   cursor: pointer;
   transition: all var(--transition-normal) ease;
   will-change: transform, border-color, box-shadow;
   overflow: hidden;
   flex: 1 1 auto;
-  max-width: 450px;
+  max-width: 550px;
 }
 
 /* Glowing border effect on hover */
@@ -544,8 +545,8 @@
 
 /* Option card icon */
 .option-card__icon {
-  font-size: 72px;
-  margin-bottom: 20px;
+  font-size: 88px;
+  margin-bottom: 24px;
   transition: transform var(--transition-normal) ease;
 }
 
@@ -564,7 +565,7 @@
 
 /* Option card text */
 .option-card__text {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 500;
   text-align: center;
   color: var(--premium-text-primary);

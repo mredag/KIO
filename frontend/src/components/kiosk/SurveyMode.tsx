@@ -356,6 +356,13 @@ export default function SurveyMode() {
             role="group"
             aria-labelledby="question-text"
           >
+            {/* Question Text - Rendered from database (Requirement 9.2) */}
+            <h2 id="question-text" className="question-text">
+              {currentQuestion.text}
+              {currentQuestion.isRequired && (
+                <span className="text-red-400 ml-2" aria-label={t('aria.required', 'Zorunlu')}>*</span>
+              )}
+            </h2>
 
             {/* Rating Question (Requirement 2.x) */}
             {currentQuestion.type === 'rating' && (

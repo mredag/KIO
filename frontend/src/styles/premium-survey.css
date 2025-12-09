@@ -217,14 +217,14 @@
 .survey-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
+  gap: 12px;
+  padding: 16px 32px;
   background: var(--premium-card-bg);
   border: 1px solid var(--premium-card-border);
-  border-radius: 24px;
-  font-size: 14px;
+  border-radius: 32px;
+  font-size: 32px;
   color: var(--premium-text-secondary);
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .survey-badge__sparkle {
@@ -232,7 +232,7 @@
 }
 
 .survey-title {
-  font-size: 96px;
+  font-size: 120px;
   font-weight: 700;
   margin: 0;
   text-shadow: 0 0 40px var(--premium-glow);
@@ -729,9 +729,9 @@
 }
 
 .question-text {
-  font-size: 56px;
+  font-size: 72px;
   font-weight: 600;
-  margin-bottom: 48px;
+  margin-bottom: 64px;
   line-height: 1.4;
 }
 
@@ -1117,48 +1117,55 @@
    Responsive Adjustments
    ============================================ */
 @media (max-width: 768px) {
+  .survey-badge {
+    font-size: 28px;
+    padding: 12px 24px;
+  }
+  
   .survey-title {
-    font-size: 32px;
+    font-size: 96px;
   }
   
   .survey-description {
-    font-size: 16px;
+    font-size: 24px;
   }
   
   .question-text {
-    font-size: 22px;
+    font-size: 64px;
   }
   
   .question-emoji {
-    font-size: 48px;
+    font-size: 72px;
   }
   
   .option-card {
-    padding: 20px 24px;
+    padding: 40px 48px;
+    min-width: 300px;
+    min-height: 220px;
   }
   
   .option-card__icon {
-    font-size: 28px;
+    font-size: 72px;
   }
   
   .option-card__text {
-    font-size: 16px;
+    font-size: 80px;
   }
   
   .emoji-rating {
-    gap: 16px;
+    gap: 24px;
   }
   
   .emoji-rating__emoji {
-    font-size: 40px;
+    font-size: 64px;
   }
   
   .thank-you-message {
-    font-size: 28px;
+    font-size: 48px;
   }
   
   .thank-you-submessage {
-    font-size: 16px;
+    font-size: 28px;
   }
   
   .glow-orb--primary {
@@ -1179,30 +1186,34 @@
 
 /* Kiosk-specific (larger screens) */
 @media (min-width: 1024px) {
-  .survey-title {
-    font-size: 48px;
-  }
-  
-  .question-text {
+  .survey-badge {
     font-size: 32px;
   }
   
+  .survey-title {
+    font-size: 120px;
+  }
+  
+  .question-text {
+    font-size: 72px;
+  }
+  
   .option-card {
-    min-width: 180px;
-    min-height: 120px;
-    padding: 28px 36px;
+    min-width: 350px;
+    min-height: 250px;
+    padding: 50px 60px;
   }
   
   .option-card__icon {
-    font-size: 42px;
+    font-size: 88px;
   }
   
   .option-card__text {
-    font-size: 20px;
+    font-size: 96px;
   }
   
   .emoji-rating__emoji {
-    font-size: 56px;
+    font-size: 80px;
   }
 }
 

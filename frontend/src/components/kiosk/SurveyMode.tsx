@@ -27,8 +27,6 @@ import { useSurveyTemplate, useSubmitSurveyResponse } from '../../hooks/useKiosk
 import AnimatedBackground from './premium-survey/AnimatedBackground';
 import EmojiRating from './premium-survey/EmojiRating';
 import OptionCard from './premium-survey/OptionCard';
-import AnimatedQuestionEmoji from './premium-survey/AnimatedQuestionEmoji';
-import ProgressIndicator from './premium-survey/ProgressIndicator';
 import ThankYouScreen from './premium-survey/ThankYouScreen';
 
 // Import premium survey styles (Requirement 1.1, 1.2)

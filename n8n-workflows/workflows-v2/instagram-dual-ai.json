@@ -1,0 +1,325 @@
+{
+  "name": "Instagram Dual AI (Classifier + Responder)",
+  "versionId": "instagram-single-ai-v12-no-hardcode",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "webhookId": "instagram-spa-dynamic"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst startTime = Date.now();\n\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\nconst entry = body.entry?.[0];\nif (!entry) return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n\nconst message = messaging.message;\nif (!message || !message.text) return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n\nif (message.is_echo === true) return [{ json: { route: 'ignore', reason: 'echo_message' } }];\n\n// IGNORE AD/STORY REPLY LINKS - Instagram sends these when user clicks ad\n// They contain URLs like instagram.com, ig.me, or are very short generic messages\nconst text = message.text.trim();\nif (text.match(/instagram\\.com|ig\\.me|instagr\\.am|https?:\\/\\//i)) {\n  return [{ json: { route: 'ignore', reason: 'ad_link' } }];\n}\n\n// Also ignore very short messages that are likely auto-generated (less than 3 chars)\nif (text.length < 3) {\n  return [{ json: { route: 'ignore', reason: 'too_short' } }];\n}\n\nconst senderId = messaging.sender?.id;\nif (!senderId) return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n\nreturn [{ json: { route: 'process', senderId, text, messageId: message.mid, timestamp: messaging.timestamp, startTime } }];"
+      },
+      "id": "parse",
+      "name": "Parse Instagram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst ALLOWED_SENDER_ID = '3279145565594935';\n\nif (input.route === 'verify') return [{ json: input }];\n\nif (input.route === 'process' && input.senderId !== ALLOWED_SENDER_ID) {\n  return [{ json: { route: 'ignore', reason: 'not_developer', senderId: input.senderId } }];\n}\n\nreturn [{ json: input }];"
+      },
+      "id": "dev-filter",
+      "name": "Dev Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "v", "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Verify" },
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "p", "leftValue": "={{ $json.route }}", "rightValue": "process", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Process" },
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "i", "leftValue": "={{ $json.route }}", "rightValue": "ignore", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Ignore" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "router",
+      "name": "Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [800, 400]
+    },
+    { "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" }, "id": "resp-verify", "name": "Verify Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [1050, 200] },
+    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ignore", "name": "Ignore Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [1050, 600] },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3001/api/integrations/services/instagram/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "check-service-status",
+      "name": "Check Service Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 400],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const statusResponse = $input.first().json;\nconst parseData = $('Dev Filter').first().json;\n\nif (statusResponse.enabled === false) {\n  return [{ json: { route: 'maintenance', senderId: parseData.senderId, message: '🔧 Sistem bakımda.', startTime: parseData.startTime } }];\n}\n\nreturn [{ json: { ...parseData, serviceEnabled: true } }];"
+      },
+      "id": "check-enabled",
+      "name": "Check Enabled",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "m", "leftValue": "={{ $json.route }}", "rightValue": "maintenance", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Maintenance" },
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "c", "leftValue": "={{ $json.serviceEnabled }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Continue" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "maintenance-check",
+      "name": "Maintenance Check",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1450, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: { senderId: data.senderId, message: data.message, intent: 'maintenance', responseTime: Date.now() - data.startTime } }];"
+      },
+      "id": "fmt-maintenance",
+      "name": "Format Maintenance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3001/api/integrations/instagram/customer/{{ $json.senderId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "fetch-customer",
+      "name": "Fetch Customer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 450],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3001/api/integrations/knowledge/context",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "fetch-knowledge",
+      "name": "Fetch Knowledge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 550],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3001/api/integrations/ai/prompt/instagram-spa-assistant",
+        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "fetch-prompt",
+      "name": "Fetch Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 650]
+    },
+    {
+      "parameters": { "mode": "append" },
+      "id": "merge-data",
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1900, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst parseData = $('Check Enabled').first().json;\n\nlet customer = {}, knowledge = {}, aiPrompt = {};\nfor (const item of items) {\n  const json = item.json;\n  if (json.systemMessage) aiPrompt = json;\n  else if (json.isNewCustomer !== undefined || json.interactionCount !== undefined) customer = json;\n  else if (json.pricing || json.services || json.hours || json.contact || json.policies) knowledge = json;\n}\n\nconst text = parseData.text.toLowerCase().trim();\nconst isNewCustomer = customer.isNewCustomer !== false;\nconst interactionCount = customer.interactionCount || 0;\nconst isFirstMessage = isNewCustomer || interactionCount <= 1;\n\n// KEYWORD-BASED INTENT DETECTION (reliable, no AI needed)\nlet intent = 'general_info';\nlet isInappropriate = false;\n\n// Normalize Turkish characters for matching\nlet normalizedText = text\n  .replace(/ş/g, 's').replace(/Ş/g, 's')\n  .replace(/ı/g, 'i').replace(/İ/g, 'i')\n  .replace(/ğ/g, 'g').replace(/Ğ/g, 'g')\n  .replace(/ü/g, 'u').replace(/Ü/g, 'u')\n  .replace(/ö/g, 'o').replace(/Ö/g, 'o')\n  .replace(/ç/g, 'c').replace(/Ç/g, 'c');\n\n// Fix common misspellings\nnormalizedText = normalizedText\n  .replace(/teakwondo|tekvando|taekwando|tekvondo|tekwondo/gi, 'taekwondo')\n  .replace(/jimnastik|jimastik|cimnastik|gimnastik/gi, 'jimnastik')\n  .replace(/kickboks|kikboks|kickbox|kikbox|kick boks/gi, 'kickboks')\n  .replace(/pilates|pilatis|plates|pilat/gi, 'pilates')\n  .replace(/reformer|reformar|refromer/gi, 'reformer')\n  .replace(/yuzme|yüzme|yuzma|yuzm/gi, 'yuzme')\n  .replace(/masaj|massaj|masag|mazaj/gi, 'masaj')\n  .replace(/hamam|hammam|hamamm/gi, 'hamam')\n  .replace(/sauna|suana|sona/gi, 'sauna')\n  .replace(/fitness|fitnes|fittness|fitnıs/gi, 'fitness')\n  .replace(/uyelik|üyelik|uyelık|uyelig/gi, 'uyelik')\n  .replace(/fiyat|fıyat|fiyaat|fyat/gi, 'fiyat')\n  .replace(/randevu|randevü|randavu|randivu/gi, 'randevu');\n\n// Check for membership-related keywords (used later for context)\nconst hasMembershipKeywords = normalizedText.match(/uyelik|member|abone|aylik|spor|gym|fitness|tesis/i);\nconst hasSpaKeywords = normalizedText.match(/masaj|spa|hamam|sauna/i);\n\n// Inappropriate check FIRST\nif (normalizedText.match(/mutlu son|happy ending|ekstra hizmet|ozel masaj|seks|sex/i)) {\n  intent = 'inappropriate';\n  isInappropriate = true;\n}\n// PILATES/REFORMER - Check VERY EARLY (before general_info catches 'merhaba')\nelse if (normalizedText.match(/pilates|reformer/i)) {\n  intent = 'membership';\n}\n// Membership - fitness, gym, tesis, uyelik\nelse if (normalizedText.match(/uyelik|member|abone|spor.*fiyat|gym|fitness|tesis.*ucret|tesis.*fiyat/i)) {\n  intent = 'membership';\n}\n// Policies/Rules - age limits, rules, etc.\nelse if (normalizedText.match(/yas.*sinir|yas.*limit|sinir.*yas|kural|policy|izin|yasak|kac yas|yas icin/i)) {\n  intent = 'policies';\n}\n// Kids courses\nelse if (normalizedText.match(/cocuk.*kurs|jimnastik|taekwondo|yuzme.*kurs|cocuk.*ders|kickboks|boks/i)) {\n  intent = 'kids';\n}\n// Pricing - but check if it's about membership\nelse if (normalizedText.match(/fiyat|ucret|ne kadar|kac para|kac lira|kac tl/i)) {\n  // If asking about membership/fitness prices, use membership intent\n  if (hasMembershipKeywords) {\n    intent = 'membership';\n  } else {\n    intent = 'pricing';\n  }\n}\n// Hours - check if about facility/sports or spa\nelse if (normalizedText.match(/saat|acik|kapali|calisma|ne zaman|pazar/i)) {\n  intent = 'hours';\n}\n// General info requests\nelse if (normalizedText.match(/bilgi|bilgi al|bilgi ist|ogrenmek|merak|merhaba|selam|hey|hi|hello/i)) {\n  intent = 'general_info';\n}\n// Location - includes neresin, nerede, iskenderun neresindesiniz etc\nelse if (normalizedText.match(/adres|nerede|neresin|konum|nasil gel|yer.*nere|nere.*yer|iskenderun/i)) {\n  intent = 'location';\n}\n// Booking\nelse if (normalizedText.match(/randevu|rezervasyon|yer ayirt/i)) {\n  intent = 'booking';\n}\n// Services (general spa/massage questions - NOT pilates, that goes to membership)\nelse if (normalizedText.match(/masaj|spa|hamam|sauna|havuz|hizmet/i)) {\n  intent = 'services';\n}\n// Thanks\nelse if (normalizedText.match(/tesekkur|sagol|thanks|eyv/i)) {\n  intent = 'thanks';\n}\n\n// Handle inappropriate\nif (isInappropriate) {\n  return [{ json: { senderId: parseData.senderId, text: parseData.text, startTime: parseData.startTime, intent, response: 'Profesyonel masaj hizmeti veriyoruz. Uygunsuz taleplere cevap vermiyoruz.', skipAI: true } }];\n}\n\n// BUILD FULL KNOWLEDGE CONTEXT\nlet knowledgeContext = '\\n\\n=== BILGILER (SADECE BUNLARI KULLAN, ASLA UYDURMA!) ===';\n\n// For policies intent - include policy data\nif (intent === 'policies') {\n  if (knowledge.policies) {\n    knowledgeContext += '\\n\\n📋 KURALLAR VE POLITIKALAR:';\n    Object.entries(knowledge.policies).forEach(([key, v]) => { knowledgeContext += '\\n• ' + v; });\n  }\n}\n\n// For general_info, first message, or pricing (spa) - include campaign and massage prices\nif (intent === 'general_info' || (intent === 'pricing' && !hasMembershipKeywords) || isFirstMessage) {\n  if (knowledge.pricing?.current_campaign) {\n    knowledgeContext += '\\n\\n🔥 KAMPANYA:\\n' + knowledge.pricing.current_campaign;\n  }\n  if (knowledge.pricing?.group_discount) {\n    knowledgeContext += '\\n🎁 ' + knowledge.pricing.group_discount;\n  }\n  if (knowledge.services?.massage_programs) {\n    knowledgeContext += '\\n\\n💆 MASAJ FIYATLARI:\\n' + knowledge.services.massage_programs;\n  }\n}\n\n// Add specific data based on intent\nif (intent === 'services' || intent === 'general_info') {\n  if (knowledge.services?.special_massage_programs) {\n    knowledgeContext += '\\n\\n⭐ OZEL MASAJLAR:\\n' + knowledge.services.special_massage_programs;\n  }\n  if (knowledge.services?.facility_overview) {\n    knowledgeContext += '\\n\\n🏢 TESIS:\\n' + knowledge.services.facility_overview;\n  }\n}\n\n// Membership intent - include ALL membership pricing\nif (intent === 'membership') {\n  knowledgeContext += '\\n\\n🏋️ FITNESS VE TESIS UYELIK UCRETLERI:';\n  if (knowledge.pricing?.membership_individual) {\n    knowledgeContext += '\\n\\n👤 FERDI UYELIK:\\n' + knowledge.pricing.membership_individual;\n  }\n  if (knowledge.pricing?.membership_family) {\n    knowledgeContext += '\\n\\n👨‍👩‍👧 AILE UYELIGI:\\n' + knowledge.pricing.membership_family;\n  }\n  if (knowledge.pricing?.reformer_pilates) {\n    knowledgeContext += '\\n\\n🧘 REFORMER PILATES:\\n' + knowledge.pricing.reformer_pilates;\n  }\n  if (knowledge.pricing?.daily_facility) {\n    knowledgeContext += '\\n\\n📅 GUNLUK KULLANIM:\\n' + knowledge.pricing.daily_facility;\n  }\n  if (knowledge.services?.facility_overview) {\n    knowledgeContext += '\\n\\n🏢 TESIS BILGISI:\\n' + knowledge.services.facility_overview;\n  }\n}\n\n// Hours intent\nif (intent === 'hours' || intent === 'booking') {\n  knowledgeContext += '\\n\\n🕐 CALISMA SAATLERI:';\n  // SPA hours\n  if (knowledge.hours?.spa_working_hours) {\n    knowledgeContext += '\\n• SPA/MASAJ: ' + knowledge.hours.spa_working_hours;\n  }\n  // Facility/gym hours - check if exists, otherwise provide general info\n  if (knowledge.hours?.facility_working_hours) {\n    knowledgeContext += '\\n• SPOR SALONU: ' + knowledge.hours.facility_working_hours;\n  } else if (hasMembershipKeywords || normalizedText.match(/spor|fitness|gym|tesis/i)) {\n    knowledgeContext += '\\n• SPOR SALONU: Detayli bilgi icin resepsiyonu arayin.';\n  }\n  // Show course schedules only if asking about courses\n  if (normalizedText.match(/kurs|ders|cocuk|jimnastik|taekwondo|yuzme|kickboks/i)) {\n    knowledgeContext += '\\n\\n📚 KURS PROGRAMLARI:';\n    if (knowledge.hours) {\n      Object.entries(knowledge.hours).forEach(([key, v]) => {\n        if (key.includes('schedule')) knowledgeContext += '\\n• ' + v;\n      });\n    }\n  }\n}\n\nif (intent === 'location' || intent === 'booking' || intent === 'general_info') {\n  if (knowledge.contact?.phone) {\n    knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n  }\n  if (knowledge.contact?.address && intent === 'location') {\n    knowledgeContext += '\\n📍 ADRES: ' + knowledge.contact.address;\n  }\n}\n\nif (intent === 'kids') {\n  if (knowledge.services?.courses_kids) {\n    knowledgeContext += '\\n\\n👶 COCUK KURSLARI:\\n' + knowledge.services.courses_kids;\n  }\n  if (knowledge.pricing?.courses_kids) {\n    knowledgeContext += '\\n\\n💰 KURS FIYATLARI:\\n' + knowledge.pricing.courses_kids;\n  }\n  if (knowledge.pricing?.courses_youth) {\n    knowledgeContext += '\\n' + knowledge.pricing.courses_youth;\n  }\n  // Add schedules\n  if (knowledge.hours) {\n    knowledgeContext += '\\n\\n📅 KURS SAATLERI:';\n    Object.entries(knowledge.hours).forEach(([key, v]) => {\n      if (key.includes('schedule')) knowledgeContext += '\\n• ' + v;\n    });\n  }\n}\n\n// Always add phone at the end\nif (knowledge.contact?.phone && !knowledgeContext.includes(knowledge.contact.phone)) {\n  knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n}\n\n// Get system prompt from database\nconst systemPrompt = aiPrompt.systemMessage || 'Sen Eform SPA musteri temsilcisisin. SADECE verilen BILGILER bolumundeki verileri kullan, ASLA uydurma!';\n\n// Add first message hint\nlet customerHint = '';\nif (isFirstMessage) {\n  customerHint = '\\n\\n⚠️ BU ILK MESAJ! Kampanya + fiyat ozeti + telefon numarasi MUTLAKA ver!';\n}\n\nreturn [{ json: { senderId: parseData.senderId, text: parseData.text, startTime: parseData.startTime, intent, isFirstMessage, systemPrompt, customerHint, knowledgeContext, skipAI: false } }];"
+      },
+      "id": "enrich-context",
+      "name": "Enrich Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2100, 500]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "s", "leftValue": "={{ $json.skipAI }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Skip" },
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "a", "leftValue": "={{ $json.skipAI }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "notEquals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "AI" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ai-switch",
+      "name": "AI Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2300, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: { senderId: data.senderId, message: data.response, intent: data.intent, responseTime: Date.now() - data.startTime, originalText: data.text } }];"
+      },
+      "id": "format-skip",
+      "name": "Format Skip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Enrich Context').first().json.text }}",
+        "options": {
+          "systemMessage": "={{ $('Enrich Context').first().json.systemPrompt + $('Enrich Context').first().json.customerHint + $('Enrich Context').first().json.knowledgeContext }}",
+          "maxIterations": 1
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [2500, 550]
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        }
+      },
+      "id": "openrouter-model",
+      "name": "OpenRouter Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [2400, 700],
+      "credentials": {
+        "openRouterApi": {
+          "id": "openrouter-credential",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'ig_' + $('Parse Instagram').first().json.senderId }}",
+        "contextWindowLength": 5
+      },
+      "id": "memory",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [2550, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "const enrichData = $('Enrich Context').first().json;\nconst aiOutput = $input.first().json;\nlet message = aiOutput.output || aiOutput.text || 'Bir hata olustu.';\n\n// Remove markdown\nmessage = message.replace(/\\*\\*/g, '').replace(/\\*/g, '');\n\n// POST-PROCESSING: Detect and fix calculation responses\n// Patterns that indicate AI did math calculations\nconst calcPatterns = [\n  /toplamda?\\s*\\d+.*₺/i,\n  /toplam\\s*(maliyet|fiyat|ucret).*\\d+/i,\n  /\\d+\\s*kisi.*\\d+.*₺.*ode/i,\n  /\\d+.*₺.*ode.*gerek/i,\n  /\\d+\\s*kisi\\s*icin\\s*\\d+.*₺/i,\n  /yani\\s*toplam/i,\n  /hesapla/i\n];\n\nconst hasCalculation = calcPatterns.some(p => message.match(p));\n\nif (hasCalculation) {\n  // Replace with clean campaign message - no calculations\n  message = '🔥 Kampanyamız: 800₺\\'ye 30dk masaj + sınırsız spa kullanımı (havuz, hamam, sauna, buhar odası)!\\n\\n🎁 4 kişi gelirse 5. kişiye aynı masaj HEDİYE!\\n\\n📞 Detaylı bilgi ve rezervasyon: 0326 502 58 58';\n}\n\n// POST-PROCESSING: Fix wrong Reformer Pilates prices (AI makes up per-session prices)\nconst originalText = enrichData.text?.toLowerCase() || '';\nif ((originalText.includes('pilates') || originalText.includes('reformer')) && message.match(/1\\s*ders.*\\d+|\\d+.*ders.*\\d+₺/i)) {\n  message = '🧘 Reformer Pilates: 3500 TL/ay\\n\\n📞 Detaylı bilgi ve kayıt: 0326 502 58 58';\n}\n\n// POST-PROCESSING: Fix wrong Taekwondo prices\nif (originalText.includes('taekwondo') && message.match(/1\\s*ders.*\\d+|\\d+.*ders.*\\d+₺/i)) {\n  message = '🥋 Taekwondo Kursu: 1500 TL/ay (8+ yaş)\\n\\n📞 Kayıt ve bilgi: 0326 502 58 58';\n}\n\nmessage = message.substring(0, 1000);\n\nconst responseTime = Date.now() - enrichData.startTime;\n\nreturn [{ json: { senderId: enrichData.senderId, message, intent: enrichData.intent, responseTime, originalText: enrichData.text } }];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2700, 550]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.instagram.com/v21.0/17841400730256913/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipient: { id: $json.senderId }, message: { text: $json.message } }) }}",
+        "options": { "timeout": 5000 }
+      },
+      "id": "send-ig",
+      "name": "Send Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2900, 500],
+      "credentials": { "httpHeaderAuth": { "id": "instagram-business-api", "name": "Instagram Business API" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/integrations/instagram/interaction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ instagramId: $json.senderId, direction: 'outbound', messageText: $json.message, intent: $json.intent, responseTime: $json.responseTime }) }}",
+        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+      },
+      "id": "log",
+      "name": "Log Interaction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3100, 500],
+      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+    },
+    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ok", "name": "OK Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [3300, 500] }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Parse Instagram", "type": "main", "index": 0 }]] },
+    "Parse Instagram": { "main": [[{ "node": "Dev Filter", "type": "main", "index": 0 }]] },
+    "Dev Filter": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
+    "Router": { "main": [
+      [{ "node": "Verify Response", "type": "main", "index": 0 }],
+      [{ "node": "Check Service Status", "type": "main", "index": 0 }],
+      [{ "node": "Ignore Response", "type": "main", "index": 0 }]
+    ]},
+    "Check Service Status": { "main": [[{ "node": "Check Enabled", "type": "main", "index": 0 }]] },
+    "Check Enabled": { "main": [[{ "node": "Maintenance Check", "type": "main", "index": 0 }]] },
+    "Maintenance Check": { "main": [
+      [{ "node": "Format Maintenance", "type": "main", "index": 0 }],
+      [{ "node": "Fetch Customer", "type": "main", "index": 0 }, { "node": "Fetch Knowledge", "type": "main", "index": 0 }, { "node": "Fetch Prompt", "type": "main", "index": 0 }]
+    ]},
+    "Format Maintenance": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Fetch Customer": { "main": [[{ "node": "Merge Data", "type": "main", "index": 0 }]] },
+    "Fetch Knowledge": { "main": [[{ "node": "Merge Data", "type": "main", "index": 1 }]] },
+    "Fetch Prompt": { "main": [[{ "node": "Merge Data", "type": "main", "index": 2 }]] },
+    "Merge Data": { "main": [[{ "node": "Enrich Context", "type": "main", "index": 0 }]] },
+    "Enrich Context": { "main": [[{ "node": "AI Switch", "type": "main", "index": 0 }]] },
+    "AI Switch": { "main": [
+      [{ "node": "Format Skip", "type": "main", "index": 0 }],
+      [{ "node": "AI Agent", "type": "main", "index": 0 }]
+    ]},
+    "Format Skip": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
+    "Format Response": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Send Instagram": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
+    "Log Interaction": { "main": [[{ "node": "OK Response", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" }
+}

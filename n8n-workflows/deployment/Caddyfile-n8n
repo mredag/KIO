@@ -1,0 +1,86 @@
+# Caddy configuration for n8n workflow automation
+# This is separate from the main kiosk Caddy configuration
+# Place this file in /etc/caddy/Caddyfile or include it from main Caddyfile
+
+# n8n domain
+n8n.yourdomain.com {
+    # Automatic HTTPS with Let's Encrypt
+    # Caddy handles certificates automatically
+
+    # Logging
+    log {
+        output file /var/log/caddy/n8n-access.log
+        format json
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Rate limiting for webhook endpoints
+    @webhooks {
+        path /webhook/*
+    }
+    
+    rate_limit @webhooks {
+        zone webhook_zone
+        key {remote_host}
+        events 100
+        window 1m
+    }
+
+    # Rate limiting for UI
+    @ui {
+        not path /webhook/*
+        not path /healthz
+    }
+    
+    rate_limit @ui {
+        zone ui_zone
+        key {remote_host}
+        events 30
+        window 1m
+    }
+
+    # Reverse proxy to n8n
+    reverse_proxy localhost:5678 {
+        # Headers
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        
+        # Timeouts
+        transport http {
+            dial_timeout 60s
+            response_header_timeout 300s
+            read_timeout 300s
+            write_timeout 300s
+        }
+        
+        # Health check
+        health_uri /healthz
+        health_interval 30s
+        health_timeout 10s
+    }
+
+    # Max body size
+    request_body {
+        max_size 16MB
+    }
+}
+
+# Alternative: If you want to use a subdirectory instead of subdomain
+# yourdomain.com {
+#     handle /n8n/* {
+#         uri strip_prefix /n8n
+#         reverse_proxy localhost:5678
+#     }
+# }

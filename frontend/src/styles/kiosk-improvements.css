@@ -1,0 +1,244 @@
+/**
+ * Kiosk UI Improvements
+ * Enhanced styles for better touch interaction and visibility
+ */
+
+/* Touch-friendly button sizes */
+.kiosk-mode button,
+.kiosk-mode .btn {
+  min-height: 80px;
+  min-width: 160px;
+  padding: 24px 48px;
+  font-size: 24px;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.kiosk-mode button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.kiosk-mode button:active {
+  transform: scale(0.95);
+}
+
+/* Enhanced typography for distance viewing */
+.kiosk-mode {
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+.kiosk-mode h1 {
+  font-size: 48px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.kiosk-mode h2 {
+  font-size: 36px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.kiosk-mode h3 {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.kiosk-mode p {
+  font-size: 22px;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+
+/* Card improvements */
+.kiosk-mode .card {
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 300ms ease;
+}
+
+.kiosk-mode .card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Touch feedback */
+.touch-feedback {
+  position: relative;
+  overflow: hidden;
+}
+
+.touch-feedback::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.touch-feedback:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+/* Loading states */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Smooth transitions */
+.fade-in {
+  animation: fadeIn 300ms ease-in;
+}
+
+.slide-up {
+  animation: slideUp 400ms ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* High contrast mode */
+.high-contrast {
+  --text-primary: #000000;
+  --text-secondary: #333333;
+  --bg-primary: #ffffff;
+  --border-color: #000000;
+}
+
+.high-contrast button {
+  border: 3px solid #000000;
+}
+
+/* Focus indicators for accessibility */
+*:focus-visible {
+  outline: 4px solid #2563eb;
+  outline-offset: 4px;
+}
+
+/* Improved spacing */
+.kiosk-mode .space-y-4 > * + * {
+  margin-top: 24px;
+}
+
+.kiosk-mode .space-y-6 > * + * {
+  margin-top: 32px;
+}
+
+.kiosk-mode .space-y-8 > * + * {
+  margin-top: 48px;
+}
+
+/* Grid improvements */
+.kiosk-mode .grid {
+  gap: 32px;
+}
+
+/* Image optimization */
+.kiosk-mode img {
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* Back button */
+.back-button {
+  position: fixed;
+  top: 32px;
+  left: 32px;
+  z-index: 50;
+  min-width: 120px;
+  min-height: 80px;
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Home button */
+.home-button {
+  position: fixed;
+  top: 32px;
+  right: 32px;
+  z-index: 50;
+  min-width: 120px;
+  min-height: 80px;
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .kiosk-mode button {
+    min-height: 60px;
+    min-width: 120px;
+    padding: 16px 32px;
+    font-size: 20px;
+  }
+
+  .kiosk-mode h1 {
+    font-size: 36px;
+  }
+
+  .kiosk-mode h2 {
+    font-size: 28px;
+  }
+
+  .kiosk-mode p {
+    font-size: 18px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .back-button,
+  .home-button,
+  nav {
+    display: none;
+  }
+}

@@ -1,0 +1,97 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads
+public/uploads/
+uploads/
+
+# Backups
+backups/
+*.backup
+
+# PM2
+.pm2/
+
+# Database export/import temp files (in root only)
+/*-import.sql
+/*-export.json
+/massages-export.json
+/massages-import.sql
+/settings-import.sql
+/surveys-import.sql
+
+# Test files in root (contain tokens/sensitive data)
+/test-*.js
+/test-*.sh
+/test-*.json
+/verify-*.js
+/check-*.js
+/list-*.js
+
+# Progress/status docs (temporary)
+WHATSAPP_SETUP_PROGRESS.md
+PI_DEPLOYMENT_CHECKLIST.md
+NEXT_STEPS_N8N_WORKFLOW_SETUP.md
+
+# Screenshots (generated during testing)
+*-screenshots/
+final-checkpoint-screenshots/
+backend/screenshots/
+
+# Kiro settings (local)
+.kiro/settings/
+
+# Credentials (sensitive)
+n8n-workflows/CREDENTIALS.md
+**/credentials.json
+**/credentials-*.json
+
+# Test backups
+backend/test-backups/
+backend/test-uploads/
+backend/test-*.db
+
+# Build error logs
+backend/build_errors.log
+backend/start_error.log
+
+# Test reports (generated)
+*-test-report.json
+*-test-report.md

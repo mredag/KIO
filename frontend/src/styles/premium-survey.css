@@ -1,0 +1,1293 @@
+/**
+ * Premium Survey UI Styles
+ * 
+ * Elegant, animated styles for the kiosk survey experience.
+ * Uses GPU-accelerated animations (transform, opacity only) for smooth performance.
+ * 
+ * Requirements: 1.1, 1.2, 1.5, 3.1, 3.3, 3.6, 5.5, 7.1, 7.2, 7.5, 8.1, 8.3, 11.1, 11.5
+ */
+
+/* ============================================
+   CSS Custom Properties (Design Tokens)
+   ============================================ */
+:root {
+  /* Premium color palette */
+  --premium-bg-start: #0f0f1a;
+  --premium-bg-end: #1a1a2e;
+  --premium-accent: #6366f1;
+  --premium-accent-light: #818cf8;
+  --premium-glow: rgba(99, 102, 241, 0.5);
+  --premium-glow-soft: rgba(99, 102, 241, 0.2);
+  
+  /* Text colors */
+  --premium-text-primary: #ffffff;
+  --premium-text-secondary: rgba(255, 255, 255, 0.7);
+  --premium-text-muted: rgba(255, 255, 255, 0.5);
+  
+  /* Card colors */
+  --premium-card-bg: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+  --premium-card-border: rgba(99, 102, 241, 0.3);
+  --premium-card-hover: linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(139, 92, 246, 0.2) 100%);
+  
+  /* Rating sentiment colors */
+  --rating-1: #ef4444;
+  --rating-2: #f97316;
+  --rating-3: #eab308;
+  --rating-4: #22c55e;
+  --rating-5: #10b981;
+  
+  /* Animation timings */
+  --transition-fast: 150ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+  
+  /* Spacing */
+  --gap-options: 16px;
+  --touch-target-min: 80px;
+}
+
+/* ============================================
+   Base Premium Survey Container
+   Requirements: 1.1, 1.4
+   ============================================ */
+.premium-survey {
+  position: relative;
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--premium-bg-start) 0%, var(--premium-bg-end) 100%);
+  color: var(--premium-text-primary);
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.premium-survey-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100vh;
+  padding: 16px 24px;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* ============================================
+   Animated Background - Floating Particles
+   Requirements: 1.1, 11.5
+   ============================================ */
+.animated-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--premium-glow-soft);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: particleFloat 15s ease-in-out infinite;
+}
+
+/* Particle size variations */
+.particle--small {
+  width: 4px;
+  height: 4px;
+}
+
+.particle--medium {
+  width: 8px;
+  height: 8px;
+}
+
+.particle--large {
+  width: 12px;
+  height: 12px;
+}
+
+
+/* GPU-accelerated particle float animation */
+@keyframes particleFloat {
+  0% {
+    transform: translateY(100vh) translateX(0) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-100px) translateX(50px) scale(1);
+    opacity: 0;
+  }
+}
+
+/* Staggered particle delays */
+.particle:nth-child(1) { left: 5%; animation-delay: 0s; }
+.particle:nth-child(2) { left: 15%; animation-delay: 1s; }
+.particle:nth-child(3) { left: 25%; animation-delay: 2s; }
+.particle:nth-child(4) { left: 35%; animation-delay: 3s; }
+.particle:nth-child(5) { left: 45%; animation-delay: 4s; }
+.particle:nth-child(6) { left: 55%; animation-delay: 5s; }
+.particle:nth-child(7) { left: 65%; animation-delay: 6s; }
+.particle:nth-child(8) { left: 75%; animation-delay: 7s; }
+.particle:nth-child(9) { left: 85%; animation-delay: 8s; }
+.particle:nth-child(10) { left: 95%; animation-delay: 9s; }
+.particle:nth-child(11) { left: 10%; animation-delay: 10s; }
+.particle:nth-child(12) { left: 20%; animation-delay: 11s; }
+.particle:nth-child(13) { left: 30%; animation-delay: 12s; }
+.particle:nth-child(14) { left: 40%; animation-delay: 13s; }
+.particle:nth-child(15) { left: 50%; animation-delay: 14s; }
+.particle:nth-child(16) { left: 60%; animation-delay: 0.5s; }
+.particle:nth-child(17) { left: 70%; animation-delay: 1.5s; }
+.particle:nth-child(18) { left: 80%; animation-delay: 2.5s; }
+.particle:nth-child(19) { left: 90%; animation-delay: 3.5s; }
+.particle:nth-child(20) { left: 3%; animation-delay: 4.5s; }
+
+/* ============================================
+   Ambient Glow Orbs
+   Requirements: 1.1, 11.5
+   ============================================ */
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.3;
+  will-change: transform, opacity;
+  animation: orbPulse 8s ease-in-out infinite;
+}
+
+.glow-orb--primary {
+  width: 400px;
+  height: 400px;
+  background: var(--premium-accent);
+  top: -100px;
+  right: -100px;
+}
+
+.glow-orb--secondary {
+  width: 300px;
+  height: 300px;
+  background: #8b5cf6;
+  bottom: -50px;
+  left: -50px;
+  animation-delay: 4s;
+}
+
+.glow-orb--tertiary {
+  width: 200px;
+  height: 200px;
+  background: #06b6d4;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation-delay: 2s;
+}
+
+@keyframes orbPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.4;
+  }
+}
+
+/* ============================================
+   Survey Header with Glow
+   Requirements: 1.2, 1.3, 1.5, 4.4
+   ============================================ */
+.survey-header {
+  text-align: center;
+  margin-bottom: 12px;
+  animation: fadeInDown var(--transition-slow) ease-out;
+}
+
+.survey-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  background: var(--premium-card-bg);
+  border: 1px solid var(--premium-card-border);
+  border-radius: 32px;
+  font-size: 16px;
+  color: var(--premium-text-secondary);
+  margin-bottom: 8px;
+}
+
+.survey-badge__sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+.survey-title {
+  font-size: 56px;
+  font-weight: 700;
+  margin: 0;
+  text-shadow: 0 0 40px var(--premium-glow);
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+.survey-description {
+  font-size: 20px;
+  color: var(--premium-text-secondary);
+  margin: 0;
+  animation: fadeIn var(--transition-slow) ease-out 0.2s both;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    text-shadow: 0 0 40px var(--premium-glow);
+  }
+  50% {
+    text-shadow: 0 0 60px var(--premium-glow), 0 0 80px var(--premium-glow-soft);
+  }
+}
+
+
+/* ============================================
+   Emoji Animations
+   Requirements: 5.5, 1.5
+   ============================================ */
+
+/* Float animation - gentle up/down movement */
+.emoji-float {
+  animation: emojiFloat 3s ease-in-out infinite;
+}
+
+@keyframes emojiFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Pulse animation - scale in/out */
+.emoji-pulse {
+  animation: emojiPulse 2s ease-in-out infinite;
+}
+
+@keyframes emojiPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Bounce animation - playful bounce */
+.emoji-bounce {
+  animation: emojiBounce 1s ease-in-out infinite;
+}
+
+@keyframes emojiBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-8px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Rotate animation - slow spin */
+.emoji-rotate {
+  animation: emojiRotate 4s linear infinite;
+}
+
+@keyframes emojiRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sparkle animation for decorative elements */
+.sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1.2) rotate(10deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.2) rotate(-10deg);
+    opacity: 0.8;
+  }
+}
+
+/* Question emoji container */
+.question-emoji {
+  font-size: 64px;
+  margin-bottom: 16px;
+  display: inline-block;
+  will-change: transform;
+}
+
+/* Emoji entrance animation */
+.emoji-enter {
+  animation: emojiEnter var(--transition-normal) ease-out;
+}
+
+@keyframes emojiEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Emoji exit animation */
+.emoji-exit {
+  animation: emojiExit var(--transition-fast) ease-in;
+}
+
+@keyframes emojiExit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+/* ============================================
+   Progress Indicator
+   Requirements: 4.1, 4.2, 4.3, 4.5
+   ============================================ */
+.progress-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.progress-dots {
+  display: flex;
+  gap: 12px;
+}
+
+.progress-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--premium-card-border);
+  transition: all var(--transition-normal) ease;
+  will-change: transform, background, box-shadow;
+}
+
+.progress-dot--active {
+  background: var(--premium-accent);
+  box-shadow: 0 0 12px var(--premium-glow);
+  transform: scale(1.2);
+}
+
+.progress-dot--completed {
+  background: var(--premium-accent-light);
+  animation: dotComplete var(--transition-normal) ease-out;
+}
+
+@keyframes dotComplete {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.progress-bar {
+  width: 200px;
+  height: 4px;
+  background: var(--premium-card-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--premium-accent), var(--premium-accent-light));
+  border-radius: 2px;
+  transition: width var(--transition-slow) ease-out;
+  box-shadow: 0 0 10px var(--premium-glow);
+}
+
+.progress-counter {
+  font-size: 14px;
+  color: var(--premium-text-muted);
+  animation: fadeIn var(--transition-normal) ease-out;
+}
+
+
+/* ============================================
+   Option Cards
+   Requirements: 3.1, 3.3, 3.4, 3.6, 8.1, 8.3
+   ============================================ */
+.option-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 20px;
+  overflow: hidden;
+}
+
+.option-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 280px;
+  height: 280px;
+  padding: 32px 24px;
+  background: linear-gradient(135deg, #86efac 0%, #7dd3fc 100%);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all var(--transition-normal) ease;
+  will-change: transform, border-color, box-shadow;
+  overflow: hidden;
+  flex: 0 0 auto;
+  box-shadow: 0 8px 32px rgba(134, 239, 172, 0.4);
+}
+
+/* Glowing border effect on hover */
+.option-card::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--premium-accent), var(--premium-accent-light));
+  opacity: 0;
+  z-index: -1;
+  transition: opacity var(--transition-normal) ease;
+}
+
+.option-card:hover:not(.option-card--selected),
+.option-card:focus-visible:not(.option-card--selected) {
+  transform: scale(1.05);
+  border-color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(135deg, #6ee7b7 0%, #60a5fa 100%);
+  box-shadow: 0 12px 40px rgba(110, 231, 183, 0.5);
+}
+
+.option-card:hover:not(.option-card--selected)::before,
+.option-card:focus-visible:not(.option-card--selected)::before {
+  opacity: 0.5;
+}
+
+.option-card:active:not(.option-card--selected) {
+  transform: scale(0.98);
+}
+
+/* Selected state */
+.option-card--selected {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(135deg, #34d399 0%, #3b82f6 100%);
+  box-shadow: 0 0 40px rgba(52, 211, 153, 0.7), inset 0 0 30px rgba(255, 255, 255, 0.2);
+  transform: scale(1);
+}
+
+.option-card--selected::before {
+  opacity: 0;
+}
+
+.option-card--selected .option-card__text {
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Option card icon */
+.option-card__icon {
+  font-size: 72px;
+  margin-bottom: 12px;
+  transition: transform var(--transition-normal) ease;
+}
+
+.option-card:hover .option-card__icon {
+  animation: iconBounce 0.5s ease;
+}
+
+@keyframes iconBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Option card text */
+.option-card__text {
+  font-size: 26px;
+  font-weight: 600;
+  text-align: center;
+  color: #1e293b;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+/* Checkmark indicator */
+.option-card__check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--premium-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0);
+  transition: all var(--transition-normal) ease;
+}
+
+.option-card--selected .option-card__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.option-card__check::after {
+  content: '✓';
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Staggered entrance animation */
+.option-card--animate {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: cardEntrance var(--transition-normal) ease-out forwards;
+}
+
+.option-card--animate:nth-child(1) { animation-delay: 0ms; }
+.option-card--animate:nth-child(2) { animation-delay: 50ms; }
+.option-card--animate:nth-child(3) { animation-delay: 100ms; }
+.option-card--animate:nth-child(4) { animation-delay: 150ms; }
+.option-card--animate:nth-child(5) { animation-delay: 200ms; }
+.option-card--animate:nth-child(6) { animation-delay: 250ms; }
+.option-card--animate:nth-child(7) { animation-delay: 300ms; }
+.option-card--animate:nth-child(8) { animation-delay: 350ms; }
+
+@keyframes cardEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   Emoji Rating
+   Requirements: 2.1, 2.2, 2.3, 2.4, 8.1
+   ============================================ */
+.emoji-rating {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.emoji-rating__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  padding: 16px;
+  background: transparent;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all var(--transition-normal) ease;
+  will-change: transform;
+}
+
+.emoji-rating__emoji {
+  font-size: 48px;
+  transition: transform var(--transition-normal) ease;
+  filter: grayscale(0.3);
+}
+
+.emoji-rating__option:hover .emoji-rating__emoji,
+.emoji-rating__option:focus-visible .emoji-rating__emoji {
+  transform: scale(1.2);
+  filter: grayscale(0);
+}
+
+.emoji-rating__label {
+  font-size: 14px;
+  color: var(--premium-text-muted);
+  opacity: 0;
+  transform: translateY(5px);
+  transition: all var(--transition-normal) ease;
+}
+
+.emoji-rating__option:hover .emoji-rating__label,
+.emoji-rating__option:focus-visible .emoji-rating__label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Selected rating with sentiment glow */
+.emoji-rating__option--selected {
+  background: var(--premium-card-bg);
+  border-radius: 16px;
+}
+
+.emoji-rating__option--selected .emoji-rating__emoji {
+  transform: scale(1.3);
+  filter: grayscale(0);
+}
+
+.emoji-rating__option--selected .emoji-rating__label {
+  opacity: 1;
+  transform: translateY(0);
+  color: var(--premium-text-primary);
+}
+
+/* Sentiment-colored glow for selected ratings */
+.emoji-rating__option--selected[data-rating="1"] {
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+}
+.emoji-rating__option--selected[data-rating="2"] {
+  box-shadow: 0 0 30px rgba(249, 115, 22, 0.4);
+}
+.emoji-rating__option--selected[data-rating="3"] {
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.4);
+}
+.emoji-rating__option--selected[data-rating="4"] {
+  box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
+}
+.emoji-rating__option--selected[data-rating="5"] {
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.4);
+}
+
+
+/* ============================================
+   Question Card & Transitions
+   Requirements: 6.1, 6.2, 6.3, 6.5
+   ============================================ */
+.question-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 800px;
+  width: 100%;
+}
+
+.question-text {
+  font-size: 36px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  line-height: 1.2;
+}
+
+/* Question transition animations */
+.question-enter {
+  animation: questionEnter var(--transition-normal) ease-out;
+}
+
+.question-exit {
+  animation: questionExit var(--transition-fast) ease-in;
+}
+
+@keyframes questionEnter {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes questionExit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+}
+
+/* Reverse direction for going back */
+.question-enter--reverse {
+  animation: questionEnterReverse var(--transition-normal) ease-out;
+}
+
+.question-exit--reverse {
+  animation: questionExitReverse var(--transition-fast) ease-in;
+}
+
+@keyframes questionEnterReverse {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes questionExitReverse {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+}
+
+/* Disabled state during transitions */
+.question-card--transitioning {
+  pointer-events: none;
+}
+
+.question-card--transitioning .option-card,
+.question-card--transitioning .emoji-rating__option {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Selection confirmation animation */
+.selection-confirm {
+  animation: selectionConfirm var(--transition-normal) ease-out;
+}
+
+@keyframes selectionConfirm {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   Thank You Screen
+   Requirements: 7.1, 7.2, 7.3, 7.5
+   ============================================ */
+.thank-you-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--premium-bg-start) 0%, var(--premium-bg-end) 100%);
+  z-index: 100;
+  animation: fadeIn var(--transition-normal) ease-out;
+}
+
+/* Animated checkmark with glow rings */
+.thank-you-checkmark {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 32px;
+}
+
+.thank-you-checkmark__circle {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--premium-accent), var(--premium-accent-light));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: checkmarkEnter 0.6s ease-out;
+}
+
+.thank-you-checkmark__icon {
+  font-size: 60px;
+  color: white;
+  animation: checkmarkPop 0.4s ease-out 0.3s both;
+}
+
+@keyframes checkmarkEnter {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes checkmarkPop {
+  from {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Expanding glow rings */
+.thank-you-checkmark__ring {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  border: 2px solid var(--premium-accent);
+  opacity: 0;
+  animation: ringExpand 1.5s ease-out infinite;
+}
+
+.thank-you-checkmark__ring:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.thank-you-checkmark__ring:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes ringExpand {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* Thank you message */
+.thank-you-message {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 16px;
+  animation: fadeInUp var(--transition-slow) ease-out 0.4s both;
+}
+
+.thank-you-submessage {
+  font-size: 20px;
+  color: var(--premium-text-secondary);
+  animation: fadeInUp var(--transition-slow) ease-out 0.6s both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Floating celebration emojis */
+.celebration-emojis {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.celebration-emoji {
+  position: absolute;
+  font-size: 32px;
+  opacity: 0;
+  animation: celebrationFloat 3s ease-out forwards;
+}
+
+@keyframes celebrationFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(100px) scale(0);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100px) scale(0.5);
+  }
+}
+
+/* Celebration emoji positions */
+.celebration-emoji:nth-child(1) { left: 10%; top: 20%; animation-delay: 0s; }
+.celebration-emoji:nth-child(2) { left: 25%; top: 60%; animation-delay: 0.2s; }
+.celebration-emoji:nth-child(3) { left: 40%; top: 30%; animation-delay: 0.4s; }
+.celebration-emoji:nth-child(4) { left: 55%; top: 70%; animation-delay: 0.1s; }
+.celebration-emoji:nth-child(5) { left: 70%; top: 25%; animation-delay: 0.3s; }
+.celebration-emoji:nth-child(6) { left: 85%; top: 55%; animation-delay: 0.5s; }
+.celebration-emoji:nth-child(7) { left: 15%; top: 45%; animation-delay: 0.6s; }
+.celebration-emoji:nth-child(8) { left: 80%; top: 40%; animation-delay: 0.7s; }
+
+/* Confetti/Sparkle effect */
+.confetti-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+  animation: confettiFall 3s ease-out forwards;
+}
+
+.confetti--circle {
+  border-radius: 50%;
+}
+
+.confetti--square {
+  border-radius: 2px;
+}
+
+@keyframes confettiFall {
+  0% {
+    opacity: 1;
+    transform: translateY(-20px) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100vh) rotate(720deg);
+  }
+}
+
+
+/* ============================================
+   Utility Animations
+   ============================================ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn var(--transition-normal) ease-out;
+}
+
+/* Ripple effect for touch feedback */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+.ripple:active::after {
+  width: 200%;
+  height: 200%;
+}
+
+/* Press-down animation */
+.press-down:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================
+   Accessibility
+   Requirements: 10.3, 10.4
+   ============================================ */
+
+/* Focus indicators */
+.premium-survey *:focus-visible {
+  outline: 3px solid var(--premium-accent-light);
+  outline-offset: 3px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .particle,
+  .glow-orb,
+  .celebration-emoji,
+  .confetti {
+    display: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .premium-survey {
+    --premium-card-border: rgba(255, 255, 255, 0.5);
+    --premium-text-secondary: rgba(255, 255, 255, 0.9);
+  }
+  
+  .option-card {
+    border-width: 3px;
+  }
+  
+  .option-card--selected {
+    border-color: white;
+  }
+}
+
+/* ============================================
+   Responsive Adjustments
+   ============================================ */
+@media (max-width: 768px) {
+  .survey-badge {
+    font-size: 16px;
+    padding: 6px 16px;
+  }
+  
+  .survey-title {
+    font-size: 48px;
+  }
+  
+  .survey-description {
+    font-size: 18px;
+  }
+  
+  .question-text {
+    font-size: 32px;
+  }
+  
+  .question-emoji {
+    font-size: 40px;
+  }
+  
+  .option-card {
+    padding: 16px 12px;
+    min-width: 0;
+    min-height: 120px;
+  }
+  
+  .option-card__icon {
+    font-size: 36px;
+  }
+  
+  .option-card__text {
+    font-size: 18px;
+  }
+  
+  .emoji-rating {
+    gap: 12px;
+  }
+  
+  .emoji-rating__emoji {
+    font-size: 40px;
+  }
+  
+  .thank-you-message {
+    font-size: 36px;
+  }
+  
+  .thank-you-submessage {
+    font-size: 20px;
+  }
+  
+  .glow-orb--primary {
+    width: 250px;
+    height: 250px;
+  }
+  
+  .glow-orb--secondary {
+    width: 200px;
+    height: 200px;
+  }
+  
+  .glow-orb--tertiary {
+    width: 150px;
+    height: 150px;
+  }
+}
+
+/* Kiosk-specific (larger screens) */
+@media (min-width: 1024px) {
+  .survey-badge {
+    font-size: 16px;
+  }
+  
+  .survey-title {
+    font-size: 56px;
+  }
+  
+  .question-text {
+    font-size: 36px;
+  }
+  
+  .option-card {
+    width: 280px;
+    height: 280px;
+    padding: 32px 24px;
+    flex: 0 0 auto;
+  }
+  
+  .option-card__icon {
+    font-size: 72px;
+  }
+  
+  .option-card__text {
+    font-size: 26px;
+  }
+  
+  .emoji-rating__emoji {
+    font-size: 64px;
+  }
+}
+
+/* ============================================
+   Timer Display (if needed)
+   ============================================ */
+.survey-timer {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  background: var(--premium-card-bg);
+  border: 1px solid var(--premium-card-border);
+  border-radius: 12px;
+  font-size: 16px;
+  color: var(--premium-text-secondary);
+  backdrop-filter: blur(10px);
+  z-index: 50;
+}
+
+.survey-timer--warning {
+  color: var(--rating-2);
+  border-color: var(--rating-2);
+  animation: timerPulse 1s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ============================================
+   Loading State
+   ============================================ */
+.survey-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.survey-loading__spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--premium-card-border);
+  border-top-color: var(--premium-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.survey-loading__text {
+  font-size: 18px;
+  color: var(--premium-text-secondary);
+}
+

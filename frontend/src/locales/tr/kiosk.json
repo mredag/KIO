@@ -1,0 +1,138 @@
+{
+  "menu": {
+    "title": "Masaj Menusu",
+    "featured": "One Cikan Masajlar",
+    "regular": "Tum Masajlar",
+    "duration": "Sure",
+    "sessions": "Seanslar",
+    "selectMassage": "Detaylari gormek icin bir masaj secin",
+    "noMassages": "Henuz masaj eklenmedi",
+    "pricing": "Fiyatlandirma",
+    "tags": "Etiketler",
+    "noTags": "Etiket eklenmedi",
+    "highlights": "One cikanlar",
+    "details": "Detaylar",
+    "mediaUnavailable": "Medya mevcut degil",
+    "loading": "Yukleniyor...",
+    "showPricing": "Fiyatlari Goster",
+    "hidePricing": "Fiyatlari Gizle"
+  },
+  "survey": {
+    "satisfaction": {
+      "title": "Memnuniyet Anketi",
+      "description": "Hizmetimiz hakkinda goruslerinizi ogrenmek isteriz",
+      "ratingQuestion": "Genel memnuniyet dereceniz nedir?",
+      "dissatisfactionQuestion": "Neden memnun kalmadiniz?",
+      "notSatisfied": "Memnun Degilim",
+      "verySatisfied": "Cok Memnunum",
+      "reasons": {
+        "notAsExpected": "Masaj bekledigim gibi degildi",
+        "environment": "Ortam sicakligi veya gurultu rahatsiz ediciydi",
+        "staff": "Personel ile ilgili sorun",
+        "price": "Fiyat",
+        "other": "Diger"
+      },
+      "thankYou": "Teşekkür Ederiz!",
+      "thankYouMessage": "Google'da yorum birakmak ister misiniz?",
+      "thankYouLowRating": "Geri bildiriminiz icin tesekkur ederiz. Gelismek icin calisacagiz.",
+      "googleButton": "Google Inceleme QR Kodunu Goster"
+    },
+    "discovery": {
+      "title": "Kesif Anketi",
+      "description": "Bizi nasil kesfettiginizi ogrenmek isteriz",
+      "channelQuestion": "Bizi nasil duydunuz?",
+      "experienceQuestion": "Daha once spa deneyiminiz oldu mu?",
+      "optional": "(Istege bagli)",
+      "channels": {
+        "google": "Google arama sonuclari",
+        "instagram": "Instagram",
+        "friend": "Arkadas tavsiyesi",
+        "passingBy": "Gecerken gordum",
+        "other": "Diger"
+      },
+      "experience": {
+        "yes": "Evet",
+        "no": "Hayir"
+      },
+      "thankYou": "Teşekkür Ederiz!",
+      "thankYouMessage": "Geri bildiriminiz bizim için değerli."
+    },
+    "loading": "Anket yükleniyor...",
+    "quickSurvey": "Hızlı Anket",
+    "back": "Geri",
+    "submit": "Gonder",
+    "skip": "Atla",
+    "timeout": "Islem zaman asimina ugradi. Anket sifirlandi.",
+    "notSupported": "Bu anket turu su anda desteklenmiyor",
+    "rating": {
+      "veryBad": "Çok Kötü",
+      "bad": "Kötü",
+      "average": "Orta",
+      "good": "İyi",
+      "excellent": "Mükemmel"
+    },
+    "progress": {
+      "question": "Soru",
+      "of": "/",
+      "questionCounter": "Soru {{current}} / {{total}}"
+    },
+    "premium": {
+      "badge": "Hızlı Anket",
+      "thankYouTitle": "Teşekkür Ederiz!",
+      "thankYouSubtitle": "Geri bildiriminiz bizim için değerli.",
+      "ratingLabels": {
+        "1": "Çok Kötü",
+        "2": "Kötü",
+        "3": "Orta",
+        "4": "İyi",
+        "5": "Mükemmel"
+      },
+      "ratingMinLabel": "Çok Kötü",
+      "ratingMaxLabel": "Mükemmel"
+    }
+  },
+  "googleReview": {
+    "defaultTitle": "Bizi Google'da degerlendirin",
+    "defaultDescription": "QR kodu telefonunuzla tarayin ve goruslerinizi paylasin",
+    "scanPrompt": "Kameranizi QR koda tutun",
+    "close": "Kapat",
+    "error": "Yapilandirma Hatasi",
+    "errorMessage": "Google inceleme yapilandirilamadi. Lutfen yoneticiyle iletisime gecin.",
+    "ctaTitle": "Lutfen Google'da oy verin",
+    "ctaSubtitle": "Bir dakikanizi ayirip deneyiminizi paylasin",
+    "ctaButton": "QR'yi ac",
+    "openCta": "Google inceleme QR'yi ac"
+  },
+  "slideshow": {
+    "promotional": "Ozel Kampanya"
+  },
+  "offline": {
+    "indicator": "Cevrimdisi Mod",
+    "message": "Onbellekteki icerik kullaniliyor"
+  },
+  "purposeTags": {
+    "relaxation": "Rahatlama",
+    "painRelief": "Agri Giderme",
+    "detox": "Detoks",
+    "flexibility": "Esneklik",
+    "postSport": "Spor sonrasi iyilesme"
+  },
+  "aria": {
+    "selectMassage": "{{name}} masajini sec",
+    "closeGoogleReview": "Google inceleme ekranini kapat",
+    "ratingButton": "{{rating}} puan ver",
+    "selectReason": "{{reason}} secenegini sec",
+    "submitSurvey": "Anketi gonder",
+    "skipQuestion": "Soruyu atla",
+    "selectChannel": "{{channel}} kanalini sec",
+    "selectExperience": "{{experience}} secenegini sec",
+    "googleReviewButton": "Google'da yorum birak",
+    "quickSurvey": "Hızlı Anket",
+    "timeRemaining": "Kalan süre: {{seconds}} saniye",
+    "required": "Zorunlu",
+    "selected": "Seçili",
+    "surveyNavigation": "Anket navigasyonu",
+    "previousQuestion": "Önceki soru"
+  }
+}
+

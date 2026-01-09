@@ -1,0 +1,26 @@
+# Credentials and sensitive data
+credentials/*.json
+!credentials/credentials-template.json
+
+# Environment files
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Backup files
+backups/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp

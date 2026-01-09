@@ -1,0 +1,65 @@
+[Unit]
+Description=n8n workflow automation for WhatsApp coupon system
+Documentation=https://docs.n8n.io
+After=network.target
+OnFailure=n8n-failure-alert.service
+
+[Service]
+Type=simple
+User=n8n
+Group=n8n
+
+# Working directory
+WorkingDirectory=/var/lib/n8n
+
+# Environment variables
+Environment=NODE_ENV=production
+Environment=N8N_PORT=5678
+Environment=N8N_PROTOCOL=http
+Environment=N8N_HOST=localhost
+Environment=WEBHOOK_URL=https://yourdomain.com
+Environment=GENERIC_TIMEZONE=Europe/Istanbul
+Environment=TZ=Europe/Istanbul
+
+# Authentication (change these in production)
+Environment=N8N_BASIC_AUTH_ACTIVE=true
+Environment=N8N_BASIC_AUTH_USER=admin
+Environment=N8N_BASIC_AUTH_PASSWORD=changeme
+
+# Execution settings
+Environment=EXECUTIONS_PROCESS=main
+Environment=EXECUTIONS_DATA_SAVE_ON_ERROR=all
+Environment=EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+Environment=EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+
+# Logging
+Environment=N8N_LOG_LEVEL=info
+Environment=N8N_LOG_OUTPUT=file
+Environment=N8N_LOG_FILE_LOCATION=/var/lib/n8n/logs/
+Environment=N8N_LOG_FILE_COUNT_MAX=10
+Environment=N8N_LOG_FILE_SIZE_MAX=16
+
+# Database location
+Environment=N8N_USER_FOLDER=/var/lib/n8n
+
+# Start n8n
+ExecStart=/usr/bin/n8n start
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/n8n
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

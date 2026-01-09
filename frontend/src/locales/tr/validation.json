@@ -1,0 +1,20 @@
+{
+  "required": "Bu alan zorunludur",
+  "email": "Geçerli bir email adresi giriniz",
+  "minLength": "En az {{min}} karakter olmalıdır",
+  "maxLength": "En fazla {{max}} karakter olmalıdır",
+  "min": "En az {{min}} olmalıdır",
+  "max": "En fazla {{max}} olmalıdır",
+  "pattern": "Geçersiz format",
+  "url": "Geçerli bir URL giriniz",
+  "number": "Geçerli bir sayı giriniz",
+  "integer": "Tam sayı giriniz",
+  "positive": "Pozitif bir sayı giriniz",
+  "fileSize": "Dosya boyutu çok büyük (maksimum: {{max}} MB)",
+  "fileType": "Geçersiz dosya formatı. Sadece {{types}} formatları desteklenir",
+  "passwordMismatch": "Şifreler eşleşmiyor",
+  "invalidCredentials": "Geçersiz kullanıcı adı veya şifre",
+  "sessionExpired": "Oturumunuz sona erdi. Lütfen tekrar giriş yapın",
+  "networkError": "İnternet bağlantısı yok. Lütfen bağlantınızı kontrol edin",
+  "serverError": "Sunucu hatası. Lütfen daha sonra tekrar deneyin"
+}

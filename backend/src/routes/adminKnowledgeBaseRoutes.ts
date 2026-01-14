@@ -10,7 +10,7 @@ import i18n from '../i18n/config.js';
  */
 const validateKnowledgeEntry = [
   body('category')
-    .isIn(['services', 'pricing', 'hours', 'policies', 'contact', 'general'])
+    .isIn(['services', 'pricing', 'hours', 'policies', 'contact', 'general', 'faq'])
     .withMessage('Invalid category'),
   body('key_name')
     .isString()
@@ -40,7 +40,7 @@ const validateKnowledgeEntry = [
 const validateKnowledgeEntryUpdate = [
   body('category')
     .optional()
-    .isIn(['services', 'pricing', 'hours', 'policies', 'contact', 'general'])
+    .isIn(['services', 'pricing', 'hours', 'policies', 'contact', 'general', 'faq'])
     .withMessage('Invalid category'),
   body('key_name')
     .optional()

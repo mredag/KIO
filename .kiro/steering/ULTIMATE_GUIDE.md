@@ -462,32 +462,64 @@ if (signature !== expectedSignature) {
 
 ---
 
-## 📸 Instagram DM Integration (Single AI with Smart Intent Detection)
+## 📸 Instagram DM Integration (Safety Gate + AI Response)
 
 ### Current Production Workflow
-**File:** `instagram-dual-ai.json` (v10)  
-**Status:** ✅ Active on Pi (2026-01-06)
+**File:** `instagram-dual-ai.json` (safety-gate-v1)  
+**Status:** ✅ Active on Pi (2026-01-13)
 
 ### Key Features
-- **Single AI Architecture**: One AI agent with code-based intent detection (no dual AI)
+- **🛡️ Safety Gate (NEW)**: LLM classifier blocks inappropriate/ambiguous messages BEFORE AI responds
 - **Turkish Character Normalization**: Handles ş→s, ı→i, ğ→g, ü→u, ö→o, ç→c for reliable keyword matching
 - **Dynamic AI Prompts**: Editable in admin panel (`/admin/ai-prompts`)
 - **Knowledge Base**: Business info from database (`/admin/knowledge-base`)
 - **Customer Enrichment**: Fetches history before AI responds
 - **Intent-Based Context**: Only relevant knowledge sent to AI based on detected intent
-- **Dev Filter**: Filters by sender ID for testing (`3279145565594935`)
-- **Interaction Logging**: All messages logged for marketing
+- **Interaction Logging**: All messages logged with safety decision
 - **Response Time Tracking**: Measures AI latency
 
 ### Workflow Flow
 ```
 Webhook → Parse → Dev Filter → Router → Check Service → 
 Fetch Customer + Fetch Knowledge + Fetch AI Prompt (parallel) → 
-Merge Data → Enrich Context (intent detection + knowledge building) → 
-AI Switch → AI Agent (OpenRouter gpt-4o-mini) → Format → Send IG → Log
+Merge Data → Enrich Context → Safety Gate Classifier → Parse Safety Gate →
+Safety Router → [ALLOW: AI Agent | BLOCK: Fixed Response | UNSURE: Clarification] → 
+Format → Send IG → Log
 ```
 
-### Intent Detection (Code-Based, No AI)
+### 🛡️ Safety Gate System (2026-01-13)
+
+**Purpose:** Prevent bot from being manipulated into confirming sexual/inappropriate content through coded language or probing questions.
+
+**Three Outcomes:**
+| Decision | Confidence | Action |
+|----------|------------|--------|
+| `ALLOW` | ≥ 0.85 | Continue to AI Agent |
+| `BLOCK` | Any | Send fixed boundary message |
+| `UNSURE` | < 0.85 or ambiguous | Send clarification request |
+
+**BLOCK triggers:**
+- Sexual service requests: "mutlu son", "happy ending", "sonu güzel mi", "sonu keyifli"
+- Confirmation probing: "so you say we will be happy right?"
+- Harassment, threats, scams, illegal requests
+- Personal data requests about staff/customers
+
+**UNSURE triggers:**
+- Ambiguous/coded messages
+- Short probes: "sonu nasıl", "anladin mi"
+- Confidence below 0.85 threshold
+- Messages not clearly mapping to allowed intents
+
+**Fixed Responses:**
+```
+BLOCK: "Cinsel içerikli veya uygunsuz hizmet sunmuyoruz. Sadece profesyonel spa ve spor hizmetleri veriyoruz. İsterseniz hizmet listemizi, fiyatlarımızı paylaşabilirim veya randevu almanıza yardımcı olabilirim."
+
+UNSURE: "Hizmetlerimiz, fiyatlarımız, randevu ve kurslarımız hakkında yardımcı olabilirim. Lütfen sorunuzu açıkça belirtir misiniz?"
+```
+
+**Credential Required:** Create "OpenRouter Header Auth" credential in n8n with `Authorization: Bearer <OPENROUTER_API_KEY>`
+
+### Intent Detection (Code-Based)
 Reliable keyword matching with Turkish character normalization:
 
 | Intent | Keywords (normalized) | Knowledge Context |
@@ -500,7 +532,6 @@ Reliable keyword matching with Turkish character normalization:
 | `services` | masaj, spa, hamam | Services + facility |
 | `kids` | cocuk.*kurs, jimnastik | Kids courses |
 | `general_info` | bilgi, merhaba, selam | Campaign + prices + phone |
-| `inappropriate` | mutlu son, happy ending | Blocked response |
 
 ### ⚠️ CRITICAL: Turkish Character Handling
 ```javascript
@@ -565,6 +596,7 @@ This guide has solved:
 - ✅ Instagram AI hallucination fix - code-based intent detection (2026-01-06)
 - ✅ Turkish character normalization for keyword matching (2026-01-06)
 - ✅ Performance optimization - 85% faster responses (2026-01-06)
+- ✅ Safety Gate for inappropriate content blocking (2026-01-13)
 
 **Result:** 100% test pass rate, production-ready system
 
@@ -674,7 +706,7 @@ The database automatically seeds 26 Turkish knowledge base entries on first init
 
 ---
 
-**Last Updated:** 2026-01-06  
+**Last Updated:** 2026-01-13  
 **Status:** ✅ Active and tested  
-**Coverage:** All critical patterns documented including AI prompts management  
-**Latest:** Instagram Single AI workflow with smart intent detection (v10) deployed (2026-01-06)
+**Coverage:** All critical patterns documented including Safety Gate  
+**Latest:** Instagram Safety Gate workflow (safety-gate-v1) deployed (2026-01-13)

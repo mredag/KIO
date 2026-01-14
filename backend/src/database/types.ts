@@ -283,7 +283,7 @@ export interface ServiceSettingsDb {
 
 export interface KnowledgeBaseDb {
   id: string;
-  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general' | 'faq';
   key_name: string;
   value: string;
   description: string | null;
@@ -338,7 +338,7 @@ export interface ServiceStatus {
 
 export interface KnowledgeEntry {
   id: string;
-  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general' | 'faq';
   key: string;
   value: string;
   description?: string;
@@ -349,7 +349,7 @@ export interface KnowledgeEntry {
 }
 
 export interface KnowledgeEntryInput {
-  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general' | 'faq';
   key: string;
   value: string;
   description?: string;

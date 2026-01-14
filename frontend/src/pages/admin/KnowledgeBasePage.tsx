@@ -22,9 +22,9 @@ interface KnowledgeEntry {
   updatedAt: Date | null;
 }
 
-type Category = 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+type Category = 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general' | 'faq';
 
-const CATEGORIES: Category[] = ['services', 'pricing', 'hours', 'policies', 'contact', 'general'];
+const CATEGORIES: Category[] = ['services', 'pricing', 'hours', 'policies', 'contact', 'general', 'faq'];
 
 export default function KnowledgeBasePage() {
   const { t } = useTranslation(['admin', 'common']);

@@ -7,7 +7,7 @@ import type { DatabaseService } from '../database/DatabaseService.js';
  */
 export interface KnowledgeEntry {
   id: string;
-  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general' | 'faq';
   key_name: string;
   value: string;
   description: string | null;
@@ -21,7 +21,7 @@ export interface KnowledgeEntry {
  * Input for creating a knowledge entry
  */
 export interface KnowledgeEntryInput {
-  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general';
+  category: 'services' | 'pricing' | 'hours' | 'policies' | 'contact' | 'general' | 'faq';
   key_name: string;
   value: string;
   description?: string;

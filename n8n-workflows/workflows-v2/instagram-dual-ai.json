@@ -1,6 +1,6 @@
 {
   "name": "Instagram Dual AI (Classifier + Responder)",
-  "versionId": "instagram-single-ai-v12-no-hardcode",
+  "versionId": "instagram-safety-gate-v1",
   "nodes": [
     {
       "parameters": {
@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst startTime = Date.now();\n\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\nconst entry = body.entry?.[0];\nif (!entry) return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n\nconst message = messaging.message;\nif (!message || !message.text) return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n\nif (message.is_echo === true) return [{ json: { route: 'ignore', reason: 'echo_message' } }];\n\n// IGNORE AD/STORY REPLY LINKS - Instagram sends these when user clicks ad\n// They contain URLs like instagram.com, ig.me, or are very short generic messages\nconst text = message.text.trim();\nif (text.match(/instagram\\.com|ig\\.me|instagr\\.am|https?:\\/\\//i)) {\n  return [{ json: { route: 'ignore', reason: 'ad_link' } }];\n}\n\n// Also ignore very short messages that are likely auto-generated (less than 3 chars)\nif (text.length < 3) {\n  return [{ json: { route: 'ignore', reason: 'too_short' } }];\n}\n\nconst senderId = messaging.sender?.id;\nif (!senderId) return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n\nreturn [{ json: { route: 'process', senderId, text, messageId: message.mid, timestamp: messaging.timestamp, startTime } }];"
+        "jsCode": "const input = $input.first().json;\nconst startTime = Date.now();\n\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\nconst body = input.body || input;\n\nif (body.object !== 'instagram') {\n  return [{ json: { route: 'ignore', reason: 'not_instagram' } }];\n}\n\nconst entry = body.entry?.[0];\nif (!entry) return [{ json: { route: 'ignore', reason: 'no_entry' } }];\n\nconst messaging = entry.messaging?.[0];\nif (!messaging) return [{ json: { route: 'ignore', reason: 'no_messaging' } }];\n\nconst message = messaging.message;\nif (!message || !message.text) return [{ json: { route: 'ignore', reason: 'no_text_message' } }];\n\nif (message.is_echo === true) return [{ json: { route: 'ignore', reason: 'echo_message' } }];\n\nconst text = message.text.trim();\nif (text.match(/instagram\\.com|ig\\.me|instagr\\.am|https?:\\/\\//i)) {\n  return [{ json: { route: 'ignore', reason: 'ad_link' } }];\n}\n\nif (text.length < 3) {\n  return [{ json: { route: 'ignore', reason: 'too_short' } }];\n}\n\nconst senderId = messaging.sender?.id;\nif (!senderId) return [{ json: { route: 'ignore', reason: 'no_sender' } }];\n\nreturn [{ json: { route: 'process', senderId, text, messageId: message.mid, timestamp: messaging.timestamp, startTime } }];"
       },
       "id": "parse",
       "name": "Parse Instagram",
@@ -28,7 +28,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst ALLOWED_SENDER_ID = '3279145565594935';\n\nif (input.route === 'verify') return [{ json: input }];\n\nif (input.route === 'process' && input.senderId !== ALLOWED_SENDER_ID) {\n  return [{ json: { route: 'ignore', reason: 'not_developer', senderId: input.senderId } }];\n}\n\nreturn [{ json: input }];"
+        "jsCode": "const input = $input.first().json;\nreturn [{ json: input }];"
       },
       "id": "dev-filter",
       "name": "Dev Filter",
@@ -158,7 +158,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst parseData = $('Check Enabled').first().json;\n\nlet customer = {}, knowledge = {}, aiPrompt = {};\nfor (const item of items) {\n  const json = item.json;\n  if (json.systemMessage) aiPrompt = json;\n  else if (json.isNewCustomer !== undefined || json.interactionCount !== undefined) customer = json;\n  else if (json.pricing || json.services || json.hours || json.contact || json.policies) knowledge = json;\n}\n\nconst text = parseData.text.toLowerCase().trim();\nconst isNewCustomer = customer.isNewCustomer !== false;\nconst interactionCount = customer.interactionCount || 0;\nconst isFirstMessage = isNewCustomer || interactionCount <= 1;\n\n// KEYWORD-BASED INTENT DETECTION (reliable, no AI needed)\nlet intent = 'general_info';\nlet isInappropriate = false;\n\n// Normalize Turkish characters for matching\nlet normalizedText = text\n  .replace(/ş/g, 's').replace(/Ş/g, 's')\n  .replace(/ı/g, 'i').replace(/İ/g, 'i')\n  .replace(/ğ/g, 'g').replace(/Ğ/g, 'g')\n  .replace(/ü/g, 'u').replace(/Ü/g, 'u')\n  .replace(/ö/g, 'o').replace(/Ö/g, 'o')\n  .replace(/ç/g, 'c').replace(/Ç/g, 'c');\n\n// Fix common misspellings\nnormalizedText = normalizedText\n  .replace(/teakwondo|tekvando|taekwando|tekvondo|tekwondo/gi, 'taekwondo')\n  .replace(/jimnastik|jimastik|cimnastik|gimnastik/gi, 'jimnastik')\n  .replace(/kickboks|kikboks|kickbox|kikbox|kick boks/gi, 'kickboks')\n  .replace(/pilates|pilatis|plates|pilat/gi, 'pilates')\n  .replace(/reformer|reformar|refromer/gi, 'reformer')\n  .replace(/yuzme|yüzme|yuzma|yuzm/gi, 'yuzme')\n  .replace(/masaj|massaj|masag|mazaj/gi, 'masaj')\n  .replace(/hamam|hammam|hamamm/gi, 'hamam')\n  .replace(/sauna|suana|sona/gi, 'sauna')\n  .replace(/fitness|fitnes|fittness|fitnıs/gi, 'fitness')\n  .replace(/uyelik|üyelik|uyelık|uyelig/gi, 'uyelik')\n  .replace(/fiyat|fıyat|fiyaat|fyat/gi, 'fiyat')\n  .replace(/randevu|randevü|randavu|randivu/gi, 'randevu');\n\n// Check for membership-related keywords (used later for context)\nconst hasMembershipKeywords = normalizedText.match(/uyelik|member|abone|aylik|spor|gym|fitness|tesis/i);\nconst hasSpaKeywords = normalizedText.match(/masaj|spa|hamam|sauna/i);\n\n// Inappropriate check FIRST\nif (normalizedText.match(/mutlu son|happy ending|ekstra hizmet|ozel masaj|seks|sex/i)) {\n  intent = 'inappropriate';\n  isInappropriate = true;\n}\n// PILATES/REFORMER - Check VERY EARLY (before general_info catches 'merhaba')\nelse if (normalizedText.match(/pilates|reformer/i)) {\n  intent = 'membership';\n}\n// Membership - fitness, gym, tesis, uyelik\nelse if (normalizedText.match(/uyelik|member|abone|spor.*fiyat|gym|fitness|tesis.*ucret|tesis.*fiyat/i)) {\n  intent = 'membership';\n}\n// Policies/Rules - age limits, rules, etc.\nelse if (normalizedText.match(/yas.*sinir|yas.*limit|sinir.*yas|kural|policy|izin|yasak|kac yas|yas icin/i)) {\n  intent = 'policies';\n}\n// Kids courses\nelse if (normalizedText.match(/cocuk.*kurs|jimnastik|taekwondo|yuzme.*kurs|cocuk.*ders|kickboks|boks/i)) {\n  intent = 'kids';\n}\n// Pricing - but check if it's about membership\nelse if (normalizedText.match(/fiyat|ucret|ne kadar|kac para|kac lira|kac tl/i)) {\n  // If asking about membership/fitness prices, use membership intent\n  if (hasMembershipKeywords) {\n    intent = 'membership';\n  } else {\n    intent = 'pricing';\n  }\n}\n// Hours - check if about facility/sports or spa\nelse if (normalizedText.match(/saat|acik|kapali|calisma|ne zaman|pazar/i)) {\n  intent = 'hours';\n}\n// General info requests\nelse if (normalizedText.match(/bilgi|bilgi al|bilgi ist|ogrenmek|merak|merhaba|selam|hey|hi|hello/i)) {\n  intent = 'general_info';\n}\n// Location - includes neresin, nerede, iskenderun neresindesiniz etc\nelse if (normalizedText.match(/adres|nerede|neresin|konum|nasil gel|yer.*nere|nere.*yer|iskenderun/i)) {\n  intent = 'location';\n}\n// Booking\nelse if (normalizedText.match(/randevu|rezervasyon|yer ayirt/i)) {\n  intent = 'booking';\n}\n// Services (general spa/massage questions - NOT pilates, that goes to membership)\nelse if (normalizedText.match(/masaj|spa|hamam|sauna|havuz|hizmet/i)) {\n  intent = 'services';\n}\n// Thanks\nelse if (normalizedText.match(/tesekkur|sagol|thanks|eyv/i)) {\n  intent = 'thanks';\n}\n\n// Handle inappropriate\nif (isInappropriate) {\n  return [{ json: { senderId: parseData.senderId, text: parseData.text, startTime: parseData.startTime, intent, response: 'Profesyonel masaj hizmeti veriyoruz. Uygunsuz taleplere cevap vermiyoruz.', skipAI: true } }];\n}\n\n// BUILD FULL KNOWLEDGE CONTEXT\nlet knowledgeContext = '\\n\\n=== BILGILER (SADECE BUNLARI KULLAN, ASLA UYDURMA!) ===';\n\n// For policies intent - include policy data\nif (intent === 'policies') {\n  if (knowledge.policies) {\n    knowledgeContext += '\\n\\n📋 KURALLAR VE POLITIKALAR:';\n    Object.entries(knowledge.policies).forEach(([key, v]) => { knowledgeContext += '\\n• ' + v; });\n  }\n}\n\n// For general_info, first message, or pricing (spa) - include campaign and massage prices\nif (intent === 'general_info' || (intent === 'pricing' && !hasMembershipKeywords) || isFirstMessage) {\n  if (knowledge.pricing?.current_campaign) {\n    knowledgeContext += '\\n\\n🔥 KAMPANYA:\\n' + knowledge.pricing.current_campaign;\n  }\n  if (knowledge.pricing?.group_discount) {\n    knowledgeContext += '\\n🎁 ' + knowledge.pricing.group_discount;\n  }\n  if (knowledge.services?.massage_programs) {\n    knowledgeContext += '\\n\\n💆 MASAJ FIYATLARI:\\n' + knowledge.services.massage_programs;\n  }\n}\n\n// Add specific data based on intent\nif (intent === 'services' || intent === 'general_info') {\n  if (knowledge.services?.special_massage_programs) {\n    knowledgeContext += '\\n\\n⭐ OZEL MASAJLAR:\\n' + knowledge.services.special_massage_programs;\n  }\n  if (knowledge.services?.facility_overview) {\n    knowledgeContext += '\\n\\n🏢 TESIS:\\n' + knowledge.services.facility_overview;\n  }\n}\n\n// Membership intent - include ALL membership pricing\nif (intent === 'membership') {\n  knowledgeContext += '\\n\\n🏋️ FITNESS VE TESIS UYELIK UCRETLERI:';\n  if (knowledge.pricing?.membership_individual) {\n    knowledgeContext += '\\n\\n👤 FERDI UYELIK:\\n' + knowledge.pricing.membership_individual;\n  }\n  if (knowledge.pricing?.membership_family) {\n    knowledgeContext += '\\n\\n👨‍👩‍👧 AILE UYELIGI:\\n' + knowledge.pricing.membership_family;\n  }\n  if (knowledge.pricing?.reformer_pilates) {\n    knowledgeContext += '\\n\\n🧘 REFORMER PILATES:\\n' + knowledge.pricing.reformer_pilates;\n  }\n  if (knowledge.pricing?.daily_facility) {\n    knowledgeContext += '\\n\\n📅 GUNLUK KULLANIM:\\n' + knowledge.pricing.daily_facility;\n  }\n  if (knowledge.services?.facility_overview) {\n    knowledgeContext += '\\n\\n🏢 TESIS BILGISI:\\n' + knowledge.services.facility_overview;\n  }\n}\n\n// Hours intent\nif (intent === 'hours' || intent === 'booking') {\n  knowledgeContext += '\\n\\n🕐 CALISMA SAATLERI:';\n  // SPA hours\n  if (knowledge.hours?.spa_working_hours) {\n    knowledgeContext += '\\n• SPA/MASAJ: ' + knowledge.hours.spa_working_hours;\n  }\n  // Facility/gym hours - check if exists, otherwise provide general info\n  if (knowledge.hours?.facility_working_hours) {\n    knowledgeContext += '\\n• SPOR SALONU: ' + knowledge.hours.facility_working_hours;\n  } else if (hasMembershipKeywords || normalizedText.match(/spor|fitness|gym|tesis/i)) {\n    knowledgeContext += '\\n• SPOR SALONU: Detayli bilgi icin resepsiyonu arayin.';\n  }\n  // Show course schedules only if asking about courses\n  if (normalizedText.match(/kurs|ders|cocuk|jimnastik|taekwondo|yuzme|kickboks/i)) {\n    knowledgeContext += '\\n\\n📚 KURS PROGRAMLARI:';\n    if (knowledge.hours) {\n      Object.entries(knowledge.hours).forEach(([key, v]) => {\n        if (key.includes('schedule')) knowledgeContext += '\\n• ' + v;\n      });\n    }\n  }\n}\n\nif (intent === 'location' || intent === 'booking' || intent === 'general_info') {\n  if (knowledge.contact?.phone) {\n    knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n  }\n  if (knowledge.contact?.address && intent === 'location') {\n    knowledgeContext += '\\n📍 ADRES: ' + knowledge.contact.address;\n  }\n}\n\nif (intent === 'kids') {\n  if (knowledge.services?.courses_kids) {\n    knowledgeContext += '\\n\\n👶 COCUK KURSLARI:\\n' + knowledge.services.courses_kids;\n  }\n  if (knowledge.pricing?.courses_kids) {\n    knowledgeContext += '\\n\\n💰 KURS FIYATLARI:\\n' + knowledge.pricing.courses_kids;\n  }\n  if (knowledge.pricing?.courses_youth) {\n    knowledgeContext += '\\n' + knowledge.pricing.courses_youth;\n  }\n  // Add schedules\n  if (knowledge.hours) {\n    knowledgeContext += '\\n\\n📅 KURS SAATLERI:';\n    Object.entries(knowledge.hours).forEach(([key, v]) => {\n      if (key.includes('schedule')) knowledgeContext += '\\n• ' + v;\n    });\n  }\n}\n\n// Always add phone at the end\nif (knowledge.contact?.phone && !knowledgeContext.includes(knowledge.contact.phone)) {\n  knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n}\n\n// Get system prompt from database\nconst systemPrompt = aiPrompt.systemMessage || 'Sen Eform SPA musteri temsilcisisin. SADECE verilen BILGILER bolumundeki verileri kullan, ASLA uydurma!';\n\n// Add first message hint\nlet customerHint = '';\nif (isFirstMessage) {\n  customerHint = '\\n\\n⚠️ BU ILK MESAJ! Kampanya + fiyat ozeti + telefon numarasi MUTLAKA ver!';\n}\n\nreturn [{ json: { senderId: parseData.senderId, text: parseData.text, startTime: parseData.startTime, intent, isFirstMessage, systemPrompt, customerHint, knowledgeContext, skipAI: false } }];"
+        "jsCode": "const items = $input.all();\nconst parseData = $('Check Enabled').first().json;\n\nlet customer = {}, knowledge = {}, aiPrompt = {};\nfor (const item of items) {\n  const json = item.json;\n  if (json.systemMessage) aiPrompt = json;\n  else if (json.isNewCustomer !== undefined || json.interactionCount !== undefined) customer = json;\n  else if (json.pricing || json.services || json.hours || json.contact || json.policies) knowledge = json;\n}\n\nconst text = parseData.text.toLowerCase().trim();\nconst isNewCustomer = customer.isNewCustomer !== false;\nconst interactionCount = customer.interactionCount || 0;\nconst isFirstMessage = isNewCustomer || interactionCount <= 1;\n\n// KEYWORD-BASED INTENT DETECTION\nlet intent = 'general_info';\n\n// Normalize Turkish characters\nlet normalizedText = text\n  .replace(/ş/g, 's').replace(/Ş/g, 's')\n  .replace(/ı/g, 'i').replace(/İ/g, 'i')\n  .replace(/ğ/g, 'g').replace(/Ğ/g, 'g')\n  .replace(/ü/g, 'u').replace(/Ü/g, 'u')\n  .replace(/ö/g, 'o').replace(/Ö/g, 'o')\n  .replace(/ç/g, 'c').replace(/Ç/g, 'c');\n\n// Fix common misspellings\nnormalizedText = normalizedText\n  .replace(/teakwondo|tekvando|taekwando|tekvondo|tekwondo/gi, 'taekwondo')\n  .replace(/jimnastik|jimastik|cimnastik|gimnastik/gi, 'jimnastik')\n  .replace(/kickboks|kikboks|kickbox|kikbox|kick boks/gi, 'kickboks')\n  .replace(/pilates|pilatis|plates|pilat/gi, 'pilates')\n  .replace(/reformer|reformar|refromer/gi, 'reformer')\n  .replace(/yuzme|yüzme|yuzma|yuzm/gi, 'yuzme')\n  .replace(/masaj|massaj|masag|mazaj/gi, 'masaj')\n  .replace(/hamam|hammam|hamamm/gi, 'hamam')\n  .replace(/sauna|suana|sona/gi, 'sauna')\n  .replace(/fitness|fitnes|fittness|fitnıs/gi, 'fitness')\n  .replace(/uyelik|üyelik|uyelık|uyelig/gi, 'uyelik')\n  .replace(/fiyat|fıyat|fiyaat|fyat/gi, 'fiyat')\n  .replace(/randevu|randevü|randavu|randivu/gi, 'randevu');\n\nconst hasMembershipKeywords = normalizedText.match(/uyelik|member|abone|aylik|spor|gym|fitness|tesis/i);\nconst hasSpaKeywords = normalizedText.match(/masaj|spa|hamam|sauna/i);\n\n// Intent detection (safety gate handles inappropriate content)\nif (normalizedText.match(/pilates|reformer/i)) {\n  intent = 'membership';\n} else if (normalizedText.match(/uyelik|member|abone|spor.*fiyat|gym|fitness|tesis.*ucret|tesis.*fiyat/i)) {\n  intent = 'membership';\n} else if (normalizedText.match(/yas.*sinir|yas.*limit|sinir.*yas|kural|policy|izin|yasak|kac yas|yas icin/i)) {\n  intent = 'policies';\n} else if (normalizedText.match(/cocuk.*kurs|jimnastik|taekwondo|yuzme.*kurs|cocuk.*ders|kickboks|boks/i)) {\n  intent = 'kids';\n} else if (normalizedText.match(/fiyat|ucret|ne kadar|kac para|kac lira|kac tl/i)) {\n  intent = hasMembershipKeywords ? 'membership' : 'pricing';\n} else if (normalizedText.match(/saat|acik|kapali|calisma|ne zaman|pazar/i)) {\n  intent = 'hours';\n} else if (normalizedText.match(/bilgi|bilgi al|bilgi ist|ogrenmek|merak|merhaba|selam|hey|hi|hello/i)) {\n  intent = 'general_info';\n} else if (normalizedText.match(/adres|nerede|neresin|konum|nasil gel|yer.*nere|nere.*yer|iskenderun/i)) {\n  intent = 'location';\n} else if (normalizedText.match(/randevu|rezervasyon|yer ayirt/i)) {\n  intent = 'booking';\n} else if (normalizedText.match(/masaj|spa|hamam|sauna|havuz|hizmet/i)) {\n  intent = 'services';\n} else if (normalizedText.match(/tesekkur|sagol|thanks|eyv/i)) {\n  intent = 'thanks';\n}\n\n// BUILD KNOWLEDGE CONTEXT\nlet knowledgeContext = '\\n\\n=== BILGILER (SADECE BUNLARI KULLAN, ASLA UYDURMA!) ===';\n\nif (intent === 'policies' && knowledge.policies) {\n  knowledgeContext += '\\n\\n📋 KURALLAR VE POLITIKALAR:';\n  Object.entries(knowledge.policies).forEach(([key, v]) => { knowledgeContext += '\\n• ' + v; });\n}\n\nif (intent === 'general_info' || (intent === 'pricing' && !hasMembershipKeywords) || isFirstMessage) {\n  if (knowledge.pricing?.current_campaign) knowledgeContext += '\\n\\n🔥 KAMPANYA:\\n' + knowledge.pricing.current_campaign;\n  if (knowledge.pricing?.group_discount) knowledgeContext += '\\n🎁 ' + knowledge.pricing.group_discount;\n  if (knowledge.services?.massage_programs) knowledgeContext += '\\n\\n💆 MASAJ FIYATLARI:\\n' + knowledge.services.massage_programs;\n}\n\nif (intent === 'services' || intent === 'general_info') {\n  if (knowledge.services?.special_massage_programs) knowledgeContext += '\\n\\n⭐ OZEL MASAJLAR:\\n' + knowledge.services.special_massage_programs;\n  if (knowledge.services?.facility_overview) knowledgeContext += '\\n\\n🏢 TESIS:\\n' + knowledge.services.facility_overview;\n}\n\nif (intent === 'membership') {\n  knowledgeContext += '\\n\\n🏋️ FITNESS VE TESIS UYELIK UCRETLERI:';\n  if (knowledge.pricing?.membership_individual) knowledgeContext += '\\n\\n👤 FERDI UYELIK:\\n' + knowledge.pricing.membership_individual;\n  if (knowledge.pricing?.membership_family) knowledgeContext += '\\n\\n👨‍👩‍👧 AILE UYELIGI:\\n' + knowledge.pricing.membership_family;\n  if (knowledge.pricing?.reformer_pilates) knowledgeContext += '\\n\\n🧘 REFORMER PILATES:\\n' + knowledge.pricing.reformer_pilates;\n  if (knowledge.pricing?.daily_facility) knowledgeContext += '\\n\\n📅 GUNLUK KULLANIM:\\n' + knowledge.pricing.daily_facility;\n  if (knowledge.services?.facility_overview) knowledgeContext += '\\n\\n🏢 TESIS BILGISI:\\n' + knowledge.services.facility_overview;\n}\n\nif (intent === 'hours' || intent === 'booking') {\n  knowledgeContext += '\\n\\n🕐 CALISMA SAATLERI:';\n  if (knowledge.hours?.spa_working_hours) knowledgeContext += '\\n• SPA/MASAJ: ' + knowledge.hours.spa_working_hours;\n  if (knowledge.hours?.facility_working_hours) knowledgeContext += '\\n• SPOR SALONU: ' + knowledge.hours.facility_working_hours;\n  else if (hasMembershipKeywords || normalizedText.match(/spor|fitness|gym|tesis/i)) knowledgeContext += '\\n• SPOR SALONU: Detayli bilgi icin resepsiyonu arayin.';\n  if (normalizedText.match(/kurs|ders|cocuk|jimnastik|taekwondo|yuzme|kickboks/i) && knowledge.hours) {\n    knowledgeContext += '\\n\\n📚 KURS PROGRAMLARI:';\n    Object.entries(knowledge.hours).forEach(([key, v]) => { if (key.includes('schedule')) knowledgeContext += '\\n• ' + v; });\n  }\n}\n\nif (intent === 'location' || intent === 'booking' || intent === 'general_info') {\n  if (knowledge.contact?.phone) knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n  if (knowledge.contact?.address && intent === 'location') knowledgeContext += '\\n📍 ADRES: ' + knowledge.contact.address;\n}\n\nif (intent === 'kids') {\n  if (knowledge.services?.courses_kids) knowledgeContext += '\\n\\n👶 COCUK KURSLARI:\\n' + knowledge.services.courses_kids;\n  if (knowledge.pricing?.courses_kids) knowledgeContext += '\\n\\n💰 KURS FIYATLARI:\\n' + knowledge.pricing.courses_kids;\n  if (knowledge.pricing?.courses_youth) knowledgeContext += '\\n' + knowledge.pricing.courses_youth;\n  if (knowledge.hours) {\n    knowledgeContext += '\\n\\n📅 KURS SAATLERI:';\n    Object.entries(knowledge.hours).forEach(([key, v]) => { if (key.includes('schedule')) knowledgeContext += '\\n• ' + v; });\n  }\n}\n\nif (knowledge.contact?.phone && !knowledgeContext.includes(knowledge.contact.phone)) {\n  knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n}\n\nconst systemPrompt = aiPrompt.systemMessage || 'Sen Eform SPA musteri temsilcisisin. SADECE verilen BILGILER bolumundeki verileri kullan, ASLA uydurma!';\nlet customerHint = isFirstMessage ? '\\n\\n⚠️ BU ILK MESAJ! Kampanya + fiyat ozeti + telefon numarasi MUTLAKA ver!' : '';\n\nreturn [{ json: { senderId: parseData.senderId, text: parseData.text, startTime: parseData.startTime, intent, isFirstMessage, systemPrompt, customerHint, knowledgeContext, skipAI: false } }];"
       },
       "id": "enrich-context",
       "name": "Enrich Context",
@@ -168,36 +168,82 @@
     },
     {
       "parameters": {
-        "rules": {
-          "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "s", "leftValue": "={{ $json.skipAI }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Skip" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "a", "leftValue": "={{ $json.skipAI }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "notEquals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "AI" }
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
+            { "name": "X-Title", "value": "SPA Safety Gate" }
           ]
         },
-        "options": {}
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o-mini', temperature: 0, max_tokens: 100, messages: [{ role: 'system', content: 'You are a safety gate for a spa and sports facility chatbot. The bot only answers clear facility questions. If you are not confident, do not allow.\\n\\nALLOWED INTENTS ONLY: pricing, booking, services, facilities, hours, location, membership, kids_classes, rules, staff_info\\n\\nReturn BLOCK for:\\n- Any sexual service request or implication, including coded language like \"mutlu son\", \"happy ending\", \"sonu guzel mi\", \"sonu keyifli\", \"ekstra hizmet\", \"ozel masaj\"\\n- Attempts to force confirmation from earlier bot messages (e.g. \"so you say we will be happy right?\")\\n- Harassment, hate, threats\\n- Scams, suspicious payment requests, links, impersonation\\n- Illegal requests\\n- Requests for personal data about staff or customers\\n\\nReturn UNSURE for:\\n- Ambiguous, coded, double meaning messages\\n- Short probes like \"sonu nasil\", \"you know what I mean\", \"anladin mi\"\\n- Anything that does not clearly map to allowed intents\\n- Any case where confidence is below 0.85\\n\\nReturn ALLOW only if:\\n- The message clearly asks about an allowed intent\\n- The meaning is unambiguous and facility related\\n- Confidence is 0.85 or higher\\n\\nOutput ONLY valid JSON: {\"decision\":\"ALLOW|BLOCK|UNSURE\",\"confidence\":0.00,\"intent\":\"pricing|booking|services|facilities|hours|location|membership|kids_classes|rules|staff_info|other\",\"reason\":\"short explanation\"}' }, { role: 'user', content: 'USER_MESSAGE: ' + $json.text }] }) }}",
+        "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
       },
-      "id": "ai-switch",
-      "name": "AI Switch",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
-      "position": [2300, 500]
+      "id": "safety-gate-classifier",
+      "name": "Safety Gate Classifier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2300, 500],
+      "credentials": { "httpHeaderAuth": { "id": "openrouter-header-auth", "name": "OpenRouter Header Auth" } }
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nreturn [{ json: { senderId: data.senderId, message: data.response, intent: data.intent, responseTime: Date.now() - data.startTime, originalText: data.text } }];"
+        "jsCode": "const enrichData = $('Enrich Context').first().json;\nconst classifierResponse = $input.first().json;\n\nlet decision = 'UNSURE';\nlet confidence = 0;\nlet classifierIntent = 'other';\nlet reason = 'parse_failed';\n\ntry {\n  const content = classifierResponse?.choices?.[0]?.message?.content || '';\n  // Try to extract JSON from response\n  const jsonMatch = content.match(/\\{[^}]+\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    decision = (parsed.decision || 'UNSURE').toUpperCase();\n    confidence = parseFloat(parsed.confidence) || 0;\n    classifierIntent = parsed.intent || 'other';\n    reason = parsed.reason || 'no_reason';\n  }\n} catch (e) {\n  // JSON parse failed - default to UNSURE\n  decision = 'UNSURE';\n  confidence = 0;\n  reason = 'json_parse_error: ' + e.message;\n}\n\n// HARD RULE: Only ALLOW when confidence >= 0.85\nif (decision === 'ALLOW' && confidence < 0.85) {\n  decision = 'UNSURE';\n  reason = 'confidence_below_threshold';\n}\n\n// Validate decision\nif (!['ALLOW', 'BLOCK', 'UNSURE'].includes(decision)) {\n  decision = 'UNSURE';\n}\n\nreturn [{ json: { ...enrichData, safetyDecision: decision, safetyConfidence: confidence, safetyIntent: classifierIntent, safetyReason: reason } }];"
       },
-      "id": "format-skip",
-      "name": "Format Skip",
+      "id": "parse-safety-gate",
+      "name": "Parse Safety Gate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2500, 400]
+      "position": [2500, 500]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "allow", "leftValue": "={{ $json.safetyDecision }}", "rightValue": "ALLOW", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Allow" },
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "block", "leftValue": "={{ $json.safetyDecision }}", "rightValue": "BLOCK", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Block" },
+            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "unsure", "leftValue": "={{ $json.safetyDecision }}", "rightValue": "UNSURE", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Unsure" }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "safety-router",
+      "name": "Safety Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2700, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst blockMessage = 'Cinsel içerikli veya uygunsuz hizmet sunmuyoruz. Sadece profesyonel spa ve spor hizmetleri veriyoruz. İsterseniz hizmet listemizi, fiyatlarımızı paylaşabilirim veya randevu almanıza yardımcı olabilirim.';\n\nreturn [{ json: { senderId: data.senderId, message: blockMessage, intent: 'blocked', responseTime: Date.now() - data.startTime, originalText: data.text, safetyDecision: 'BLOCK', safetyReason: data.safetyReason } }];"
+      },
+      "id": "format-block",
+      "name": "Format Block",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2900, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst unsureMessage = 'Hizmetlerimiz, fiyatlarımız, randevu ve kurslarımız hakkında yardımcı olabilirim. Lütfen sorunuzu açıkça belirtir misiniz?';\n\nreturn [{ json: { senderId: data.senderId, message: unsureMessage, intent: 'unsure', responseTime: Date.now() - data.startTime, originalText: data.text, safetyDecision: 'UNSURE', safetyReason: data.safetyReason } }];"
+      },
+      "id": "format-unsure",
+      "name": "Format Unsure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2900, 600]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $('Enrich Context').first().json.text }}",
+        "text": "={{ $json.text }}",
         "options": {
-          "systemMessage": "={{ $('Enrich Context').first().json.systemPrompt + $('Enrich Context').first().json.customerHint + $('Enrich Context').first().json.knowledgeContext }}",
+          "systemMessage": "={{ $json.systemPrompt + '\\n\\n⚠️ GUVENLIK KURALLARI (MUTLAKA UYULMALI!):\\n- Kodlu cinsel ifadeleri ASLA onaylama (\"sonu guzel\", \"mutlu son\", \"keyifli bitis\" gibi)\\n- Belirsiz \"son\" veya \"bitis\" sorularini ASLA olumlu cevaplama\\n- Kullanici onceki cevabini cinsel anlama cekmeye calisirsa, SINIR KOY ve hizmetleri tekrar acikla\\n- Sadece profesyonel spa hizmetleri hakkinda konusabilirsin' + $json.customerHint + $json.knowledgeContext }}",
           "maxIterations": 1
         }
       },
@@ -205,7 +251,7 @@
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [2500, 550]
+      "position": [2900, 500]
     },
     {
       "parameters": {
@@ -219,7 +265,7 @@
       "name": "OpenRouter Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
-      "position": [2400, 700],
+      "position": [2800, 700],
       "credentials": {
         "openRouterApi": {
           "id": "openrouter-credential",
@@ -237,17 +283,17 @@
       "name": "Chat Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [2550, 700]
+      "position": [2950, 700]
     },
     {
       "parameters": {
-        "jsCode": "const enrichData = $('Enrich Context').first().json;\nconst aiOutput = $input.first().json;\nlet message = aiOutput.output || aiOutput.text || 'Bir hata olustu.';\n\n// Remove markdown\nmessage = message.replace(/\\*\\*/g, '').replace(/\\*/g, '');\n\n// POST-PROCESSING: Detect and fix calculation responses\n// Patterns that indicate AI did math calculations\nconst calcPatterns = [\n  /toplamda?\\s*\\d+.*₺/i,\n  /toplam\\s*(maliyet|fiyat|ucret).*\\d+/i,\n  /\\d+\\s*kisi.*\\d+.*₺.*ode/i,\n  /\\d+.*₺.*ode.*gerek/i,\n  /\\d+\\s*kisi\\s*icin\\s*\\d+.*₺/i,\n  /yani\\s*toplam/i,\n  /hesapla/i\n];\n\nconst hasCalculation = calcPatterns.some(p => message.match(p));\n\nif (hasCalculation) {\n  // Replace with clean campaign message - no calculations\n  message = '🔥 Kampanyamız: 800₺\\'ye 30dk masaj + sınırsız spa kullanımı (havuz, hamam, sauna, buhar odası)!\\n\\n🎁 4 kişi gelirse 5. kişiye aynı masaj HEDİYE!\\n\\n📞 Detaylı bilgi ve rezervasyon: 0326 502 58 58';\n}\n\n// POST-PROCESSING: Fix wrong Reformer Pilates prices (AI makes up per-session prices)\nconst originalText = enrichData.text?.toLowerCase() || '';\nif ((originalText.includes('pilates') || originalText.includes('reformer')) && message.match(/1\\s*ders.*\\d+|\\d+.*ders.*\\d+₺/i)) {\n  message = '🧘 Reformer Pilates: 3500 TL/ay\\n\\n📞 Detaylı bilgi ve kayıt: 0326 502 58 58';\n}\n\n// POST-PROCESSING: Fix wrong Taekwondo prices\nif (originalText.includes('taekwondo') && message.match(/1\\s*ders.*\\d+|\\d+.*ders.*\\d+₺/i)) {\n  message = '🥋 Taekwondo Kursu: 1500 TL/ay (8+ yaş)\\n\\n📞 Kayıt ve bilgi: 0326 502 58 58';\n}\n\nmessage = message.substring(0, 1000);\n\nconst responseTime = Date.now() - enrichData.startTime;\n\nreturn [{ json: { senderId: enrichData.senderId, message, intent: enrichData.intent, responseTime, originalText: enrichData.text } }];"
+        "jsCode": "const enrichData = $('Parse Safety Gate').first().json;\nconst aiOutput = $input.first().json;\nlet message = aiOutput.output || aiOutput.text || 'Bir hata olustu.';\n\n// Remove markdown\nmessage = message.replace(/\\*\\*/g, '').replace(/\\*/g, '');\nmessage = message.replace(/\\n{3,}/g, '\\n\\n').trim();\n\n// POST-PROCESSING: Detect and fix calculation responses\nconst calcPatterns = [/toplamda?\\s*\\d+.*₺/i, /toplam\\s*(maliyet|fiyat|ucret).*\\d+/i, /\\d+\\s*kisi.*\\d+.*₺.*ode/i, /\\d+.*₺.*ode.*gerek/i, /\\d+\\s*kisi\\s*icin\\s*\\d+.*₺/i, /yani\\s*toplam/i, /hesapla/i];\nif (calcPatterns.some(p => message.match(p))) {\n  message = '🔥 Kampanyamız: 800₺\\'ye 30dk masaj + sınırsız spa kullanımı (havuz, hamam, sauna, buhar odası)!\\n\\n🎁 4 kişi gelirse 5. kişiye aynı masaj HEDİYE!\\n\\n📞 Detaylı bilgi ve rezervasyon: 0326 502 58 58';\n}\n\nconst originalText = enrichData.text?.toLowerCase() || '';\nif ((originalText.includes('pilates') || originalText.includes('reformer')) && message.match(/1\\s*ders.*\\d+|\\d+.*ders.*\\d+₺/i)) {\n  message = '🧘 Reformer Pilates: 3500 TL/ay\\n\\n📞 Detaylı bilgi ve kayıt: 0326 502 58 58';\n}\nif (originalText.includes('taekwondo') && message.match(/1\\s*ders.*\\d+|\\d+.*ders.*\\d+₺/i)) {\n  message = '🥋 Taekwondo Kursu: 1500 TL/ay (8+ yaş)\\n\\n📞 Kayıt ve bilgi: 0326 502 58 58';\n}\n\nmessage = message.substring(0, 1000);\nconst responseTime = Date.now() - enrichData.startTime;\n\nreturn [{ json: { senderId: enrichData.senderId, message, intent: enrichData.intent, responseTime, originalText: enrichData.text, safetyDecision: enrichData.safetyDecision } }];"
       },
       "id": "format-response",
       "name": "Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2700, 550]
+      "position": [3100, 500]
     },
     {
       "parameters": {
@@ -264,7 +310,7 @@
       "name": "Send Instagram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [2900, 500],
+      "position": [3300, 500],
       "credentials": { "httpHeaderAuth": { "id": "instagram-business-api", "name": "Instagram Business API" } }
     },
     {
@@ -275,17 +321,17 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ instagramId: $json.senderId, direction: 'outbound', messageText: $json.message, intent: $json.intent, responseTime: $json.responseTime }) }}",
+        "jsonBody": "={{ JSON.stringify({ instagramId: $json.senderId, direction: 'outbound', messageText: $json.message, intent: $json.intent, responseTime: $json.responseTime, safetyDecision: $json.safetyDecision || 'N/A' }) }}",
         "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
       },
       "id": "log",
       "name": "Log Interaction",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [3100, 500],
+      "position": [3500, 500],
       "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
     },
-    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ok", "name": "OK Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [3300, 500] }
+    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ok", "name": "OK Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [3700, 500] }
   ],
   "connections": {
     "Webhook": { "main": [[{ "node": "Parse Instagram", "type": "main", "index": 0 }]] },
@@ -307,12 +353,16 @@
     "Fetch Knowledge": { "main": [[{ "node": "Merge Data", "type": "main", "index": 1 }]] },
     "Fetch Prompt": { "main": [[{ "node": "Merge Data", "type": "main", "index": 2 }]] },
     "Merge Data": { "main": [[{ "node": "Enrich Context", "type": "main", "index": 0 }]] },
-    "Enrich Context": { "main": [[{ "node": "AI Switch", "type": "main", "index": 0 }]] },
-    "AI Switch": { "main": [
-      [{ "node": "Format Skip", "type": "main", "index": 0 }],
-      [{ "node": "AI Agent", "type": "main", "index": 0 }]
+    "Enrich Context": { "main": [[{ "node": "Safety Gate Classifier", "type": "main", "index": 0 }]] },
+    "Safety Gate Classifier": { "main": [[{ "node": "Parse Safety Gate", "type": "main", "index": 0 }]] },
+    "Parse Safety Gate": { "main": [[{ "node": "Safety Router", "type": "main", "index": 0 }]] },
+    "Safety Router": { "main": [
+      [{ "node": "AI Agent", "type": "main", "index": 0 }],
+      [{ "node": "Format Block", "type": "main", "index": 0 }],
+      [{ "node": "Format Unsure", "type": "main", "index": 0 }]
     ]},
-    "Format Skip": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Format Block": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
+    "Format Unsure": { "main": [[{ "node": "Send Instagram", "type": "main", "index": 0 }]] },
     "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
     "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
     "AI Agent": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },

@@ -241,7 +241,7 @@ VALUES
 -- Requirements: 3.1, 3.2, 4.1
 CREATE TABLE IF NOT EXISTS knowledge_base (
   id TEXT PRIMARY KEY,
-  category TEXT NOT NULL CHECK(category IN ('services', 'pricing', 'hours', 'policies', 'contact', 'general')),
+  category TEXT NOT NULL CHECK(category IN ('services', 'pricing', 'hours', 'policies', 'contact', 'general', 'faq')),
   key_name TEXT NOT NULL,
   value TEXT NOT NULL,
   description TEXT,

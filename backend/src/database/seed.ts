@@ -415,6 +415,70 @@ export function seedDatabase(db: Database.Database): void {
       description: 'Hediye çeki bilgisi',
       is_active: 1,
       version: 1
+    },
+    // FAQ entries (Sıkça Sorulan Sorular)
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'kadinlar_gunu',
+      value: 'Tesisimiz karma hizmet verir. Kadınlara özel gün bulunmamaktadır. Daha sakin saatleri öğrenmek için tesisimizi arayıp yoğunluğun az olduğu saatleri sorabilirsiniz.',
+      description: 'Kadınlar günü var mı, kadınlara özel gün, hamam sauna kadınlar günü',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'kese_kopuk_personel',
+      value: 'Hamam kese ve köpük hizmeti kadın spa personelimiz tarafından yapılır.',
+      description: 'Kese köpük kim yapıyor, hamam personeli, kadın personel',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'personal_trainer',
+      value: 'Birebir personal trainer hizmetimiz vardır. Hedefinize göre plan ve uygun saat bilgisi için bilgi alabilirsiniz.',
+      description: 'PT var mı, personal trainer, birebir antrenör, zayıflama takip',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'yaninda_ne_getir',
+      value: 'Özel bir şey getirmeniz gerekmez. Havlu, terlik ve ihtiyaç duyacağınız temel malzemeler tesisimizde bulunur. Havuz kullanımı için bone zorunludur. Boneniz yoksa tesisimizden temin edebilirsiniz.',
+      description: 'Yanımda ne getireyim, havlu terlik gerekiyor mu, bone, havuz hazırlık',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'terapist_yasal_belge',
+      value: "Eform Spa'da görev yapan terapistlerimiz yasal çalışma izinlerine sahiptir. Hijyen ve hizmet standartlarına uygun şekilde çalışırız.",
+      description: 'Terapist yasal mı, çalışma izni, belge sertifika var mı',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'randevu_nasil',
+      value: 'Randevu telefonla veya WhatsApp üzerinden oluşturulur. Şu an online rezervasyon sistemimiz yok.',
+      description: 'Randevu nasıl alınır, Instagram randevu, online rezervasyon, WhatsApp telefon',
+      is_active: 1,
+      version: 1
+    },
+    {
+      id: randomUUID(),
+      category: 'faq',
+      key_name: 'ileri_tarih_randevu',
+      value: 'Günlük randevu sistemi ile çalışırız. Aynı gün içinde uygun saat için bilgi alabilirsiniz. Spa hizmet saatleri: 13:00 ile 23:00',
+      description: 'İleri tarih randevu, yarın haftaya randevu, günlük randevu, spa saatleri',
+      is_active: 1,
+      version: 1
     }
   ];
 

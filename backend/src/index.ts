@@ -33,6 +33,7 @@ import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.
 import { createIntegrationRoutes } from './routes/integrationRoutes.js';
 import { createAIPromptsRoutes } from './routes/aiPromptsRoutes.js';
 import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsRoutes.js';
+import { createWorkflowTestRoutes } from './routes/workflowTestRoutes.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -252,6 +253,7 @@ app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
 app.use('/webhook/instagram', createInstagramWebhookRoutes());
 app.use('/api/integrations/instagram', createInstagramIntegrationRoutes(db));
+app.use('/api/workflow-test', createWorkflowTestRoutes(dbService));
 
 // Serve frontend static files in production - use centralized config
 if (process.env.NODE_ENV === 'production') {

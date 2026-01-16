@@ -107,6 +107,8 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
         'kids': ['services', 'hours', 'pricing'],
         'general_info': ['pricing', 'services', 'contact'],
         'thanks': ['contact'],
+        'faq': ['faq', 'policies'],
+        'policies': ['policies', 'faq'],
       };
 
       // Determine which categories to return

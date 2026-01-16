@@ -149,6 +149,14 @@ function App() {
               }
             />
             <Route
+              path="/admin/workflow-test"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.WorkflowTestPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/services"
               element={
                 <ProtectedRoute>

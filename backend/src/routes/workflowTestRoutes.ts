@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { randomUUID } from 'crypto';
 import { KnowledgeBaseService } from '../services/KnowledgeBaseService.js';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
@@ -21,7 +20,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     const startTime = Date.now();
     
     try {
-      const { message, senderId = 'test-user-' + randomUUID().slice(0, 8) } = req.body;
+      const { message } = req.body;
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({ error: 'Message is required' });
@@ -142,7 +141,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     const startTime = Date.now();
     
     try {
-      const { message, senderId = 'test-user-' + randomUUID().slice(0, 8) } = req.body;
+      const { message } = req.body;
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({ error: 'Message is required' });
@@ -257,7 +256,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
    * GET /api/workflow-test/knowledge
    * Get all knowledge base entries for debugging
    */
-  router.get('/knowledge', apiKeyAuth, (req: Request, res: Response) => {
+  router.get('/knowledge', apiKeyAuth, (_req: Request, res: Response) => {
     try {
       const knowledge = knowledgeBaseService.getContext();
       res.json({
@@ -274,7 +273,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
    * GET /api/workflow-test/intents
    * List all supported intents and their keywords
    */
-  router.get('/intents', (req: Request, res: Response) => {
+  router.get('/intents', (_req: Request, res: Response) => {
     res.json({
       intents: {
         faq: {
@@ -405,19 +404,18 @@ function detectIntent(text: string): { intent: string; normalizedText: string } 
  * Build knowledge context based on intent
  * Same logic as n8n workflow Enrich Context node
  */
-function buildKnowledgeContext(intent: string, knowledge: Record<string, Record<string, string>>, text: string): string {
+function buildKnowledgeContext(intent: string, knowledge: Record<string, Record<string, string>>, _text: string): string {
   let knowledgeContext = '\n\n=== BILGILER (SADECE BUNLARI KULLAN, ASLA UYDURMA!) ===';
-  const normalizedText = text.toLowerCase();
 
   // FAQ CONTEXT
   if ((intent === 'faq' || intent === 'policies') && knowledge.faq) {
     knowledgeContext += '\n\n❓ SIKCA SORULAN SORULAR:';
-    Object.entries(knowledge.faq).forEach(([key, v]) => { knowledgeContext += '\n• ' + v; });
+    Object.entries(knowledge.faq).forEach(([_key, v]) => { knowledgeContext += '\n• ' + v; });
   }
 
   if (intent === 'policies' && knowledge.policies) {
     knowledgeContext += '\n\n📋 KURALLAR VE POLITIKALAR:';
-    Object.entries(knowledge.policies).forEach(([key, v]) => { knowledgeContext += '\n• ' + v; });
+    Object.entries(knowledge.policies).forEach(([_key, v]) => { knowledgeContext += '\n• ' + v; });
   }
 
   if (intent === 'general_info' || intent === 'pricing') {

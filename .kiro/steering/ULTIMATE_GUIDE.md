@@ -244,9 +244,29 @@ grep NODE_ENV ~/spa-kiosk/backend/.env  # NODE_ENV=production
 
 ### Database-Driven AI Context
 - Knowledge base entries stored in `knowledge_base` table
-- 6 categories: services, pricing, hours, policies, contact, general
+- **7 categories:** services, pricing, hours, policies, contact, general, **faq** ✅ NEW
 - All content in Turkish for AI workflows
 - Seeded automatically on database initialization
+
+### FAQ Category (S.S.S.) ✅ Added 2026-01-16
+7 FAQ entries for common customer questions:
+
+| Key | Question | Answer Summary |
+|-----|----------|----------------|
+| `kadinlar_gunu` | Kadınlar günü var mı? | Karma hizmet, kadınlara özel gün yok |
+| `kese_kopuk_personel` | Kese köpük kim yapıyor? | Kadın spa personeli |
+| `personal_trainer` | PT var mı? | Birebir PT hizmeti var |
+| `yaninda_ne_getir` | Ne getirmeliyim? | Havlu/terlik tesiste, bone zorunlu |
+| `terapist_yasal_belge` | Terapistler yasal mı? | Yasal çalışma izinleri var |
+| `randevu_nasil` | Randevu nasıl? | Telefon/WhatsApp ile |
+| `ileri_tarih_randevu` | İleri tarih randevu? | Günlük sistem, aynı gün |
+
+### PT (Personal Trainer) Pricing ✅ Added 2026-01-16
+| Package | Price |
+|---------|-------|
+| 12 saat | 8,000 TL |
+| 24 saat | 14,000 TL |
+| 36 saat | 20,000 TL |
 
 ---
 
@@ -524,14 +544,24 @@ Reliable keyword matching with Turkish character normalization:
 
 | Intent | Keywords (normalized) | Knowledge Context |
 |--------|----------------------|-------------------|
-| `policies` | yas.*sinir, kural, yasak | Policies data |
-| `pricing` | fiyat, ucret, ne kadar | Campaign + prices |
-| `membership` | uyelik, fitness, spor, gym | Membership + facility |
+| `faq` | kadin.*gun, kese.*kopuk, personal.*trainer, pt, yaninda.*getir, terapist.*yasal, randevu.*nasil, ileri.*tarih | FAQ data ✅ NEW |
+| `policies` | yas.*sinir, kural, yasak | Policies + FAQ data |
+| `pricing` | fiyat, ucret, ne kadar | Campaign + prices + PT pricing |
+| `membership` | uyelik, fitness, spor, gym | Membership + facility + PT pricing |
 | `location` | adres, nerede, konum, yer.*nere | Address + phone |
 | `hours` | saat, acik, kapali | Working hours |
 | `services` | masaj, spa, hamam | Services + facility |
 | `kids` | cocuk.*kurs, jimnastik | Kids courses |
 | `general_info` | bilgi, merhaba, selam | Campaign + prices + phone |
+
+### ⚠️ FAQ Intent Forces ALLOW (Safety Gate Bypass)
+FAQ questions are legitimate business inquiries - they bypass Safety Gate:
+```javascript
+// In Enrich Context node
+if (intent === 'faq') {
+  safetyOverride = 'ALLOW'; // Skip Safety Gate for FAQ
+}
+```
 
 ### ⚠️ CRITICAL: Turkish Character Handling
 ```javascript
@@ -577,6 +607,17 @@ ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.137 "n8n list:w
 ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.137 "n8n update:workflow --id=<ID> --active=true 2>/dev/null; sudo systemctl restart n8n"
 ```
 
+### ⚠️ CRITICAL: n8n Workflow Import Gotcha
+**Problem:** Importing workflow with same name doesn't update existing workflow!  
+**Solution:** Rename workflow to force new import:
+```javascript
+// In workflow JSON, change name:
+"name": "Instagram Dual AI FAQ v2"  // Add version suffix
+```
+Then import creates NEW workflow instead of silently failing.
+
+**n8n Database Location:** `~/.n8n/database.sqlite` (NOT database.sqlite3)
+
 **Files:** `n8n-workflows/workflows-v2/instagram-dual-ai.json`  
 **Docs:** `n8n-workflows/DYNAMIC_AUTOMATION_INTEGRATION.md`
 
@@ -597,6 +638,9 @@ This guide has solved:
 - ✅ Turkish character normalization for keyword matching (2026-01-06)
 - ✅ Performance optimization - 85% faster responses (2026-01-06)
 - ✅ Safety Gate for inappropriate content blocking (2026-01-13)
+- ✅ FAQ category with 7 S.S.S. entries (2026-01-16)
+- ✅ PT pricing integration (2026-01-16)
+- ✅ n8n workflow import gotcha documented (2026-01-16)
 
 **Result:** 100% test pass rate, production-ready system
 
@@ -678,15 +722,16 @@ DELETE FROM knowledge_base WHERE category = 'pricing' AND key_name = 'old_item';
 ## 🗄️ Database Seeding
 
 ### Knowledge Base Auto-Seeding
-The database automatically seeds 26 Turkish knowledge base entries on first initialization:
+The database automatically seeds **33+ Turkish knowledge base entries** on first initialization:
 
-**Categories:**
-- **Services** (3): Massage types, spa facilities, packages
-- **Pricing** (4): 60/90min massages, couple/day spa packages
+**Categories (7 total):**
+- **Services** (4): Massage types, spa facilities, packages, PT service
+- **Pricing** (7): 60/90min massages, couple/day spa packages, PT packages (12/24/36 saat)
 - **Hours** (4): Weekday/Sunday hours, holidays, last appointment
 - **Policies** (5): Cancellation, late arrival, payment, age, health
 - **Contact** (5): Phone, WhatsApp, email, address, Instagram
 - **General** (5): Welcome, parking, WiFi, loyalty, gift certificates
+- **FAQ** (7): Kadınlar günü, kese köpük, PT, ne getir, terapist belge, randevu ✅ NEW
 
 **Service Settings:**
 - WhatsApp and Instagram services enabled by default
@@ -706,7 +751,7 @@ The database automatically seeds 26 Turkish knowledge base entries on first init
 
 ---
 
-**Last Updated:** 2026-01-13  
+**Last Updated:** 2026-01-16  
 **Status:** ✅ Active and tested  
-**Coverage:** All critical patterns documented including Safety Gate  
-**Latest:** Instagram Safety Gate workflow (safety-gate-v1) deployed (2026-01-13)
+**Coverage:** All critical patterns documented including Safety Gate + FAQ  
+**Latest:** FAQ category (7 entries) + PT pricing + n8n import fix (2026-01-16)

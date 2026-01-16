@@ -39,8 +39,6 @@ export default function WorkflowTestPage() {
   const [intents, setIntents] = useState<Record<string, IntentInfo> | null>(null);
   const [useFullSimulation, setUseFullSimulation] = useState(false);
 
-  const apiKey = (import.meta.env.VITE_N8N_API_KEY as string) || 'test-key';
-
   const testMessages = [
     { label: 'FAQ: Kadınlar günü', message: 'kadınlar günü var mı' },
     { label: 'FAQ: Kese köpük', message: 'kese köpük kim yapıyor' },
@@ -67,8 +65,8 @@ export default function WorkflowTestPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
         },
+        credentials: 'include', // Include session cookies
         body: JSON.stringify({ message: message.trim() })
       });
 
@@ -88,7 +86,9 @@ export default function WorkflowTestPage() {
 
   const loadIntents = async () => {
     try {
-      const response = await fetch('/api/workflow-test/intents');
+      const response = await fetch('/api/workflow-test/intents', {
+        credentials: 'include'
+      });
       const data = await response.json();
       setIntents(data.intents);
       setShowIntents(true);

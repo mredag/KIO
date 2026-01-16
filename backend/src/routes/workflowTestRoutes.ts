@@ -11,12 +11,22 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const router = Router();
   const knowledgeBaseService = new KnowledgeBaseService(db);
 
+  // Middleware that allows either session auth (admin panel) or API key auth (external)
+  const flexibleAuth = (req: Request, res: Response, next: Function) => {
+    // Check session auth first (for admin panel)
+    if (req.session && (req.session as { isAuthenticated?: boolean }).isAuthenticated) {
+      return next();
+    }
+    // Fall back to API key auth
+    return apiKeyAuth(req, res, next);
+  };
+
   /**
    * POST /api/workflow-test/simulate
    * Simulates the Instagram workflow processing
    * Returns what the AI would respond with
    */
-  router.post('/simulate', apiKeyAuth, async (req: Request, res: Response) => {
+  router.post('/simulate', flexibleAuth, async (req: Request, res: Response) => {
     const startTime = Date.now();
     
     try {
@@ -137,7 +147,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
    * Full simulation with actual OpenRouter AI call
    * Requires OPENROUTER_API_KEY in environment
    */
-  router.post('/simulate-full', apiKeyAuth, async (req: Request, res: Response) => {
+  router.post('/simulate-full', flexibleAuth, async (req: Request, res: Response) => {
     const startTime = Date.now();
     
     try {
@@ -256,7 +266,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
    * GET /api/workflow-test/knowledge
    * Get all knowledge base entries for debugging
    */
-  router.get('/knowledge', apiKeyAuth, (_req: Request, res: Response) => {
+  router.get('/knowledge', flexibleAuth, (_req: Request, res: Response) => {
     try {
       const knowledge = knowledgeBaseService.getContext();
       res.json({

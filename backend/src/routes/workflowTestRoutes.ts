@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { KnowledgeBaseService } from '../services/KnowledgeBaseService.js';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
@@ -12,7 +12,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const knowledgeBaseService = new KnowledgeBaseService(db);
 
   // Middleware that allows either session auth (admin panel) or API key auth (external)
-  const flexibleAuth = (req: Request, res: Response, next: Function) => {
+  const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {
     // Check session auth first (for admin panel)
     if (req.session && (req.session as { isAuthenticated?: boolean }).isAuthenticated) {
       return next();

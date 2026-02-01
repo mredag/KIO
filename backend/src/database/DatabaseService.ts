@@ -27,6 +27,14 @@ export class DatabaseService {
   }
 
   /**
+   * Get the raw database instance
+   * Used by services that need direct database access
+   */
+  getDb(): Database.Database {
+    return this.db;
+  }
+
+  /**
    * Execute a function within a transaction
    * Ensures atomicity for multi-step operations
    */

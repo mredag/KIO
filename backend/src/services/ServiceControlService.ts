@@ -87,6 +87,42 @@ export class ServiceControlService {
   }
 
   /**
+   * Get blocking system status for a service
+   */
+  getBlockingEnabled(serviceName: string): boolean {
+    const service = this.getStatus(serviceName);
+    if (!service || !service.config) {
+      return false; // Default: blocking disabled
+    }
+
+    try {
+      const config = JSON.parse(service.config);
+      return config.blocking_enabled === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Enable or disable blocking system for a service
+   */
+  setBlockingEnabled(serviceName: string, enabled: boolean): ServiceStatus {
+    const service = this.getStatus(serviceName);
+    let config: Record<string, any> = {};
+
+    if (service?.config) {
+      try {
+        config = JSON.parse(service.config);
+      } catch {
+        config = {};
+      }
+    }
+
+    config.blocking_enabled = enabled;
+    return this.updateConfig(serviceName, config);
+  }
+
+  /**
    * Update last activity timestamp for a service
    * Called when interactions are logged
    * Requirements: 9.1

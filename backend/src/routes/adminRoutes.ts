@@ -1444,5 +1444,172 @@ export function createAdminRoutes(
     }
   });
 
+  // ============================================
+  // BLOCKED USERS MANAGEMENT
+  // ============================================
+
+  /**
+   * GET /api/admin/blocked-users
+   * Get all blocked users
+   */
+  router.get('/blocked-users', authMiddleware, async (_req: Request, res: Response) => {
+    try {
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db.getDb());
+      
+      const users = blockService.getBlockedUsers();
+      
+      res.json({
+        count: users.length,
+        users
+      });
+    } catch (error) {
+      console.error('[Admin] Error fetching blocked users:', error);
+      res.status(500).json({ error: 'Failed to fetch blocked users' });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/blocked-users/:platform/:platformUserId
+   * Unblock a user
+   */
+  router.delete('/blocked-users/:platform/:platformUserId', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db.getDb());
+      
+      const unblocked = blockService.unblockUser(platform, platformUserId);
+      
+      if (unblocked) {
+        db.createLog({
+          level: 'info',
+          message: 'User unblocked',
+          details: { platform, platformUserId, admin: req.session?.user?.username }
+        });
+        res.json({ success: true, message: 'User unblocked successfully' });
+      } else {
+        res.json({ success: false, message: 'User was not blocked' });
+      }
+    } catch (error) {
+      console.error('[Admin] Error unblocking user:', error);
+      res.status(500).json({ error: 'Failed to unblock user' });
+    }
+  });
+
+  /**
+   * GET /api/admin/blocked-users/:platform/:platformUserId/history
+   * Get chat history for a blocked user
+   */
+  router.get('/blocked-users/:platform/:platformUserId/history', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db.getDb());
+      
+      const history = blockService.getChatHistory(platform, platformUserId, limit);
+      
+      res.json({
+        platform,
+        platformUserId,
+        count: history.length,
+        messages: history
+      });
+    } catch (error) {
+      console.error('[Admin] Error fetching chat history:', error);
+      res.status(500).json({ error: 'Failed to fetch chat history' });
+    }
+  });
+
+  /**
+   * POST /api/admin/blocked-users/:platform/:platformUserId/permanent
+   * Permanently block a user
+   */
+  router.post('/blocked-users/:platform/:platformUserId/permanent', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db.getDb());
+      
+      blockService.permanentBlock(platform, platformUserId, 'Admin permanent block');
+      
+      db.createLog({
+        level: 'warn',
+        message: 'User permanently blocked',
+        details: { platform, platformUserId, admin: req.session?.user?.username }
+      });
+      
+      res.json({
+        success: true,
+        blocked: true,
+        isPermanent: true,
+        message: 'User permanently blocked'
+      });
+    } catch (error) {
+      console.error('[Admin] Error permanently blocking user:', error);
+      res.status(500).json({ error: 'Failed to permanently block user' });
+    }
+  });
+
+  // ============================================
+  // SUSPICIOUS USERS MANAGEMENT
+  // ============================================
+
+  /**
+   * GET /api/admin/suspicious-users
+   * Get all suspicious users
+   */
+  router.get('/suspicious-users', authMiddleware, async (_req: Request, res: Response) => {
+    try {
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      
+      const users = suspiciousService.getSuspiciousUsers();
+      
+      res.json({
+        count: users.length,
+        users
+      });
+    } catch (error) {
+      console.error('[Admin] Error fetching suspicious users:', error);
+      res.status(500).json({ error: 'Failed to fetch suspicious users' });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/suspicious-users/:platform/:platformUserId
+   * Unflag a suspicious user
+   */
+  router.delete('/suspicious-users/:platform/:platformUserId', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      
+      const unflagged = suspiciousService.unflagUser(platform, platformUserId);
+      
+      if (!unflagged) {
+        res.status(404).json({ error: 'Suspicious user not found' });
+        return;
+      }
+      
+      db.createLog({
+        level: 'info',
+        message: 'User unflagged from suspicious list',
+        details: { platform, platformUserId, admin: req.session?.user?.username }
+      });
+      
+      res.json({ success: true, message: 'User unflagged successfully' });
+    } catch (error) {
+      console.error('[Admin] Error unflagging user:', error);
+      res.status(500).json({ error: 'Failed to unflag user' });
+    }
+  });
+
   return router;
 }

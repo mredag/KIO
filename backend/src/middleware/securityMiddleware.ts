@@ -149,7 +149,8 @@ export const sessionConfig = {
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    // Only require HTTPS if explicitly set - allows HTTP on local network
+    secure: process.env.COOKIE_SECURE === 'true',
     httpOnly: true, // Prevent XSS access to cookie
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: 'lax' as const, // CSRF protection

@@ -100,7 +100,8 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
         intent,
         sentiment,
         aiResponse,
-        responseTime
+        responseTime,
+        username
       } = req.body;
 
       if (!instagramId || !direction || !messageText) {
@@ -114,14 +115,27 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
       const now = new Date().toISOString();
 
       // Upsert customer record FIRST (to satisfy foreign key)
-      db.prepare(`
-        INSERT INTO instagram_customers (instagram_id, last_interaction_at, interaction_count, updated_at)
-        VALUES (?, ?, 1, ?)
-        ON CONFLICT(instagram_id) DO UPDATE SET
-          last_interaction_at = excluded.last_interaction_at,
-          interaction_count = interaction_count + 1,
-          updated_at = excluded.updated_at
-      `).run(instagramId, now, now);
+      // Also update username if provided
+      if (username) {
+        db.prepare(`
+          INSERT INTO instagram_customers (instagram_id, name, last_interaction_at, interaction_count, updated_at)
+          VALUES (?, ?, ?, 1, ?)
+          ON CONFLICT(instagram_id) DO UPDATE SET
+            name = COALESCE(excluded.name, name),
+            last_interaction_at = excluded.last_interaction_at,
+            interaction_count = interaction_count + 1,
+            updated_at = excluded.updated_at
+        `).run(instagramId, username, now, now);
+      } else {
+        db.prepare(`
+          INSERT INTO instagram_customers (instagram_id, last_interaction_at, interaction_count, updated_at)
+          VALUES (?, ?, 1, ?)
+          ON CONFLICT(instagram_id) DO UPDATE SET
+            last_interaction_at = excluded.last_interaction_at,
+            interaction_count = interaction_count + 1,
+            updated_at = excluded.updated_at
+        `).run(instagramId, now, now);
+      }
 
       // Insert interaction
       db.prepare(`
@@ -351,6 +365,203 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
     } catch (error) {
       console.error('[Instagram API] Error exporting data:', error);
       res.status(500).json({ error: 'Failed to export data' });
+    }
+  });
+
+  /**
+   * GET /api/integrations/instagram/block/check/:instagramId
+   * Check if a user is currently blocked
+   * Used by n8n workflow before responding
+   */
+  router.get('/block/check/:instagramId', async (req: Request, res: Response) => {
+    try {
+      const { instagramId } = req.params;
+      
+      // Import UserBlockService dynamically
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db);
+      
+      const result = blockService.checkBlock('instagram', instagramId);
+      
+      res.json(result);
+    } catch (error) {
+      console.error('[Instagram API] Error checking block status:', error);
+      res.status(500).json({ error: 'Failed to check block status', isBlocked: false });
+    }
+  });
+
+  /**
+   * POST /api/integrations/instagram/block/:instagramId
+   * Block a user temporarily after inappropriate message
+   * Called by n8n workflow when safety gate returns BLOCK
+   */
+  router.post('/block/:instagramId', async (req: Request, res: Response) => {
+    try {
+      const { instagramId } = req.params;
+      const { reason } = req.body;
+      
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db);
+      
+      const block = blockService.blockUser('instagram', instagramId, reason || 'Inappropriate message');
+      
+      // Calculate duration in minutes
+      const expiresAt = new Date(block.expiresAt);
+      const durationMinutes = Math.ceil((expiresAt.getTime() - Date.now()) / 60000);
+      
+      console.log(`[Instagram API] User ${instagramId} blocked for ${durationMinutes} minutes (offense #${block.blockCount})`);
+      
+      res.json({
+        success: true,
+        blocked: true,
+        expiresAt: block.expiresAt,
+        durationMinutes,
+        blockCount: block.blockCount,
+        message: `User blocked for ${durationMinutes} minutes`
+      });
+    } catch (error) {
+      console.error('[Instagram API] Error blocking user:', error);
+      res.status(500).json({ error: 'Failed to block user' });
+    }
+  });
+
+  /**
+   * DELETE /api/integrations/instagram/block/:instagramId
+   * Manually unblock a user (admin action)
+   */
+  router.delete('/block/:instagramId', async (req: Request, res: Response) => {
+    try {
+      const { instagramId } = req.params;
+      
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db);
+      
+      const unblocked = blockService.unblockUser('instagram', instagramId);
+      
+      if (unblocked) {
+        console.log(`[Instagram API] User ${instagramId} manually unblocked`);
+        res.json({ success: true, message: 'User unblocked successfully' });
+      } else {
+        res.json({ success: false, message: 'User was not blocked' });
+      }
+    } catch (error) {
+      console.error('[Instagram API] Error unblocking user:', error);
+      res.status(500).json({ error: 'Failed to unblock user' });
+    }
+  });
+
+  /**
+   * GET /api/integrations/instagram/blocked-users
+   * Get list of currently blocked users
+   */
+  router.get('/blocked-users', async (_req: Request, res: Response) => {
+    try {
+      const { UserBlockService } = await import('../services/UserBlockService.js');
+      const blockService = new UserBlockService(db);
+      
+      const blockedUsers = blockService.getBlockedUsers('instagram');
+      
+      res.json({
+        count: blockedUsers.length,
+        users: blockedUsers
+      });
+    } catch (error) {
+      console.error('[Instagram API] Error fetching blocked users:', error);
+      res.status(500).json({ error: 'Failed to fetch blocked users' });
+    }
+  });
+
+  // ==================== SUSPICIOUS USERS ====================
+
+  /**
+   * GET /api/integrations/instagram/suspicious/check/:instagramId
+   * Check if a user is flagged as suspicious
+   */
+  router.get('/suspicious/check/:instagramId', async (req: Request, res: Response) => {
+    try {
+      const { instagramId } = req.params;
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db);
+      
+      const result = suspiciousService.checkSuspicious('instagram', instagramId);
+      res.json(result);
+    } catch (error) {
+      console.error('[Instagram API] Error checking suspicious status:', error);
+      res.status(500).json({ error: 'Failed to check suspicious status', isSuspicious: false });
+    }
+  });
+
+  /**
+   * POST /api/integrations/instagram/suspicious/flag/:instagramId
+   * Flag a user as suspicious
+   */
+  router.post('/suspicious/flag/:instagramId', async (req: Request, res: Response) => {
+    try {
+      const { instagramId } = req.params;
+      const { reason } = req.body;
+      
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db);
+      
+      const user = suspiciousService.flagUser('instagram', instagramId, reason || 'Inappropriate message');
+      
+      console.log(`[Instagram API] User ${instagramId} flagged as suspicious (offense #${user.offenseCount})`);
+      
+      res.json({
+        success: true,
+        flagged: true,
+        offenseCount: user.offenseCount,
+        message: `User flagged as suspicious (offense #${user.offenseCount})`
+      });
+    } catch (error) {
+      console.error('[Instagram API] Error flagging user:', error);
+      res.status(500).json({ error: 'Failed to flag user' });
+    }
+  });
+
+  /**
+   * DELETE /api/integrations/instagram/suspicious/unflag/:instagramId
+   * Remove suspicious flag from user
+   */
+  router.delete('/suspicious/unflag/:instagramId', async (req: Request, res: Response) => {
+    try {
+      const { instagramId } = req.params;
+      
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db);
+      
+      const unflagged = suspiciousService.unflagUser('instagram', instagramId);
+      
+      if (unflagged) {
+        console.log(`[Instagram API] User ${instagramId} unflagged`);
+        res.json({ success: true, message: 'User unflagged successfully' });
+      } else {
+        res.json({ success: false, message: 'User was not flagged' });
+      }
+    } catch (error) {
+      console.error('[Instagram API] Error unflagging user:', error);
+      res.status(500).json({ error: 'Failed to unflag user' });
+    }
+  });
+
+  /**
+   * GET /api/integrations/instagram/suspicious-users
+   * Get list of suspicious users
+   */
+  router.get('/suspicious-users', async (_req: Request, res: Response) => {
+    try {
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db);
+      
+      const users = suspiciousService.getSuspiciousUsers('instagram');
+      
+      res.json({
+        count: users.length,
+        users
+      });
+    } catch (error) {
+      console.error('[Instagram API] Error fetching suspicious users:', error);
+      res.status(500).json({ error: 'Failed to fetch suspicious users' });
     }
   });
 

@@ -157,6 +157,22 @@ function App() {
               }
             />
             <Route
+              path="/admin/blocked-users"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.BlockedUsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/suspicious-users"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.SuspiciousUsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/services"
               element={
                 <ProtectedRoute>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Send, Bot, AlertTriangle, CheckCircle, XCircle, HelpCircle, Loader2, Info } from 'lucide-react';
+import { Send, Bot, AlertTriangle, CheckCircle, XCircle, HelpCircle, Loader2, Info, Zap } from 'lucide-react';
+import AdminLayout from '../../layouts/AdminLayout';
 
 interface TestResult {
   status: string;
@@ -8,19 +9,22 @@ interface TestResult {
   intent: string;
   safetyDecision: string;
   safetyReason?: string;
-  processingTime: number;
+  processingTime?: number;
+  responseTime?: number;
   debug?: {
-    normalizedText: string;
-    detectedIntent: string;
-    knowledgeCategories: string[];
-    contextLength: number;
+    normalizedText?: string;
+    detectedIntent?: string;
+    knowledgeCategories?: string[];
+    contextLength?: number;
     faqEntries?: string[];
+    knowledgeContextLength?: number;
   };
   aiContext?: {
     systemPrompt: string;
     knowledgeContext: string;
     userMessage: string;
   };
+  originalMessage?: string;
 }
 
 interface IntentInfo {
@@ -37,7 +41,8 @@ export default function WorkflowTestPage() {
   const [error, setError] = useState<string | null>(null);
   const [showIntents, setShowIntents] = useState(false);
   const [intents, setIntents] = useState<Record<string, IntentInfo> | null>(null);
-  const [useFullSimulation, setUseFullSimulation] = useState(false);
+  const [testMode, setTestMode] = useState<'local' | 'n8n'>('n8n');
+  const n8nUrl = '/api/workflow-test/n8n';
 
   const testMessages = [
     { label: 'FAQ: Kadınlar günü', message: 'kadınlar günü var mı' },
@@ -60,23 +65,51 @@ export default function WorkflowTestPage() {
     setResult(null);
 
     try {
-      const endpoint = useFullSimulation ? '/api/workflow-test/simulate-full' : '/api/workflow-test/simulate';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Include session cookies
-        body: JSON.stringify({ message: message.trim() })
-      });
+      let response;
+      
+      if (testMode === 'n8n') {
+        // Call the real n8n workflow via backend proxy (avoids CSP issues)
+        response = await fetch(n8nUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ message: message.trim() })
+        });
+      } else {
+        // Local simulation (backend only)
+        response = await fetch('/api/workflow-test/simulate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ message: message.trim() })
+        });
+      }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Test failed');
+        const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      setResult(data);
+      
+      // Normalize response format (n8n returns slightly different structure)
+      const normalizedResult: TestResult = {
+        status: data.status || (data.response ? 'success' : 'error'),
+        response: data.response || data.message || 'No response',
+        intent: data.intent || 'unknown',
+        safetyDecision: data.safetyDecision || 'N/A',
+        safetyReason: data.safetyReason,
+        processingTime: data.processingTime || data.responseTime,
+        responseTime: data.responseTime,
+        debug: data.debug,
+        originalMessage: data.originalMessage
+      };
+      
+      setResult(normalizedResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -130,7 +163,8 @@ export default function WorkflowTestPage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <AdminLayout>
+      <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Bot className="w-7 h-7" />
@@ -182,16 +216,30 @@ export default function WorkflowTestPage() {
           </button>
         </div>
         
-        <div className="mt-3 flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useFullSimulation}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseFullSimulation(e.target.checked)}
-              className="w-4 h-4 rounded"
-            />
-            <span className="text-sm">Full simulation (calls OpenRouter AI)</span>
-          </label>
+        <div className="mt-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setTestMode('n8n')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                testMode === 'n8n' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              Real n8n Workflow
+            </button>
+            <button
+              onClick={() => setTestMode('local')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                testMode === 'local' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              Local Simulation
+            </button>
+          </div>
           <button
             onClick={loadIntents}
             className="text-sm text-blue-600 hover:underline"
@@ -199,6 +247,15 @@ export default function WorkflowTestPage() {
             View all intents →
           </button>
         </div>
+        
+        {testMode === 'n8n' && (
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-blue-800">
+              <Zap className="w-4 h-4" />
+              <span className="font-medium">Real AI Mode:</span> Messages go through the actual n8n workflow on Pi (via backend proxy)
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error Display */}
@@ -214,7 +271,7 @@ export default function WorkflowTestPage() {
           <div className="flex items-center gap-2 mb-3">
             {getStatusIcon(result.status)}
             <span className="font-medium capitalize">{result.status}</span>
-            <span className="text-sm text-gray-500">• {result.processingTime}ms</span>
+            <span className="text-sm text-gray-500">• {result.responseTime || result.processingTime}ms</span>
             <span className="ml-auto px-2 py-0.5 bg-white rounded text-sm">
               Intent: <strong>{result.intent}</strong>
             </span>
@@ -299,5 +356,6 @@ export default function WorkflowTestPage() {
         </div>
       )}
     </div>
+    </AdminLayout>
   );
 }

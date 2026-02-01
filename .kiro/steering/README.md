@@ -54,8 +54,11 @@ Only 2 additional files for specific scenarios:
 - Use n8n CLI commands, not browser automation
 - See `n8n-development.md` for full details
 - **WhatsApp:** `whatsapp-dynamic-automation.json`
-- **Instagram:** `instagram-dual-ai.json` (FAQ v2 - with FAQ intent detection)
+- **Instagram:** `instagram-dual-ai-suspicious-v1.json` (v9 with Suspicious User System!)
+- **Test Channel:** `/admin/workflow-test` - test AI without Instagram
+- **Suspicious Users:** `/admin/suspicious-users` - view/unflag suspicious users ✅ NEW
 - **⚠️ Import gotcha:** Rename workflow to force new import (same name = silent fail)
+- **⚠️ Test Channel:** When updating Instagram workflow, maintain test webhook compatibility!
 
 ---
 
@@ -123,12 +126,16 @@ These steering files have solved:
 - ✅ Performance optimization - 85% faster (2026-01-06)
 - ✅ FAQ category (7 S.S.S. entries) + PT pricing (2026-01-16)
 - ✅ n8n workflow import gotcha fix (2026-01-16)
+- ✅ Workflow Test Channel - test AI without Instagram (2026-01-16)
+- ✅ AI Hint Pattern - context-aware guidance for ambiguous questions (2026-01-16)
+- ✅ Women's swimming course knowledge base entry (2026-01-16)
+- ✅ Suspicious User System - track repeat offenders (2026-01-18)
 
 **Result:** 100% test pass rate, production-ready system
 
 ---
 
-**Last Updated:** 2026-01-16  
+**Last Updated:** 2026-01-18  
 **Status:** ✅ Streamlined and optimized  
 **Total Files:** 6 (1 ultimate + 4 specialized + 1 readme)  
-**Coverage:** All critical patterns consolidated including FAQ
+**Coverage:** All critical patterns consolidated including FAQ + Test Channel + AI Hints + Suspicious Users

@@ -157,5 +157,85 @@ export function createAdminServiceControlRoutes(db: DatabaseService): Router {
     }
   });
 
+  /**
+   * POST /api/admin/services/:name/blocking/toggle
+   * Toggle blocking system on/off for a service
+   */
+  router.post('/:name/blocking/toggle', authMiddleware, validateServiceName, handleValidationErrors, (req: Request, res: Response) => {
+    try {
+      const { name } = req.params;
+
+      // Check if service exists
+      const existing = serviceControlService.getStatus(name);
+      if (!existing) {
+        res.status(404).json({ error: i18n.t('errors:notFound') });
+        return;
+      }
+
+      // Get current blocking state
+      const currentBlockingEnabled = serviceControlService.getBlockingEnabled(name);
+      
+      // Determine new blocking state
+      const newBlockingState = req.body.enabled !== undefined 
+        ? req.body.enabled 
+        : !currentBlockingEnabled;
+
+      const service = serviceControlService.setBlockingEnabled(name, newBlockingState);
+
+      // Log blocking toggle
+      db.createLog({
+        level: 'info',
+        message: `Blocking system ${newBlockingState ? 'enabled' : 'disabled'} for ${name}`,
+        details: { 
+          serviceName: name,
+          blockingEnabled: newBlockingState,
+          user: req.session.user?.username 
+        },
+      });
+
+      // Transform snake_case to camelCase for frontend
+      const transformedService = {
+        serviceName: service.service_name,
+        enabled: service.enabled === 1,
+        lastActivity: service.last_activity,
+        messageCount24h: service.message_count_24h,
+        config: service.config ? JSON.parse(service.config) : null,
+        updatedAt: service.updated_at,
+      };
+
+      res.json(transformedService);
+    } catch (error) {
+      console.error('Error toggling blocking system:', error);
+      res.status(500).json({ error: i18n.t('errors:updateFailed') });
+    }
+  });
+
+  /**
+   * GET /api/admin/services/:name/blocking/status
+   * Get blocking system status for a service
+   */
+  router.get('/:name/blocking/status', authMiddleware, validateServiceName, handleValidationErrors, (req: Request, res: Response) => {
+    try {
+      const { name } = req.params;
+
+      // Check if service exists
+      const existing = serviceControlService.getStatus(name);
+      if (!existing) {
+        res.status(404).json({ error: i18n.t('errors:notFound') });
+        return;
+      }
+
+      const blockingEnabled = serviceControlService.getBlockingEnabled(name);
+
+      res.json({ 
+        serviceName: name,
+        blockingEnabled 
+      });
+    } catch (error) {
+      console.error('Error fetching blocking status:', error);
+      res.status(500).json({ error: i18n.t('errors:fetchFailed') });
+    }
+  });
+
   return router;
 }

@@ -39,6 +39,8 @@ export const ServicesPage = lazy(() => import('../pages/admin/ServicesPage'));
 export const KnowledgeBasePage = lazy(() => import('../pages/admin/KnowledgeBasePage'));
 export const AIPromptsPage = lazy(() => import('../pages/admin/AIPromptsPage'));
 export const WorkflowTestPage = lazy(() => import('../pages/admin/WorkflowTestPage'));
+export const BlockedUsersPage = lazy(() => import('../pages/admin/BlockedUsersPage'));
+export const SuspiciousUsersPage = lazy(() => import('../pages/admin/SuspiciousUsersPage'));
 
 // Admin - System
 export const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));

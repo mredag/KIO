@@ -10,16 +10,75 @@ import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const router = Router();
   const knowledgeBaseService = new KnowledgeBaseService(db);
+  
+  // n8n server URL (Pi)
+  const N8N_URL = process.env.N8N_URL || 'http://192.168.1.137:5678';
 
   // Middleware that allows either session auth (admin panel) or API key auth (external)
   const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {
-    // Check session auth first (for admin panel)
-    if (req.session && (req.session as { isAuthenticated?: boolean }).isAuthenticated) {
+    // Check session auth first (for admin panel) - same check as authMiddleware
+    if (req.session && req.session.user) {
       return next();
     }
     // Fall back to API key auth
     return apiKeyAuth(req, res, next);
   };
+
+  /**
+   * POST /api/workflow-test/n8n
+   * Proxy requests to n8n workflow on Pi
+   * Bypasses browser CSP restrictions
+   */
+  router.post('/n8n', flexibleAuth, async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    
+    try {
+      const { message } = req.body;
+
+      if (!message || typeof message !== 'string') {
+        res.status(400).json({ error: 'Message is required' });
+        return;
+      }
+
+      // Forward to n8n test webhook
+      const n8nResponse = await fetch(`${N8N_URL}/webhook/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: message.trim() })
+      });
+
+      if (!n8nResponse.ok) {
+        const errorText = await n8nResponse.text();
+        console.error('[Workflow Test] n8n error:', errorText);
+        res.status(n8nResponse.status).json({ 
+          error: 'n8n request failed',
+          details: errorText,
+          processingTime: Date.now() - startTime
+        });
+        return;
+      }
+
+      const data = await n8nResponse.json() as Record<string, unknown>;
+      
+      // Add processing time if not present
+      if (!data.processingTime) {
+        data.processingTime = Date.now() - startTime;
+      }
+
+      res.json(data);
+
+    } catch (error) {
+      console.error('[Workflow Test] Proxy error:', error);
+      res.status(500).json({ 
+        error: 'Failed to connect to n8n',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        hint: `Make sure n8n is running at ${N8N_URL}`,
+        processingTime: Date.now() - startTime
+      });
+    }
+  });
 
   /**
    * POST /api/workflow-test/simulate

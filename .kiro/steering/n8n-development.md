@@ -1204,6 +1204,32 @@ This prevents confusion when customers say "kupon kullan" multiple times.
 
 Instagram DM AI Agent with **dynamic automation** - combines AI prompts from database, knowledge base integration, and customer data enrichment.
 
+### 🧪 Test Channel (2026-01-16) ✅ NEW
+
+**Test the Instagram workflow without Instagram!** Access via admin panel at `/admin/workflow-test`.
+
+**Production Workflow with Test Channel:**
+- **File:** `instagram-dual-ai-with-test.json`
+- **Workflow ID:** `7Aq6F1fJCAFyDaKB` (on Pi)
+- **Test Webhook:** `/webhook/test`
+- **Instagram Webhook:** `/webhook/instagram`
+
+**How it works:**
+```
+Browser → /api/workflow-test/n8n (backend proxy) → n8n /webhook/test → AI → JSON response
+```
+
+**⚠️ CRITICAL: When updating Instagram workflow, ALWAYS maintain test channel:**
+1. Keep both webhooks (Instagram + Test)
+2. Preserve `isTestMode` flag through all nodes
+3. Keep Output Router that routes test → JSON, Instagram → Send IG
+4. Use correct credential IDs (see ULTIMATE_GUIDE.md)
+
+**Files:**
+- Workflow: `n8n-workflows/workflows-v2/instagram-dual-ai-with-test.json`
+- Backend proxy: `backend/src/routes/workflowTestRoutes.ts`
+- Frontend: `frontend/src/pages/admin/WorkflowTestPage.tsx`
+
 ### Current Production Workflow
 
 **File:** `instagram-dynamic-automation.json`  

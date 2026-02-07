@@ -1,6 +1,6 @@
 {
-  "name": "Instagram Full AI v19",
-  "versionId": "instagram-full-ai-v19",
+  "name": "Instagram Full AI v21",
+  "versionId": "instagram-full-ai-v21",
   "nodes": [
     {
       "parameters": {
@@ -210,7 +210,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role: 'system', content: 'Sen bir intent siniflandirici AI\\'sin. Musteri mesajlarini analiz et ve hangi kategoriye ait oldugunu belirle.\\n\\nKATEGORILER:\\n- faq: Sikca sorulan sorular (kadinlar gunu, kese kopuk, PT, yaninda ne getir, terapist yasal mi, randevu nasil, ileri tarih randevu)\\n- pricing: Fiyat sorulari (masaj fiyatlari, ne kadar, ucret)\\n- membership: Uyelik sorulari (fitness, spor salonu, gym, pilates, aile uyeligi)\\n- hours: Calisma saatleri (saat kacta, acik mi, kapali mi)\\n- location: Adres, konum sorulari\\n- services: Hizmetler (masaj turleri, spa, hamam, sauna)\\n- kids: Cocuk kurslari (yuzme, jimnastik, taekwondo)\\n- policies: Kurallar (yas siniri, iptal politikasi)\\n- booking: Randevu talebi\\n- thanks: Tesekkur mesajlari\\n- general_info: Genel bilgi, merhaba, selam\\n\\nSadece kategori adini yaz. Baska bir sey yazma.' }, { role: 'user', content: $('Process Suspicious Check').first().json.text }], temperature: 0.1, max_tokens: 20 }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o', messages: [{ role: 'system', content: 'Sen bir intent siniflandirici AI\\'sin. Musteri mesajlarini analiz et ve hangi kategoriye ait oldugunu belirle.\\n\\nKATEGORILER:\\n- faq: Sikca sorulan sorular (kadinlar gunu, kese kopuk, PT, yaninda ne getir, terapist yasal mi, randevu nasil, ileri tarih randevu)\\n- pricing: Fiyat sorulari (masaj fiyatlari, ne kadar, ucret, kac para, gunluk giris, tek seans)\\n- membership: Uyelik sorulari (fitness, spor salonu, gym, pilates, aile uyeligi, kuzen dahil mi)\\n- hours: Calisma saatleri (saat kacta, acik mi, kapali mi, yuzme saati, jimnastik saati)\\n- location: Adres, konum sorulari (nerede, yer, konum)\\n- services: Hizmetler (masaj turleri, spa, hamam, sauna, sicak tas, terapist bilgi, tesis genel)\\n- kids: Cocuk kurslari (yuzme, jimnastik, taekwondo, kadin yuzme, cocuk girebilir mi)\\n- policies: Kurallar (yas siniri, iptal politikasi, aile uyeligi kural, kuzen dahil mi)\\n- booking: Randevu talebi\\n- thanks: Tesekkur mesajlari\\n- general_info: Genel bilgi, merhaba, selam\\n\\nONEMLI:\\n- \"PT\" veya \"personal trainer\" sorulari = faq\\n- \"kese kopuk fiyat\" = pricing (fiyat sorusu)\\n- \"gunluk giris\" = pricing (fiyat sorusu)\\n- \"sicak tas\" = services (hizmet sorusu)\\n- \"terapist\" = services (hizmet sorusu)\\n- \"yuzme saati\" = hours (saat sorusu)\\n- \"cocuk girebilir\" = policies (kural sorusu)\\n- \"aile uyeligi kural\" = policies (kural sorusu)\\n- \"kadin yuzme\" = kids (kurs sorusu)\\n\\nSadece kategori adini yaz. Baska bir sey yazma.' }, { role: 'user', content: $('Process Suspicious Check').first().json.text }], temperature: 0.05, max_tokens: 20 }) }}",
         "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
       },
       "id": "ai-intent",
@@ -247,7 +247,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o-mini', messages: [{ role: 'system', content: 'Sen bir guvenlik filtresisin. Mesajlari analiz et ve uygun olup olmadigini belirle.\\n\\nREJECT (reddet) - SADECE asagidaki durumlarda:\\n- Acik cinsel icerik: \"mutlu son\", \"happy ending\", \"mutlu\", \"sonu guzel\", \"sonu keyifli\", \"ekstra servis\", \"ozel masaj\", \"gizli hizmet\", \"VIP masaj\", \"full servis\", \"escort\", \"romantik masaj\", \"sevgili masaji\", \"partner masaji\"\\n- Cinsel ima: \"masaj sonrasi ne olur\", \"odada ne olur\", \"gece masaji\", \"keyifli masaj\"\\n- Personel bilgisi istekleri: \"terapist telefonu\", \"calisanin numarasi\", \"masajci kiz\"\\n- Taciz, tehdit, kufur\\n\\nALLOW (izin ver) - Asagidaki NORMAL sorular:\\n- Fiyat sorulari: masaj fiyati, ucret, ne kadar\\n- Hizmet sorulari: kese kopuk, hamam, sauna, aromaterapi, sicak tas\\n- Saat sorulari: saat kacta, acik mi, kapali mi\\n- Adres sorulari: nerede, adres\\n- Randevu talepleri\\n- Uyelik sorulari: fitness, pilates, gym\\n- Cocuk kurslari: yuzme, jimnastik\\n- Genel sorular: merhaba, tesekkur\\n\\nONEMLI: \"kese kopuk\", \"hamam\", \"sauna\", \"aromaterapi\" gibi normal spa hizmetleri ALLOW olmali!\\n\\nSadece \"ALLOW\" veya \"REJECT\" yaz.' }, { role: 'user', content: $json.text }], temperature: 0.1, max_tokens: 10 }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o', messages: [{ role: 'system', content: 'Sen bir guvenlik filtresisin. Mesajlari analiz et ve uygun olup olmadigini belirle.\\n\\nONEMLI: Bu bir SPA ve SPOR merkezidir. Asagidaki MEŞRU hizmetler var:\\n- MIX masaj (7 farkli teknik, premium hizmet)\\n- Sicak tas masaj\\n- Medikal masaj\\n- Kese kopuk (geleneksel hamam hizmeti)\\n- Klasik masaj\\n- Hamam, sauna, buhar odasi\\n- Fitness, pilates, yuzme kurslari\\n\\nREJECT (reddet) - SADECE asagidaki durumlarda:\\n- Acik cinsel icerik: \"mutlu son\", \"happy ending\", \"mutlu\", \"sonu guzel\", \"sonu keyifli\", \"ekstra servis\", \"ozel masaj\", \"gizli hizmet\", \"VIP masaj\", \"full servis\", \"escort\", \"romantik masaj\", \"sevgili masaji\", \"partner masaji\"\\n- Cinsel ima: \"masaj sonrasi ne olur\", \"odada ne olur\", \"gece masaji\", \"keyifli masaj\"\\n- Personel bilgisi istekleri: \"terapist telefonu\", \"calisanin numarasi\", \"masajci kiz\"\\n- Taciz, tehdit, kufur\\n\\nALLOW (izin ver) - Asagidaki NORMAL sorular KESINLIKSE ALLOW:\\n- Fiyat sorulari: masaj fiyati, ucret, ne kadar, kac para, 60 dakika masaj ucret, gunluk giris\\n- Hizmet sorulari: kese kopuk, hamam, sauna, aromaterapi, sicak tas, terapist bilgi, MIX masaj, medikal masaj\\n- Masaj turleri: klasik masaj, sicak tas masaj, MIX masaj, medikal masaj, kese kopuk\\n- Saat sorulari: saat kacta, acik mi, kapali mi, yuzme saati\\n- Adres sorulari: nerede, adres, yer, konum\\n- Randevu talepleri\\n- Uyelik sorulari: fitness, pilates, gym, aile uyeligi\\n- Cocuk kurslari: yuzme, jimnastik, cocuk girebilir mi\\n- Genel sorular: merhaba, tesekkur, dahil mi, var mi, hakkinda\\n- Kisa takip sorulari: \"yer\", \"dahil mi\", \"var mi\", \"hakkinda bilgi\"\\n\\nKRITIK: \"ucret\", \"fiyat\", \"ne kadar\" gibi kelimeler NORMAL fiyat sorularidir - ALLOW!\\nKRITIK: \"MIX masaj\", \"sicak tas\", \"medikal masaj\" MEŞRU hizmetlerdir - ALLOW!\\n\\nSadece \"ALLOW\" veya \"REJECT\" yaz.' }, { role: 'user', content: $json.text }], temperature: 0.05, max_tokens: 10 }) }}",
         "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
       },
       "id": "ai-safety-check",
@@ -312,8 +312,8 @@
     },
     {
       "parameters": {
-        "model": "openai/gpt-4o-mini",
-        "options": { "temperature": 0.3, "maxTokens": 500 }
+        "model": "openai/gpt-4o",
+        "options": { "temperature": 0.3, "maxTokens": 600 }
       },
       "id": "openrouter-model",
       "name": "OpenRouter Model",

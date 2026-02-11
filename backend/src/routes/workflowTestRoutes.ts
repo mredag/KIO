@@ -12,7 +12,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const knowledgeBaseService = new KnowledgeBaseService(db);
   
   // n8n server URL (Pi)
-  const N8N_URL = process.env.N8N_URL || 'http://192.168.1.137:5678';
+  const N8N_URL = process.env.N8N_URL || 'http://192.168.1.7:5678';
 
   // Middleware that allows either session auth (admin panel) or API key auth (external)
   const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {

@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { homedir, totalmem, freemem } from 'os';
 import type { MCSchedulerService } from '../services/MCSchedulerService.js';
 
 let _db: Database.Database | null = null;
@@ -225,6 +225,7 @@ export function extractConfidence(responseText: string): { confidence: number; r
 router.get('/dashboard', (_req: Request, res: Response) => {
   try {
     const db = getDb();
+    const usedMemoryMb = Number(((totalmem() - freemem()) / (1024 * 1024)).toFixed(2));
     const agents = db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as active FROM mc_agents').get('active') as any;
     const jobs = db.prepare(`SELECT COUNT(*) as total,
       SUM(CASE WHEN status IN ('queued','scheduled') THEN 1 ELSE 0 END) as queue_depth,
@@ -295,8 +296,13 @@ router.get('/dashboard', (_req: Request, res: Response) => {
       console.warn('Approval metrics query failed:', approvalErr.message);
     }
 
-    res.json({ system_status: 'operational', agents, jobs, conversations, cost: { today: costToday, total: costTotal }, recent_events: recentEvents, recent_interactions: recentInteractions, instagram_dm_stats, approval_metrics });
+    res.json({ system_status: 'operational', agents, jobs, conversations, cost: { today: costToday, total: costTotal }, recent_events: recentEvents, recent_interactions: recentInteractions, instagram_dm_stats, approval_metrics, totalMemoryUsageMb: usedMemoryMb });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Backward-compatible typo alias used by some clients
+router.get('/dam-board', (_req: Request, res: Response) => {
+  res.redirect(307, '/api/mc/dashboard');
 });
 
 // GET /dashboard/comparison — Comparison metrics (current vs previous period)

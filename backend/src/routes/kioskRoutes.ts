@@ -72,7 +72,12 @@ export function createKioskRoutes(
    * Requirements: 19.2 - Backend availability check
    */
   router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      version: "1.0.0",
+      gitCommit: "latest"
+    });
   });
 
   /**

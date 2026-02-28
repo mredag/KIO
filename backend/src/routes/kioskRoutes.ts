@@ -87,6 +87,7 @@ export function createKioskRoutes(
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
+      nodeVersion: process.version,
       gitCommit: 'latest',
       uptime: formatUptime(uptimeSeconds),
       environment,

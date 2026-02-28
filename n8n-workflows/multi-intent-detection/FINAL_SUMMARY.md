@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11  
 **Status:** v31 deployed (60% pass rate)  
-**Pi IP:** 192.168.1.7
+**Pi IP:** 192.168.1.9
 
 ---
 
@@ -156,8 +156,8 @@ To reach 90%+ pass rate:
 **Workflow:** Instagram v31 AI-Driven  
 **ID:** NEW_WORKFLOW_V31  
 **Status:** ✅ Active on Pi  
-**Test Webhook:** http://192.168.1.7:5678/webhook/test  
-**Production Webhook:** http://192.168.1.7:5678/webhook/instagram
+**Test Webhook:** http://192.168.1.9:5678/webhook/test  
+**Production Webhook:** http://192.168.1.9:5678/webhook/instagram
 
 ---
 

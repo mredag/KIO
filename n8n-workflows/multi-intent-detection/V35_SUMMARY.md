@@ -3,7 +3,7 @@
 **Date:** 2026-02-11
 **Status:** ✅ Deployed
 **Pass Rate:** 70% (7/10) — same as v34
-**Pi IP:** 192.168.1.7
+**Pi IP:** 192.168.1.9
 
 ---
 

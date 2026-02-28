@@ -3,7 +3,7 @@
 **Date:** 2026-02-11  
 **Status:** ✅ Deployed and Active  
 **Pass Rate:** 60% (6/10) - Same as v31  
-**Pi IP:** 192.168.1.7
+**Pi IP:** 192.168.1.9
 
 ---
 
@@ -135,8 +135,8 @@ This suggests the Enrich Context code is adding extra sections beyond what the i
 **Workflow:** Instagram v33 Multi-Intent Fixed  
 **ID:** NEW_WORKFLOW_V33  
 **Status:** ✅ Active on Pi  
-**Test Webhook:** http://192.168.1.7:5678/webhook/test  
-**Production Webhook:** http://192.168.1.7:5678/webhook/instagram
+**Test Webhook:** http://192.168.1.9:5678/webhook/test  
+**Production Webhook:** http://192.168.1.9:5678/webhook/instagram
 
 **Files:**
 - Update script: `update_ai_intent_prompt_v32_simple.js`

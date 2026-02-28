@@ -77,7 +77,7 @@ Dev Machine (Windows)
 └── OpenClaw (port 18789) — AI agent gateway
     └── Instagram hook        — Multi-model routing via OpenRouter
 
-Raspberry Pi (192.168.1.7)
+Raspberry Pi (192.168.1.9)
 ├── Backend (PM2, port 3001) — serves frontend in prod
 └── OpenClaw (planned)
 ```

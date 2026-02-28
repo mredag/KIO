@@ -1,4 +1,4 @@
-# Touch Screen Fix for Raspberry Pi (192.168.1.7)
+# Touch Screen Fix for Raspberry Pi (192.168.1.9)
 
 ## Problem
 USB touch monitor (VID: 0318, PID: 2808) is detected as keyboard/mouse only, not as touchscreen.
@@ -161,5 +161,5 @@ sudo libinput debug-events
 
 ---
 **Date:** 2026-02-11  
-**Pi IP:** 192.168.1.7  
+**Pi IP:** 192.168.1.9  
 **Monitor:** ZEUSLAP with separate USB touch data requirement

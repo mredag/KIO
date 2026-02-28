@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-11  
 **Purpose:** Test multi-intent detection system with all knowledge base categories  
-**Pi IP:** 192.168.1.7
+**Pi IP:** 192.168.1.9
 
 ---
 
@@ -267,7 +267,7 @@ foreach ($body in $tests) {
     Write-Host "Question: $body" -ForegroundColor Yellow
     
     try {
-        $result = Invoke-RestMethod -Uri "http://192.168.1.7:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
+        $result = Invoke-RestMethod -Uri "http://192.168.1.9:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
         
         Write-Host "Intent: $($result.intent)" -ForegroundColor Green
         Write-Host "Detected Intents: $($result.detectedIntents -join ', ')" -ForegroundColor Green

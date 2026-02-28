@@ -37,10 +37,20 @@ export const CouponSettingsPage = lazy(() => import('../pages/admin/CouponSettin
 export const InteractionsPage = lazy(() => import('../pages/admin/InteractionsPage'));
 export const ServicesPage = lazy(() => import('../pages/admin/ServicesPage'));
 export const KnowledgeBasePage = lazy(() => import('../pages/admin/KnowledgeBasePage'));
-export const AIPromptsPage = lazy(() => import('../pages/admin/AIPromptsPage'));
 export const WorkflowTestPage = lazy(() => import('../pages/admin/WorkflowTestPage'));
-export const BlockedUsersPage = lazy(() => import('../pages/admin/BlockedUsersPage'));
-export const SuspiciousUsersPage = lazy(() => import('../pages/admin/SuspiciousUsersPage'));
+
+// Admin - Mission Control
+export const MCDashboardPage = lazy(() => import('../pages/admin/mc/MCDashboardPage'));
+export const MCWorkshopPage = lazy(() => import('../pages/admin/mc/MCWorkshopPage'));
+export const MCAgentsPage = lazy(() => import('../pages/admin/mc/MCAgentsPage'));
+export const MCConversationsPage = lazy(() => import('../pages/admin/mc/MCConversationsPage'));
+export const MCCostsPage = lazy(() => import('../pages/admin/mc/MCCostsPage'));
+export const MCPoliciesPage = lazy(() => import('../pages/admin/mc/MCPoliciesPage'));
+export const MCJarvisPage = lazy(() => import('../pages/admin/mc/MCJarvisPage'));
+export const MCDMKontrolPage = lazy(() => import('../pages/admin/mc/MCDMKontrolPage'));
+export const MCAutoPilotPage = lazy(() => import('../pages/admin/mc/MCAutoPilotPage'));
+export const MCActivityPage = lazy(() => import('../pages/admin/mc/MCActivityPage'));
+export const MCCronPage = lazy(() => import('../pages/admin/mc/MCCronPage'));
 
 // Admin - System
 export const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));

@@ -4,6 +4,7 @@ import * as LazyRoutes from './routes/lazyRoutes';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuthStore } from './stores/authStore';
+import { CommandPalette } from './components/mc/CommandPalette';
 
 // Loading fallback component
 function PageLoader() {
@@ -21,6 +22,7 @@ function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <CommandPalette />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Kiosk route */}
@@ -141,34 +143,10 @@ function App() {
               }
             />
             <Route
-              path="/admin/ai-prompts"
-              element={
-                <ProtectedRoute>
-                  <LazyRoutes.AIPromptsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/admin/workflow-test"
               element={
                 <ProtectedRoute>
                   <LazyRoutes.WorkflowTestPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/blocked-users"
-              element={
-                <ProtectedRoute>
-                  <LazyRoutes.BlockedUsersPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/suspicious-users"
-              element={
-                <ProtectedRoute>
-                  <LazyRoutes.SuspiciousUsersPage />
                 </ProtectedRoute>
               }
             />
@@ -188,6 +166,96 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Mission Control routes */}
+            <Route
+              path="/admin/mc"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/workshop"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCWorkshopPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/agents"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCAgentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/conversations"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCConversationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/costs"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCCostsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/policies"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCPoliciesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/jarvis"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCJarvisPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/dm-kontrol"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCDMKontrolPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/autopilot"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCAutoPilotPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/activity"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCActivityPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/mc/cron"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCCronPage />
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/admin/settings"
               element={

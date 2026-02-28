@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.13"
+  },
+  "env": {
+    "OPENROUTER_API_KEY": "<YOUR_OPENROUTER_API_KEY>"
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/moonshotai/kimi-k2",
+        "fallbacks": [
+          "openrouter/openai/gpt-4o-mini",
+          "openrouter/deepseek/deepseek-chat",
+          "openrouter/google/gemini-2.5-flash-lite"
+        ]
+      },
+      "imageModel": {
+        "primary": "openrouter/openai/gpt-4o-mini",
+        "fallbacks": ["openrouter/google/gemini-2.5-flash-lite"]
+      },
+      "models": {
+        "openrouter/moonshotai/kimi-k2": { "alias": "kimi" },
+        "openrouter/openai/gpt-4o-mini": { "alias": "mini" },
+        "openrouter/deepseek/deepseek-chat": { "alias": "ds" },
+        "openrouter/google/gemini-2.5-flash-lite": { "alias": "flash" },
+        "openrouter/openrouter/auto": { "alias": "auto" },
+        "openai-codex/gpt-5.3-codex": { "alias": "codex53" }
+      },
+      "workspace": "~/.openclaw/workspace",
+      "contextTokens": 128000,
+      "heartbeat": {
+        "every": "0",
+        "model": "openrouter/google/gemini-2.5-flash-lite",
+        "target": "none"
+      },
+      "subagents": {
+        "maxConcurrent": 3,
+        "archiveAfterMinutes": 120,
+        "model": "openrouter/deepseek/deepseek-chat"
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "identity": { "name": "Jarvis" },
+        "subagents": { "allowAgents": ["nexus", "forge", "atlas", "ledger", "instagram"] }
+      },
+      {
+        "id": "forge",
+        "name": "forge",
+        "model": "openai-codex/gpt-5.3-codex",
+        "identity": { "name": "Forge" }
+      }
+    ]
+  },
+  "hooks": {
+    "enabled": true,
+    "path": "/hooks",
+    "token": "<YOUR_HOOKS_TOKEN>",
+    "allowRequestSessionKey": true,
+    "mappings": [
+      {
+        "id": "instagram",
+        "match": { "path": "instagram" },
+        "action": "agent",
+        "wakeMode": "now",
+        "name": "Instagram DM",
+        "sessionKey": "hook:instagram:{{senderId}}",
+        "messageTemplate": "{{message}}",
+        "deliver": false
+      }
+    ]
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "auth": { "token": "<YOUR_GATEWAY_AUTH_TOKEN>" }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "<YOUR_TELEGRAM_BOT_TOKEN>",
+      "dmPolicy": "allowlist",
+      "allowFrom": ["<YOUR_TELEGRAM_CHAT_ID>"],
+      "streaming": "off"
+    }
+  }
+}

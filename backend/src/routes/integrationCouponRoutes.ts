@@ -1,7 +1,7 @@
 /**
  * Integration Coupon Routes
  * 
- * Handles n8n integration operations for the WhatsApp coupon loyalty system:
+ * Handles external integration operations for the coupon loyalty system:
  * - Token consumption (when customer sends token via WhatsApp)
  * - Redemption claims (when customer requests to use coupons)
  * - Wallet lookup (for balance checks)
@@ -41,7 +41,7 @@ export function createIntegrationCouponRoutes(
    * GET /api/integrations/coupons/policy
    * Get current coupon policy (thresholds, reward tiers)
    * 
-   * This endpoint allows n8n and other integrations to dynamically
+   * This endpoint allows OpenClaw and other integrations to dynamically
    * fetch the current coupon rules instead of hardcoding values.
    * 
    * Response:
@@ -87,14 +87,12 @@ export function createIntegrationCouponRoutes(
    * 
    * Checks:
    * - Database connectivity (can query coupon tables)
-   * - n8n webhook reachability (if N8N_WEBHOOK_URL is configured)
    * 
    * Response:
    * - status: 'healthy' | 'degraded' | 'unhealthy'
    * - timestamp: string (ISO 8601)
    * - components: object with component health status
    *   - database: { status: 'up' | 'down', message?: string }
-   *   - n8nWebhook: { status: 'up' | 'down' | 'not_configured', message?: string }
    */
   router.get('/health', async (_req: Request, res: Response) => {
     const healthCheck = {
@@ -102,13 +100,11 @@ export function createIntegrationCouponRoutes(
       timestamp: new Date().toISOString(),
       components: {
         database: { status: 'up' as 'up' | 'down', message: undefined as string | undefined },
-        n8nWebhook: { status: 'not_configured' as 'up' | 'down' | 'not_configured', message: undefined as string | undefined },
       },
     };
 
     // Check database connectivity
     try {
-      // Try to query coupon_tokens table
       const stmt = db.prepare('SELECT COUNT(*) as count FROM coupon_tokens LIMIT 1');
       stmt.get();
       healthCheck.components.database.status = 'up';
@@ -116,36 +112,6 @@ export function createIntegrationCouponRoutes(
       healthCheck.components.database.status = 'down';
       healthCheck.components.database.message = error.message;
       healthCheck.status = 'unhealthy';
-    }
-
-    // Check n8n webhook reachability (if configured)
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
-    if (n8nWebhookUrl) {
-      try {
-        // Try to reach n8n webhook with a HEAD request (non-intrusive)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-        const response = await fetch(n8nWebhookUrl, {
-          method: 'HEAD',
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok || response.status === 404 || response.status === 405) {
-          // 404/405 means n8n is reachable but endpoint doesn't accept HEAD
-          healthCheck.components.n8nWebhook.status = 'up';
-        } else {
-          healthCheck.components.n8nWebhook.status = 'down';
-          healthCheck.components.n8nWebhook.message = `HTTP ${response.status}`;
-          healthCheck.status = healthCheck.status === 'unhealthy' ? 'unhealthy' : 'degraded';
-        }
-      } catch (error: any) {
-        healthCheck.components.n8nWebhook.status = 'down';
-        healthCheck.components.n8nWebhook.message = error.message;
-        healthCheck.status = healthCheck.status === 'unhealthy' ? 'unhealthy' : 'degraded';
-      }
     }
 
     // Return appropriate status code

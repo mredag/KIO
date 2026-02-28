@@ -33,7 +33,27 @@ import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.
 import { createIntegrationRoutes } from './routes/integrationRoutes.js';
 import { createAIPromptsRoutes } from './routes/aiPromptsRoutes.js';
 import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsRoutes.js';
-import { createWorkflowTestRoutes } from './routes/workflowTestRoutes.js';
+import { createWorkflowTestRoutes, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
+import { createMissionControlRoutes, setSchedulerService } from './routes/missionControlRoutes.js';
+import { MCSchedulerService } from './services/MCSchedulerService.js';
+import { createJarvisRoutes } from './routes/jarvisRoutes.js';
+import { createAgentCommsRoutes } from './routes/agentCommsRoutes.js';
+import { createDmKontrolRoutes } from './routes/dmKontrolRoutes.js';
+import { createAutoPilotRoutes, setAutoPilotService } from './routes/autopilotRoutes.js';
+import { createActivityRoutes } from './routes/activityRoutes.js';
+import { createGatewayRoutes } from './routes/gatewayRoutes.js';
+import { createTagsRoutes } from './routes/tagsRoutes.js';
+import { createAuditRoutes, setAuditService } from './routes/auditRoutes.js';
+import { createCronRoutes, registerCronToggle, registerCronTrigger } from './routes/cronRoutes.js';
+import { createEscalationRoutes, setEscalationActionService } from './routes/escalationRoutes.js';
+import { createTelegramWebhookRoutes, setTelegramWebhookDeps } from './routes/telegramWebhookRoutes.js';
+import { TelegramCallbackPoller } from './services/TelegramCallbackPoller.js';
+import { AutoPilotService } from './services/AutoPilotService.js';
+import { NightlyAuditService } from './services/NightlyAuditService.js';
+import { TelegramNotificationService } from './services/TelegramNotificationService.js';
+import { EscalationService } from './services/EscalationService.js';
+import { setEscalationService as setWebhookEscalation } from './routes/instagramWebhookRoutes.js';
+import { AgentLifecycleService } from './services/AgentLifecycleService.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
@@ -251,9 +271,74 @@ app.use('/api/integrations/ai', createIntegrationAIPromptsRoutes(db));
 app.use('/api/integrations', createIntegrationRoutes(dbService));
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
-app.use('/webhook/instagram', createInstagramWebhookRoutes());
+app.use('/webhook/instagram', createInstagramWebhookRoutes(db));
+app.use('/webhook/telegram', createTelegramWebhookRoutes());
 app.use('/api/integrations/instagram', createInstagramIntegrationRoutes(db));
 app.use('/api/workflow-test', createWorkflowTestRoutes(dbService));
+app.use('/api/mc', createMissionControlRoutes(db));
+app.use('/api/mc/jarvis', createJarvisRoutes(db));
+app.use('/api/mc', createAgentCommsRoutes(db));
+app.use('/api/mc/dm-kontrol', createDmKontrolRoutes(db));
+app.use('/api/mc/autopilot', createAutoPilotRoutes(db));
+app.use('/api/mc/activity', createActivityRoutes(db));
+app.use('/api/mc/gateways', createGatewayRoutes(db));
+app.use('/api/mc', createTagsRoutes(db));
+app.use('/api/mc/audit', createAuditRoutes(db));
+app.use('/api/mc/cron', createCronRoutes(db));
+app.use('/api/mc/escalation', createEscalationRoutes(db));
+
+// Initialize MC Scheduler
+const mcScheduler = new MCSchedulerService(db);
+setSchedulerService(mcScheduler);
+mcScheduler.start();
+
+// Initialize AutoPilot Engine
+const autoPilot = new AutoPilotService(db);
+setAutoPilotService(autoPilot);
+autoPilot.start();
+
+// Initialize Nightly Audit Service
+const nightlyAudit = new NightlyAuditService(db);
+setAuditService(nightlyAudit);
+nightlyAudit.start();
+
+// Initialize Telegram + Escalation Services (closed-loop DM quality system)
+const telegramNotifier = new TelegramNotificationService(db);
+const escalationService = new EscalationService(db, telegramNotifier);
+
+// Wire escalation into all pipeline components
+autoPilot.setEscalationService(escalationService);
+nightlyAudit.setEscalationService(escalationService);
+setWebhookEscalation(escalationService);
+setSimulatorEscalation(escalationService);
+setEscalationActionService(escalationService);
+setTelegramWebhookDeps(escalationService, telegramNotifier);
+
+// Start Telegram callback poller (handles inline keyboard button presses)
+// Auto-detects OpenClaw gateway and defers when it's running
+const telegramPoller = new TelegramCallbackPoller(escalationService, telegramNotifier);
+telegramPoller.start();
+
+// Register cron toggle/trigger handlers
+registerCronToggle('autopilot', (_jobId, enabled) => {
+  if (enabled) { autoPilot.start(); } else { autoPilot.stop(); }
+  return { ok: true, status: enabled ? 'active' : 'stopped' };
+});
+registerCronTrigger('autopilot', async () => {
+  autoPilot.start();
+  return { ok: true, message: 'AutoPilot taraması başlatıldı' };
+});
+registerCronToggle('nightly-audit', (_jobId, enabled) => {
+  nightlyAudit.saveConfig({ enabled });
+  return { ok: true, status: enabled ? 'active' : 'stopped' };
+});
+registerCronTrigger('nightly-audit', async () => {
+  const result = await nightlyAudit.runAudit();
+  return { ok: true, message: `Denetim tamamlandı: ${result.audited} incelendi`, detail: result };
+});
+
+// Initialize Agent Lifecycle Service
+AgentLifecycleService.init(db);
 
 // Serve frontend static files in production - use centralized config
 if (process.env.NODE_ENV === 'production') {
@@ -283,11 +368,19 @@ app.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
+  mcScheduler.stop();
+  autoPilot.stop();
+  nightlyAudit.stop();
+  telegramPoller.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
+  mcScheduler.stop();
+  autoPilot.stop();
+  nightlyAudit.stop();
+  telegramPoller.stop();
   process.exit(0);
 });
 

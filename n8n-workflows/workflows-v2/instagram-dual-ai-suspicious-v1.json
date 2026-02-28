@@ -1,6 +1,6 @@
 {
   "name": "Instagram Full AI v21",
-  "versionId": "instagram-full-ai-v21",
+  "versionId": "instagram-full-ai-v35-rename-massage-v4",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,10 @@
       "name": "Webhook Instagram",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 400],
+      "position": [
+        200,
+        400
+      ],
       "webhookId": "instagram-spa-dynamic"
     },
     {
@@ -27,7 +30,10 @@
       "name": "Webhook Test",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [200, 700],
+      "position": [
+        200,
+        700
+      ],
       "webhookId": "workflow-test-channel"
     },
     {
@@ -38,7 +44,10 @@
       "name": "Parse Instagram",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 400]
+      "position": [
+        400,
+        400
+      ]
     },
     {
       "parameters": {
@@ -48,50 +57,182 @@
       "name": "Parse Test",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 700]
+      "position": [
+        400,
+        700
+      ]
     },
-    { "parameters": { "mode": "append" }, "id": "merge-inputs", "name": "Merge Inputs", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [550, 500] },
     {
-      "parameters": { "jsCode": "const input = $input.first().json;\nreturn [{ json: input }];" },
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "merge-inputs",
+      "name": "Merge Inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        550,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn [{ json: input }];"
+      },
       "id": "dev-filter",
       "name": "Dev Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 500]
+      "position": [
+        700,
+        500
+      ]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "v", "leftValue": "={{ $json.route }}", "rightValue": "verify", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Verify" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "p", "leftValue": "={{ $json.route }}", "rightValue": "process", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Process" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "i", "leftValue": "={{ $json.route }}", "rightValue": "ignore", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Ignore" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "v",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "verify",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Verify"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "p",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "process",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Process"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "i",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "ignore",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ignore"
+            }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "router",
       "name": "Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [900, 500]
+      "position": [
+        900,
+        500
+      ]
     },
-    { "parameters": { "respondWith": "text", "responseBody": "={{ $json.challenge }}" }, "id": "resp-verify", "name": "Verify Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [1150, 300] },
-    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ignore", "name": "Ignore Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [1150, 700] },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.challenge }}"
+      },
+      "id": "resp-verify",
+      "name": "Verify Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      },
+      "id": "resp-ignore",
+      "name": "Ignore Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1150,
+        700
+      ]
+    },
     {
       "parameters": {
         "method": "GET",
         "url": "http://localhost:3001/api/integrations/services/instagram/status",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "check-service-status",
       "name": "Check Service Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1150, 500],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        1150,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
     {
       "parameters": {
@@ -101,14 +242,61 @@
       "name": "Check Enabled",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1350, 500]
+      "position": [
+        1350,
+        500
+      ]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "m", "leftValue": "={{ $json.route }}", "rightValue": "maintenance", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Maintenance" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "c", "leftValue": "={{ $json.serviceEnabled }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Continue" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "m",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "maintenance",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Maintenance"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "c",
+                    "leftValue": "={{ $json.serviceEnabled }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Continue"
+            }
           ]
         },
         "options": {}
@@ -117,31 +305,53 @@
       "name": "Maintenance Check",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [1550, 500]
+      "position": [
+        1550,
+        500
+      ]
     },
     {
-      "parameters": { "jsCode": "const data = $input.first().json;\nreturn [{ json: { senderId: data.senderId, message: data.message, intent: 'maintenance', responseTime: Date.now() - data.startTime, isTestMode: data.isTestMode } }];" },
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: { senderId: data.senderId, message: data.message, intent: 'maintenance', responseTime: Date.now() - data.startTime, isTestMode: data.isTestMode } }];"
+      },
       "id": "fmt-maintenance",
       "name": "Format Maintenance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1750, 400]
+      "position": [
+        1750,
+        400
+      ]
     },
-
     {
       "parameters": {
         "method": "GET",
         "url": "=http://localhost:3001/api/integrations/instagram/suspicious/check/{{ $json.senderId }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "check-suspicious",
       "name": "Check Suspicious",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1750, 550],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        1750,
+        550
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
     {
       "parameters": {
@@ -151,7 +361,10 @@
       "name": "Process Suspicious Check",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1950, 550]
+      "position": [
+        1950,
+        550
+      ]
     },
     {
       "parameters": {
@@ -159,14 +372,29 @@
         "url": "=http://localhost:3001/api/integrations/instagram/customer/{{ $json.senderId }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "fetch-customer",
       "name": "Fetch Customer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [2150, 500],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        2150,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
     {
       "parameters": {
@@ -174,26 +402,51 @@
         "url": "http://localhost:3001/api/integrations/knowledge/context",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "fetch-knowledge",
       "name": "Fetch Knowledge",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [2150, 600],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        2150,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
     {
       "parameters": {
         "method": "GET",
         "url": "http://localhost:3001/api/integrations/ai/prompt/instagram-spa-assistant",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "fetch-prompt",
       "name": "Fetch Prompt",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [2150, 700]
+      "position": [
+        2150,
+        700
+      ]
     },
     {
       "parameters": {
@@ -204,34 +457,69 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
-            { "name": "X-Title", "value": "SPA Digital Kiosk" }
+            {
+              "name": "HTTP-Referer",
+              "value": "https://spa-kiosk.local"
+            },
+            {
+              "name": "X-Title",
+              "value": "SPA Digital Kiosk"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o', messages: [{ role: 'system', content: 'Sen bir intent siniflandirici AI\\'sin. Musteri mesajlarini analiz et ve hangi kategoriye ait oldugunu belirle.\\n\\nKATEGORILER:\\n- faq: Sikca sorulan sorular (kadinlar gunu, kese kopuk, PT, yaninda ne getir, terapist yasal mi, randevu nasil, ileri tarih randevu)\\n- pricing: Fiyat sorulari (masaj fiyatlari, ne kadar, ucret, kac para, gunluk giris, tek seans)\\n- membership: Uyelik sorulari (fitness, spor salonu, gym, pilates, aile uyeligi, kuzen dahil mi)\\n- hours: Calisma saatleri (saat kacta, acik mi, kapali mi, yuzme saati, jimnastik saati)\\n- location: Adres, konum sorulari (nerede, yer, konum)\\n- services: Hizmetler (masaj turleri, spa, hamam, sauna, sicak tas, terapist bilgi, tesis genel)\\n- kids: Cocuk kurslari (yuzme, jimnastik, taekwondo, kadin yuzme, cocuk girebilir mi)\\n- policies: Kurallar (yas siniri, iptal politikasi, aile uyeligi kural, kuzen dahil mi)\\n- booking: Randevu talebi\\n- thanks: Tesekkur mesajlari\\n- general_info: Genel bilgi, merhaba, selam\\n\\nONEMLI:\\n- \"PT\" veya \"personal trainer\" sorulari = faq\\n- \"kese kopuk fiyat\" = pricing (fiyat sorusu)\\n- \"gunluk giris\" = pricing (fiyat sorusu)\\n- \"sicak tas\" = services (hizmet sorusu)\\n- \"terapist\" = services (hizmet sorusu)\\n- \"yuzme saati\" = hours (saat sorusu)\\n- \"cocuk girebilir\" = policies (kural sorusu)\\n- \"aile uyeligi kural\" = policies (kural sorusu)\\n- \"kadin yuzme\" = kids (kurs sorusu)\\n\\nSadece kategori adini yaz. Baska bir sey yazma.' }, { role: 'user', content: $('Process Suspicious Check').first().json.text }], temperature: 0.05, max_tokens: 20 }) }}",
-        "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 3000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "ai-intent",
       "name": "AI Intent Detection",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [2150, 800],
-      "credentials": { "httpHeaderAuth": { "id": "OpenRouterAPI001", "name": "OpenRouter API" } }
+      "position": [
+        2150,
+        800
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "OpenRouterAPI001",
+          "name": "OpenRouter API"
+        }
+      }
     },
-    { "parameters": { "mode": "append" }, "id": "merge-data", "name": "Merge Data", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [2400, 600] },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst parseData = $('Process Suspicious Check').first().json;\nconst aiIntentResponse = $('AI Intent Detection').first().json;\n\nlet customer = {}, knowledge = {}, aiPrompt = {};\nfor (const item of items) {\n  const json = item.json;\n  if (json.systemMessage) aiPrompt = json;\n  else if (json.isNewCustomer !== undefined || json.interactionCount !== undefined) customer = json;\n  else if (json.pricing || json.services || json.hours || json.contact || json.policies || json.faq) knowledge = json;\n}\n\nconst isNewCustomer = customer.isNewCustomer !== false;\nconst interactionCount = customer.interactionCount || 0;\nconst isFirstMessage = isNewCustomer || interactionCount <= 1;\nconst isSuspicious = parseData.isSuspicious === true;\nconst offenseCount = parseData.offenseCount || 0;\nconst textLower = parseData.text.toLowerCase();\n\n// Get AI-detected intent\nlet intent = 'general_info';\nconst aiContent = aiIntentResponse.choices?.[0]?.message?.content?.trim().toLowerCase();\nconst validIntents = ['faq', 'pricing', 'membership', 'hours', 'location', 'services', 'kids', 'policies', 'booking', 'thanks', 'general_info'];\nif (validIntents.includes(aiContent)) {\n  intent = aiContent;\n} else if (aiIntentResponse.error) {\n  if (textLower.match(/fiyat|ucret|ne kadar/i)) intent = 'pricing';\n  else if (textLower.match(/saat|acik|kapali/i)) intent = 'hours';\n  else if (textLower.match(/adres|nerede/i)) intent = 'location';\n  else if (textLower.match(/masaj|spa/i)) intent = 'services';\n}\n\n// Check for specific topics in message (topic detection)\nconst mentionsPilates = textLower.match(/pilates|reformer/i);\nconst mentionsMassage = textLower.match(/masaj|massage/i);\nconst mentionsFitness = textLower.match(/fitness|spor|gym|uyelik/i);\nconst mentionsCourses = textLower.match(/taekwondo|yuzme|jimnastik|kickboks|boks|kurs/i);\n\n// BUILD KNOWLEDGE CONTEXT based on AI-detected intent + message content\nlet knowledgeContext = '\\n\\n=== BILGILER (SADECE BUNLARI KULLAN, ASLA UYDURMA!) ===';\n\nif ((intent === 'faq' || intent === 'policies') && knowledge.faq) {\n  knowledgeContext += '\\n\\n❓ SIKCA SORULAN SORULAR:';\n  Object.entries(knowledge.faq).forEach(([key, v]) => { knowledgeContext += '\\n• ' + v; });\n}\n\nif (intent === 'policies' && knowledge.policies) {\n  knowledgeContext += '\\n\\n📋 KURALLAR:';\n  Object.entries(knowledge.policies).forEach(([key, v]) => { knowledgeContext += '\\n• ' + v; });\n}\n\n// Add pilates info if message mentions pilates (regardless of intent)\nif (mentionsPilates) {\n  if (knowledge.pricing?.reformer_pilates) knowledgeContext += '\\n\\n🧘 PILATES FIYAT:\\n' + knowledge.pricing.reformer_pilates;\n  if (knowledge.services?.reformer_pilates_details) knowledgeContext += '\\n\\n🧘 PILATES DETAY:\\n' + knowledge.services.reformer_pilates_details;\n}\n\n// Add courses info if message mentions any course (taekwondo, yuzme, etc)\nif (mentionsCourses || intent === 'kids') {\n  if (knowledge.services?.courses_kids) knowledgeContext += '\\n\\n👶 COCUK KURSLARI:\\n' + knowledge.services.courses_kids;\n  if (knowledge.pricing?.courses_kids) knowledgeContext += '\\n\\n💰 KURS FIYATLARI:\\n' + knowledge.pricing.courses_kids;\n  if (knowledge.services?.courses_women) knowledgeContext += '\\n\\n👩 KADIN KURSLARI:\\n' + knowledge.services.courses_women;\n  if (knowledge.pricing?.courses_women) knowledgeContext += '\\n💰 ' + knowledge.pricing.courses_women;\n  // Add course schedules\n  if (knowledge.hours?.taekwondo_schedule) knowledgeContext += '\\n\\n🥋 ' + knowledge.hours.taekwondo_schedule;\n  if (knowledge.hours?.kickboxing_schedule) knowledgeContext += '\\n🥊 ' + knowledge.hours.kickboxing_schedule;\n  if (knowledge.hours?.gymnastics_schedule) knowledgeContext += '\\n🤸 ' + knowledge.hours.gymnastics_schedule;\n  if (knowledge.hours?.swim_kids_schedule) knowledgeContext += '\\n🏊 ' + knowledge.hours.swim_kids_schedule;\n  if (knowledge.hours?.swim_women_schedule) knowledgeContext += '\\n🏊‍♀️ ' + knowledge.hours.swim_women_schedule;\n  if (knowledge.policies?.age_groups) knowledgeContext += '\\n\\n📋 YAS GRUPLARI: ' + knowledge.policies.age_groups;\n}\n\n// Add massage info if message mentions massage or pricing intent\nif (mentionsMassage || intent === 'pricing' || intent === 'general_info' || isFirstMessage) {\n  if (knowledge.pricing?.current_campaign) knowledgeContext += '\\n\\n' + knowledge.pricing.current_campaign;\n  if (knowledge.pricing?.spa_massage && !mentionsPilates) knowledgeContext += '\\n\\n' + knowledge.pricing.spa_massage;\n  if (knowledge.pricing?.special_massage) knowledgeContext += '\\n\\n' + knowledge.pricing.special_massage;\n  if (knowledge.services?.therapist_info) knowledgeContext += '\\n\\n' + knowledge.services.therapist_info;\n}\n\nif (intent === 'general_info' || isFirstMessage) {\n  if (knowledge.services?.facility_overview) knowledgeContext += '\\n\\n🏢 TESIS:\\n' + knowledge.services.facility_overview;\n  if (knowledge.services?.membership_includes) knowledgeContext += '\\n\\n✅ TESIS KULLANIMI:\\n' + knowledge.services.membership_includes;\n}\n\nif (intent === 'services' || intent === 'general_info') {\n  if (knowledge.services?.therapist_info) knowledgeContext += '\\n\\n👩‍⚕️ TERAPISTLER:\\n' + knowledge.services.therapist_info;\n  if (knowledge.services?.facility_overview && !knowledgeContext.includes('TESIS:')) knowledgeContext += '\\n\\n🏢 TESIS:\\n' + knowledge.services.facility_overview;\n}\n\nif (intent === 'membership' || mentionsFitness) {\n  knowledgeContext += '\\n\\n🏋️ UYELIK UCRETLERI:';\n  if (knowledge.pricing?.membership_individual) knowledgeContext += '\\n\\n👤 FERDI:\\n' + knowledge.pricing.membership_individual;\n  if (knowledge.pricing?.membership_family) knowledgeContext += '\\n\\n👨‍👩‍👧 AILE:\\n' + knowledge.pricing.membership_family;\n  if (!mentionsPilates && knowledge.pricing?.reformer_pilates) knowledgeContext += '\\n\\n🧘 PILATES FIYAT:\\n' + knowledge.pricing.reformer_pilates;\n  if (!mentionsPilates && knowledge.services?.reformer_pilates_details) knowledgeContext += '\\n\\n🧘 PILATES DETAY:\\n' + knowledge.services.reformer_pilates_details;\n  if (knowledge.services?.facility_overview && !knowledgeContext.includes('TESIS:')) knowledgeContext += '\\n\\n🏢 TESIS:\\n' + knowledge.services.facility_overview;\n  if (knowledge.services?.membership_includes && !knowledgeContext.includes('TESIS KULLANIMI:')) knowledgeContext += '\\n\\n✅ TESIS KULLANIMI:\\n' + knowledge.services.membership_includes;\n}\n\nif (intent === 'hours' || intent === 'booking') {\n  knowledgeContext += '\\n\\n🕐 SAATLER:';\n  if (knowledge.hours?.spa_working_hours) knowledgeContext += '\\n• SPA: ' + knowledge.hours.spa_working_hours;\n  if (knowledge.hours?.facility_working_hours) knowledgeContext += '\\n• SPOR: ' + knowledge.hours.facility_working_hours;\n}\n\nif (intent === 'location' || intent === 'booking' || intent === 'general_info') {\n  if (knowledge.contact?.phone) knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n  if (knowledge.contact?.address && intent === 'location') knowledgeContext += '\\n📍 ADRES: ' + knowledge.contact.address;\n}\n\nif (knowledge.contact?.phone && !knowledgeContext.includes(knowledge.contact.phone)) {\n  knowledgeContext += '\\n\\n📞 RANDEVU: ' + knowledge.contact.phone;\n}\n\n// SYSTEM PROMPT - Different for suspicious users\nlet systemPrompt = aiPrompt.systemMessage || 'Sen Eform Spor Merkezi musteri temsilcisisin.';\n\nif (isSuspicious) {\n  systemPrompt = 'Sen Eform Spor Merkezi musteri temsilcisisin. ONEMLI: Bu kullanici daha once uygunsuz mesaj gondermis. DIREKT ve KISA cevap ver. ASLA samimi olma. ASLA \"nasil yardimci olabilirim\", \"randevu ister misiniz\", \"baska soru var mi\" gibi sorular SORMA. Sadece sorulan soruya cevap ver ve BIT. Uygunsuz icerik algilasan HEMEN sert reddet.';\n}\n\nlet customerHint = '';\nif (isFirstMessage && !isSuspicious) {\n  customerHint = '\\n\\n⚠️ ILK MESAJ! Kendini tanit: \"Merhaba! Ben Eform Spor Merkezi dijital asistaniyim.\"';\n} else if (isSuspicious) {\n  customerHint = '\\n\\n⚠️ SUPELI KULLANICI (ihlal: ' + offenseCount + '). Direkt cevap ver, samimi olma, ASLA soru sorma (randevu, yardim, vs). Sadece cevap ver ve BIT.';\n}\n\nreturn [{ json: { senderId: parseData.senderId, text: parseData.text, startTime: parseData.startTime, intent, isFirstMessage, isSuspicious, offenseCount, systemPrompt, customerHint, knowledgeContext, isTestMode: parseData.isTestMode } }];"
+        "mode": "append"
+      },
+      "id": "merge-data",
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2400,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\r\nconst parseData = $('Process Suspicious Check').first().json;\r\nconst aiIntentResponse = $('AI Intent Detection').first().json;\r\n\r\nlet customer = {}, knowledge = {}, aiPrompt = {};\r\nfor (const item of items) {\r\n  const json = item.json;\r\n  if (json.systemMessage) aiPrompt = json;\r\n  else if (json.isNewCustomer !== undefined || json.interactionCount !== undefined) customer = json;\r\n  else if (json.pricing || json.services || json.hours || json.contact || json.policies || json.faq) knowledge = json;\r\n}\r\n\r\nconst isNewCustomer = customer.isNewCustomer !== false;\r\nconst interactionCount = customer.interactionCount || 0;\r\nconst isFirstMessage = isNewCustomer || interactionCount <= 1;\r\nconst isSuspicious = parseData.isSuspicious === true;\r\nconst offenseCount = parseData.offenseCount || 0;\r\nconst textLower = parseData.text.toLowerCase();\r\n\r\n// Normalize Turkish characters\r\nconst normalizedText = textLower\r\n  .replace(/Ã…Å¸/g, 's').replace(/Ã„Â±/g, 'i')\r\n  .replace(/Ã„Å¸/g, 'g').replace(/ÃƒÂ¼/g, 'u')\r\n  .replace(/ÃƒÂ¶/g, 'o').replace(/ÃƒÂ§/g, 'c');\r\n\r\n// ============================================\r\n// AI-DRIVEN INTENT DETECTION (NO HARDCODING)\r\n// ============================================\r\n\r\n// Parse AI response - expecting JSON array of intents\r\nlet detectedIntents = [];\r\nconst aiContent = aiIntentResponse.choices?.[0]?.message?.content?.trim();\r\n\r\ntry {\r\n  // Try to parse as JSON array\r\n  const parsed = JSON.parse(aiContent);\r\n  if (Array.isArray(parsed)) {\r\n    detectedIntents = parsed;\r\n  } else if (typeof parsed === 'string') {\r\n    detectedIntents = [parsed];\r\n  }\r\n} catch (e) {\r\n  // Fallback: treat as comma-separated string or single intent\r\n  if (aiContent) {\r\n    detectedIntents = aiContent.split(',').map(s => s.trim().toLowerCase());\r\n  }\r\n}\r\n\r\n// Validate intents\r\nconst validIntents = ['faq', 'pricing', 'membership', 'hours', 'location', 'services', 'kids', 'policies', 'booking', 'thanks', 'general_info'];\r\ndetectedIntents = detectedIntents.filter(intent => validIntents.includes(intent));\r\n\r\n// If no valid intents detected, use general_info\r\nif (detectedIntents.length === 0) {\r\n  detectedIntents = ['general_info'];\r\n}\r\n\r\nconst primaryIntent = detectedIntents[0];\r\n\r\n// ============================================\r\n// TOPIC DETECTION (SPECIFIC ENTITIES)\r\n// ============================================\r\n\r\n// Topics are specific entities mentioned (not intents)\r\nconst detectedTopics = {\r\n  pilates: /pilates|reformer/i.test(textLower),\r\n  massage: /masaj|massage/i.test(textLower),\r\n  pt: /\\bpt\\b|personal trainer|kisisel egitmen|ozel egitmen/i.test(textLower),\r\n  courses: /taekwondo|yuzme|jimnastik|kickboks|boks|kurs/i.test(textLower),\r\n  kese_kopuk: /kese.*kopuk|kopuk.*kese/i.test(textLower),\r\n  membership: /uyelik|uyel|fitness|spor.*salon|aylik|ferdi|aile.*uye/i.test(normalizedText)\r\n};\r\n\r\n// ============================================\r\n// KNOWLEDGE CONTEXT BUILDER (INTENT-DRIVEN)\r\n// ============================================\r\n\r\nlet knowledgeContext = '\\n\\n=== BILGILER (SADECE BUNLARI KULLAN, ASLA UYDURMA!) ===';\r\nconst addedSections = new Set();\r\n\r\nfunction addSection(key, content) {\r\n  if (!addedSections.has(key) && content) {\r\n    knowledgeContext += content;\r\n    addedSections.add(key);\r\n  }\r\n}\r\n\r\n// ============================================\r\n// INTENT Ã¢â€ â€™ KNOWLEDGE MAPPING (NO HARDCODING)\r\n// ============================================\r\n\r\nfor (const intent of detectedIntents) {\r\n  switch (intent) {\r\n    case 'faq':\r\n      if (knowledge.faq) {\r\n        let faqContent = '\\n\\nÃ¢Ââ€œ SIKCA SORULAN SORULAR:';\r\n        Object.entries(knowledge.faq).forEach(([key, v]) => { faqContent += '\\nÃ¢â‚¬Â¢ ' + v; });\r\n        addSection('faq', faqContent);\r\n      }\r\n      break;\r\n\r\n    case 'pricing':\r\n      // Add campaign\r\n      if (knowledge.pricing?.current_campaign) {\r\n        addSection('campaign', '\\n\\n' + knowledge.pricing.current_campaign);\r\n      }\r\n      \r\n      // Add pricing based on detected topics\r\n      if (detectedTopics.membership) {\r\n        if (knowledge.pricing?.membership_individual) {\r\n          addSection('membership_individual', '\\n\\nÃ°Å¸Ââ€¹Ã¯Â¸Â FERDI UYELIK:\\n' + knowledge.pricing.membership_individual);\r\n        }\r\n        if (knowledge.pricing?.membership_family) {\r\n          addSection('membership_family', '\\n\\nÃ°Å¸â€˜Â¨Ã¢â‚¬ÂÃ°Å¸â€˜Â©Ã¢â‚¬ÂÃ°Å¸â€˜Â§ AILE UYELIGI:\\n' + knowledge.pricing.membership_family);\r\n        }\r\n      } else if (detectedTopics.pilates) {\r\n        if (knowledge.pricing?.reformer_pilates) {\r\n          addSection('pilates_pricing', '\\n\\nÃ°Å¸Â§Ëœ PILATES FIYAT:\\n' + knowledge.pricing.reformer_pilates);\r\n        }\r\n      } else if (detectedTopics.pt) {\r\n        if (knowledge.pricing?.pt_pricing) {\r\n          addSection('pt_pricing', '\\n\\n' + knowledge.pricing.pt_pricing);\r\n        }\r\n      } else if (detectedTopics.courses) {\r\n        if (knowledge.pricing?.courses_kids) {\r\n          addSection('courses_kids_pricing', '\\n\\nÃ°Å¸â€™Â° KURS FIYATLARI:\\n' + knowledge.pricing.courses_kids);\r\n        }\r\n        if (knowledge.pricing?.courses_women) {\r\n          addSection('courses_women_pricing', '\\nÃ°Å¸â€™Â° ' + knowledge.pricing.courses_women);\r\n        }\r\n      } else {\r\n        // Default: massage pricing\r\n        if (knowledge.pricing?.spa_massage) {\r\n          addSection('spa_massage', '\\n\\n' + knowledge.pricing.spa_massage);\r\n        }\r\n        if (knowledge.pricing?.other_massage_programs) {\r\n          addSection('other_massage_programs', '\\n\\n' + knowledge.pricing.other_massage_programs);\r\n        }\r\n      }\r\n      break;\r\n\r\n    case 'membership':\r\n      if (knowledge.pricing?.membership_individual) {\r\n        addSection('membership_individual', '\\n\\nÃ°Å¸Ââ€¹Ã¯Â¸Â FERDI UYELIK:\\n' + knowledge.pricing.membership_individual);\r\n      }\r\n      if (knowledge.pricing?.membership_family) {\r\n        addSection('membership_family', '\\n\\nÃ°Å¸â€˜Â¨Ã¢â‚¬ÂÃ°Å¸â€˜Â©Ã¢â‚¬ÂÃ°Å¸â€˜Â§ AILE UYELIGI:\\n' + knowledge.pricing.membership_family);\r\n      }\r\n      if (knowledge.services?.facility_overview) {\r\n        addSection('facility', '\\n\\nÃ°Å¸ÂÂ¢ TESIS:\\n' + knowledge.services.facility_overview);\r\n      }\r\n      if (knowledge.services?.membership_includes) {\r\n        addSection('membership_includes', '\\n\\nÃ¢Å“â€¦ TESIS KULLANIMI:\\n' + knowledge.services.membership_includes);\r\n      }\r\n      // Add pilates if mentioned\r\n      if (detectedTopics.pilates && knowledge.pricing?.reformer_pilates) {\r\n        addSection('pilates_pricing', '\\n\\nÃ°Å¸Â§Ëœ PILATES FIYAT:\\n' + knowledge.pricing.reformer_pilates);\r\n      }\r\n      break;\r\n\r\n    case 'hours':\r\n      let hoursContent = '\\n\\nÃ°Å¸â€¢Â SAATLER:';\r\n      if (knowledge.hours?.spa_working_hours) {\r\n        hoursContent += '\\nÃ¢â‚¬Â¢ SPA: ' + knowledge.hours.spa_working_hours;\r\n      }\r\n      if (knowledge.hours?.facility_working_hours) {\r\n        hoursContent += '\\nÃ¢â‚¬Â¢ SPOR: ' + knowledge.hours.facility_working_hours;\r\n      }\r\n      addSection('hours', hoursContent);\r\n      \r\n      // Add course schedules if courses mentioned\r\n      if (detectedTopics.courses) {\r\n        if (knowledge.hours?.taekwondo_schedule) addSection('taekwondo_schedule', '\\n\\nÃ°Å¸Â¥â€¹ ' + knowledge.hours.taekwondo_schedule);\r\n        if (knowledge.hours?.kickboxing_schedule) addSection('kickboxing_schedule', '\\nÃ°Å¸Â¥Å  ' + knowledge.hours.kickboxing_schedule);\r\n        if (knowledge.hours?.gymnastics_schedule) addSection('gymnastics_schedule', '\\nÃ°Å¸Â¤Â¸ ' + knowledge.hours.gymnastics_schedule);\r\n        if (knowledge.hours?.swim_kids_schedule) addSection('swim_kids_schedule', '\\nÃ°Å¸ÂÅ  ' + knowledge.hours.swim_kids_schedule);\r\n        if (knowledge.hours?.swim_women_schedule) addSection('swim_women_schedule', '\\nÃ°Å¸ÂÅ Ã¢â‚¬ÂÃ¢â„¢â‚¬Ã¯Â¸Â ' + knowledge.hours.swim_women_schedule);\r\n      }\r\n      break;\r\n\r\n    case 'location':\r\n      if (knowledge.contact?.address) {\r\n        addSection('address', '\\n\\nÃ°Å¸â€œÂ ADRES: ' + knowledge.contact.address);\r\n      }\r\n      if (knowledge.contact?.phone) {\r\n        addSection('phone', '\\n\\nÃ°Å¸â€œÅ¾ ILETISIM: ' + knowledge.contact.phone);\r\n      }\r\n      break;\r\n\r\n    case 'services':\r\n      if (detectedTopics.massage) {\r\n        if (knowledge.services?.therapist_info) {\r\n          addSection('therapist', '\\n\\nÃ°Å¸â€˜Â©Ã¢â‚¬ÂÃ¢Å¡â€¢Ã¯Â¸Â TERAPISTLER:\\n' + knowledge.services.therapist_info);\r\n        }\r\n        if (knowledge.services?.massage_programs) {\r\n          addSection('massage_programs', '\\n\\nÃ°Å¸â€™â€  MASAJ TURLERI:\\n' + knowledge.services.massage_programs);\r\n        }\r\n      } else if (detectedTopics.courses) {\r\n        if (knowledge.services?.courses_kids) {\r\n          addSection('courses_kids', '\\n\\nÃ°Å¸â€˜Â¶ COCUK KURSLARI:\\n' + knowledge.services.courses_kids);\r\n        }\r\n        if (knowledge.services?.courses_women) {\r\n          addSection('courses_women', '\\n\\nÃ°Å¸â€˜Â© KADIN KURSLARI:\\n' + knowledge.services.courses_women);\r\n        }\r\n      } else if (detectedTopics.pilates) {\r\n        if (knowledge.services?.reformer_pilates_details) {\r\n          addSection('pilates_details', '\\n\\nÃ°Å¸Â§Ëœ PILATES DETAY:\\n' + knowledge.services.reformer_pilates_details);\r\n        }\r\n      } else {\r\n        // General facility overview\r\n        if (knowledge.services?.facility_overview) {\r\n          addSection('facility', '\\n\\nÃ°Å¸ÂÂ¢ TESIS:\\n' + knowledge.services.facility_overview);\r\n        }\r\n      }\r\n      break;\r\n\r\n    case 'kids':\r\n      if (knowledge.services?.courses_kids) {\r\n        addSection('courses_kids', '\\n\\nÃ°Å¸â€˜Â¶ COCUK KURSLARI:\\n' + knowledge.services.courses_kids);\r\n      }\r\n      if (knowledge.services?.courses_women) {\r\n        addSection('courses_women', '\\n\\nÃ°Å¸â€˜Â© KADIN KURSLARI:\\n' + knowledge.services.courses_women);\r\n      }\r\n      if (knowledge.pricing?.courses_kids) {\r\n        addSection('courses_kids_pricing', '\\n\\nÃ°Å¸â€™Â° KURS FIYATLARI:\\n' + knowledge.pricing.courses_kids);\r\n      }\r\n      if (knowledge.pricing?.courses_women) {\r\n        addSection('courses_women_pricing', '\\nÃ°Å¸â€™Â° ' + knowledge.pricing.courses_women);\r\n      }\r\n      if (knowledge.policies?.age_groups) {\r\n        addSection('age_groups', '\\n\\nÃ°Å¸â€œâ€¹ YAS GRUPLARI: ' + knowledge.policies.age_groups);\r\n      }\r\n      // Add schedules\r\n      if (knowledge.hours?.taekwondo_schedule) addSection('taekwondo_schedule', '\\n\\nÃ°Å¸Â¥â€¹ ' + knowledge.hours.taekwondo_schedule);\r\n      if (knowledge.hours?.kickboxing_schedule) addSection('kickboxing_schedule', '\\nÃ°Å¸Â¥Å  ' + knowledge.hours.kickboxing_schedule);\r\n      if (knowledge.hours?.gymnastics_schedule) addSection('gymnastics_schedule', '\\nÃ°Å¸Â¤Â¸ ' + knowledge.hours.gymnastics_schedule);\r\n      if (knowledge.hours?.swim_kids_schedule) addSection('swim_kids_schedule', '\\nÃ°Å¸ÂÅ  ' + knowledge.hours.swim_kids_schedule);\r\n      if (knowledge.hours?.swim_women_schedule) addSection('swim_women_schedule', '\\nÃ°Å¸ÂÅ Ã¢â‚¬ÂÃ¢â„¢â‚¬Ã¯Â¸Â ' + knowledge.hours.swim_women_schedule);\r\n      break;\r\n\r\n    case 'policies':\r\n      if (knowledge.policies) {\r\n        let policiesContent = '\\n\\nÃ°Å¸â€œâ€¹ KURALLAR:';\r\n        Object.entries(knowledge.policies).forEach(([key, v]) => {\r\n          if (key !== 'legitimate_services' && key !== 'rejection_prompt') {\r\n            policiesContent += '\\nÃ¢â‚¬Â¢ ' + v;\r\n          }\r\n        });\r\n        addSection('policies', policiesContent);\r\n      }\r\n      break;\r\n\r\n    case 'booking':\r\n      if (knowledge.contact?.phone) {\r\n        addSection('phone', '\\n\\nÃ°Å¸â€œÅ¾ RANDEVU: ' + knowledge.contact.phone);\r\n      }\r\n      // Hours only added when 'hours' is in detectedIntents (handled by hours case)\r\n      break;\r\n\r\n    case 'general_info':\r\n      // Only for truly general questions or first message\r\n      if (isFirstMessage) {\r\n        if (knowledge.services?.facility_overview) {\r\n          addSection('facility', '\\n\\nÃ°Å¸ÂÂ¢ TESIS:\\n' + knowledge.services.facility_overview);\r\n        }\r\n        // Campaign pricing only added when 'pricing' is in detectedIntents (handled by pricing case)\r\n        if (knowledge.contact?.phone) {\r\n          addSection('phone', '\\n\\nÃ°Å¸â€œÅ¾ RANDEVU: ' + knowledge.contact.phone);\r\n        }\r\n      }\r\n      break;\r\n  }\r\n}\r\n\r\n// ============================================\r\n// CLOSE KNOWLEDGE CONTEXT WITH ANTI-HALLUCINATION FENCE\r\n// ============================================\r\n\r\nknowledgeContext += '\\n\\n=== BILGILER SONU ===';\r\nknowledgeContext += '\\nÃ°Å¸Å¡Â« Yukaridaki bilgileri kullanarak cevap ver. Bilgi yoksa \"Bu konuda detayli bilgi icin lutfen bizi arayin\" de.';\r\nknowledgeContext += '\\nÃ°Å¸Å¡Â« Yukarida OLMAYAN hizmet, fiyat veya saat UYDURMA!';\r\n\r\n// ============================================\r\n// SYSTEM PROMPT & HINTS\r\n// ============================================\r\n\r\nlet systemPrompt = aiPrompt.systemMessage || 'Sen Eform Spor Merkezi musteri temsilcisisin.';\r\n\r\nif (isSuspicious) {\r\n  systemPrompt = 'Sen Eform Spor Merkezi musteri temsilcisisin. ONEMLI: Bu kullanici daha once uygunsuz mesaj gondermis. DIREKT ve KISA cevap ver. ASLA samimi olma. ASLA \"nasil yardimci olabilirim\", \"randevu ister misiniz\", \"baska soru var mi\" gibi sorular SORMA. Sadece sorulan soruya cevap ver ve BIT. Uygunsuz icerik algilasan HEMEN sert reddet.';\r\n}\r\n\r\nlet customerHint = '';\r\n\r\n// Multi-intent hint\r\nif (detectedIntents.length > 1) {\r\n  customerHint += '\\n\\nÃ¢Å¡Â Ã¯Â¸Â COKLU SORU! Kullanici ' + detectedIntents.length + ' farkli konu hakkinda soru soruyor: ' + detectedIntents.join(', ') + '. HER KONUYA cevap ver, hicbirini atlama!';\r\n}\r\n\r\n// Specific hints based on topics\r\nif (normalizedText.match(/ne getir|getirmem|getirmeli|yanima|yaninda/)) {\r\n  customerHint += '\\n\\nÃ¢Å¡Â Ã¯Â¸Â KRITIK: Kullanici masaga gelirken ne getirmesi gerektigini soruyor. MUTLAKA soyle: Havlu, terlik VE SORT tesiste ucretsiz saglanir. Tek kullanimlik sort secenegi de var. Havuz icin bone zorunlu.';\r\n}\r\n\r\nif (isFirstMessage && !isSuspicious) {\r\n  customerHint += '\\n\\nÃ¢Å¡Â Ã¯Â¸Â ILK MESAJ! Kendini tanit: \"Merhaba! Ben Eform Spor Merkezi dijital asistaniyim.\"';\r\n} else if (isSuspicious) {\r\n  customerHint += '\\n\\nÃ¢Å¡Â Ã¯Â¸Â SUPELI KULLANICI (ihlal: ' + offenseCount + '). Direkt cevap ver, samimi olma, ASLA soru sorma (randevu, yardim, vs). Sadece cevap ver ve BIT.';\r\n}\r\n\r\nconst legitimateServices = knowledge.policies?.legitimate_services || \r\n  'MIX masaj, Klasik masaj, SÃ„Â±cak taÃ…Å¸ masajÃ„Â±, Medikal masaj, Kese kÃƒÂ¶pÃƒÂ¼k, Hamam, Sauna, Buhar odasÃ„Â±, Fitness, Reformer Pilates, YÃƒÂ¼zme kurslarÃ„Â±, Jimnastik, Taekwondo, Kickboks, Boks, Personal Trainer, Fizik tedavi';\r\n\r\nreturn [{ \r\n  json: { \r\n    senderId: parseData.senderId, \r\n    text: parseData.text, \r\n    startTime: parseData.startTime, \r\n    intent: primaryIntent,\r\n    detectedIntents: detectedIntents,\r\n    detectedTopics: Object.keys(detectedTopics).filter(k => detectedTopics[k]),\r\n    isFirstMessage, \r\n    isSuspicious, \r\n    offenseCount, \r\n    systemPrompt, \r\n    customerHint, \r\n    knowledgeContext, \r\n    legitimateServices, \r\n    isTestMode: parseData.isTestMode \r\n  } \r\n}];\r\n"
       },
       "id": "enrich-context",
       "name": "Enrich Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2600, 600]
+      "position": [
+        2600,
+        600
+      ]
     },
-
     {
       "parameters": {
         "method": "POST",
@@ -241,21 +529,42 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "HTTP-Referer", "value": "https://spa-kiosk.local" },
-            { "name": "X-Title", "value": "SPA Digital Kiosk" }
+            {
+              "name": "HTTP-Referer",
+              "value": "https://spa-kiosk.local"
+            },
+            {
+              "name": "X-Title",
+              "value": "SPA Digital Kiosk"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o', messages: [{ role: 'system', content: 'Sen bir guvenlik filtresisin. Mesajlari analiz et ve uygun olup olmadigini belirle.\\n\\nONEMLI: Bu bir SPA ve SPOR merkezidir. Asagidaki MEŞRU hizmetler var:\\n- MIX masaj (7 farkli teknik, premium hizmet)\\n- Sicak tas masaj\\n- Medikal masaj\\n- Kese kopuk (geleneksel hamam hizmeti)\\n- Klasik masaj\\n- Hamam, sauna, buhar odasi\\n- Fitness, pilates, yuzme kurslari\\n\\nREJECT (reddet) - SADECE asagidaki durumlarda:\\n- Acik cinsel icerik: \"mutlu son\", \"happy ending\", \"mutlu\", \"sonu guzel\", \"sonu keyifli\", \"ekstra servis\", \"ozel masaj\", \"gizli hizmet\", \"VIP masaj\", \"full servis\", \"escort\", \"romantik masaj\", \"sevgili masaji\", \"partner masaji\"\\n- Cinsel ima: \"masaj sonrasi ne olur\", \"odada ne olur\", \"gece masaji\", \"keyifli masaj\"\\n- Personel bilgisi istekleri: \"terapist telefonu\", \"calisanin numarasi\", \"masajci kiz\"\\n- Taciz, tehdit, kufur\\n\\nALLOW (izin ver) - Asagidaki NORMAL sorular KESINLIKSE ALLOW:\\n- Fiyat sorulari: masaj fiyati, ucret, ne kadar, kac para, 60 dakika masaj ucret, gunluk giris\\n- Hizmet sorulari: kese kopuk, hamam, sauna, aromaterapi, sicak tas, terapist bilgi, MIX masaj, medikal masaj\\n- Masaj turleri: klasik masaj, sicak tas masaj, MIX masaj, medikal masaj, kese kopuk\\n- Saat sorulari: saat kacta, acik mi, kapali mi, yuzme saati\\n- Adres sorulari: nerede, adres, yer, konum\\n- Randevu talepleri\\n- Uyelik sorulari: fitness, pilates, gym, aile uyeligi\\n- Cocuk kurslari: yuzme, jimnastik, cocuk girebilir mi\\n- Genel sorular: merhaba, tesekkur, dahil mi, var mi, hakkinda\\n- Kisa takip sorulari: \"yer\", \"dahil mi\", \"var mi\", \"hakkinda bilgi\"\\n\\nKRITIK: \"ucret\", \"fiyat\", \"ne kadar\" gibi kelimeler NORMAL fiyat sorularidir - ALLOW!\\nKRITIK: \"MIX masaj\", \"sicak tas\", \"medikal masaj\" MEŞRU hizmetlerdir - ALLOW!\\n\\nSadece \"ALLOW\" veya \"REJECT\" yaz.' }, { role: 'user', content: $json.text }], temperature: 0.05, max_tokens: 10 }) }}",
-        "options": { "timeout": 3000, "response": { "response": { "neverError": true } } }
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-4o', messages: [{ role: 'system', content: 'Sen bir guvenlik filtresisin. Mesajlari analiz et ve uygun olup olmadigini belirle.\\n\\nONEMLI: Bu bir SPA ve SPOR merkezidir. Asagidaki MEÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¾RU hizmetler var:\\n- MIX masaj (7 farkli teknik, premium hizmet)\\n- Sicak tas masaj\\n- Medikal masaj\\n- Kese kopuk (geleneksel hamam hizmeti)\\n- Klasik masaj\\n- Hamam, sauna, buhar odasi\\n- Fitness, pilates, yuzme kurslari\\n\\nREJECT (reddet) - SADECE asagidaki durumlarda:\\n- Acik cinsel icerik: \"mutlu son\", \"happy ending\", \"mutlu\", \"sonu guzel\", \"sonu keyifli\", \"ekstra servis\", \"ozel masaj\", \"gizli hizmet\", \"VIP masaj\", \"full servis\", \"escort\", \"romantik masaj\", \"sevgili masaji\", \"partner masaji\"\\n- Cinsel ima: \"masaj sonrasi ne olur\", \"odada ne olur\", \"gece masaji\", \"keyifli masaj\"\\n- Personel bilgisi istekleri: \"terapist telefonu\", \"calisanin numarasi\", \"masajci kiz\"\\n- Taciz, tehdit, kufur\\n\\nALLOW (izin ver) - Asagidaki NORMAL sorular KESINLIKSE ALLOW:\\n- Fiyat sorulari: masaj fiyati, ucret, ne kadar, kac para, 60 dakika masaj ucret, gunluk giris\\n- Hizmet sorulari: kese kopuk, hamam, sauna, aromaterapi, sicak tas, terapist bilgi, MIX masaj, medikal masaj\\n- Masaj turleri: klasik masaj, sicak tas masaj, MIX masaj, medikal masaj, kese kopuk\\n- Saat sorulari: saat kacta, acik mi, kapali mi, yuzme saati\\n- Adres sorulari: nerede, adres, yer, konum\\n- Randevu talepleri\\n- Uyelik sorulari: fitness, pilates, gym, aile uyeligi\\n- Cocuk kurslari: yuzme, jimnastik, cocuk girebilir mi\\n- Genel sorular: merhaba, tesekkur, dahil mi, var mi, hakkinda\\n- Kisa takip sorulari: \"yer\", \"dahil mi\", \"var mi\", \"hakkinda bilgi\"\\n\\nKRITIK: \"ucret\", \"fiyat\", \"ne kadar\" gibi kelimeler NORMAL fiyat sorularidir - ALLOW!\\nKRITIK: \"MIX masaj\", \"sicak tas\", \"medikal masaj\" MEÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€¦Ã‚Â¾RU hizmetlerdir - ALLOW!\\n\\nSadece \"ALLOW\" veya \"REJECT\" yaz.' }, { role: 'user', content: $json.text }], temperature: 0.05, max_tokens: 10 }) }}",
+        "options": {
+          "timeout": 3000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "ai-safety-check",
       "name": "AI Safety Check",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [2800, 600],
-      "credentials": { "httpHeaderAuth": { "id": "OpenRouterAPI001", "name": "OpenRouter API" } }
+      "position": [
+        2800,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "OpenRouterAPI001",
+          "name": "OpenRouter API"
+        }
+      }
     },
     {
       "parameters": {
@@ -265,42 +574,95 @@
       "name": "Parse Safety",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2950, 600]
+      "position": [
+        2950,
+        600
+      ]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "reject", "leftValue": "={{ $json.safetyDecision }}", "rightValue": "REJECT", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Reject" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "allow", "leftValue": "={{ $json.safetyDecision }}", "rightValue": "ALLOW", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Allow" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "reject",
+                    "leftValue": "={{ $json.safetyDecision }}",
+                    "rightValue": "REJECT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reject"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "allow",
+                    "leftValue": "={{ $json.safetyDecision }}",
+                    "rightValue": "ALLOW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Allow"
+            }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "safety-router",
       "name": "Safety Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [3000, 600]
+      "position": [
+        3000,
+        600
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconst knowledge = $('Fetch Knowledge').first().json || {};\n\n// Get rejection prompt from knowledge base or use default\nconst rejectionPrompt = knowledge.policies?.rejection_prompt || 'DIREKT ve SERT reddet. Kullaniciyi AZARLA. KISA cevap ver.';\n\n// Add HARSH denial instruction to system prompt\ndata.systemPrompt = data.systemPrompt + '\\n\\n🚫 KRITIK UYARI: Bu kullanici uygunsuz/cinsel icerik istedi (' + data.safetyReason + ').\\n\\n' + rejectionPrompt;\n\ndata.customerHint = '\\n\\n⚠️ UYGUNSUZ TALEP! SERT VE KABA REDDET!';\n\nreturn [{ json: data }];"
+        "jsCode": "const data = $input.first().json;\nconst knowledge = $('Fetch Knowledge').first().json || {};\n\n// Get rejection prompt from knowledge base or use default\nconst rejectionPrompt = knowledge.policies?.rejection_prompt || 'DIREKT ve SERT reddet. Kullaniciyi AZARLA. KISA cevap ver.';\n\n// Add HARSH denial instruction to system prompt\ndata.systemPrompt = data.systemPrompt + '\\n\\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â« KRITIK UYARI: Bu kullanici uygunsuz/cinsel icerik istedi (' + data.safetyReason + ').\\n\\n' + rejectionPrompt;\n\ndata.customerHint = '\\n\\nÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â UYGUNSUZ TALEP! SERT VE KABA REDDET!';\n\nreturn [{ json: data }];"
       },
       "id": "prepare-denial",
       "name": "Prepare Denial",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3200, 500]
+      "position": [
+        3200,
+        500
+      ]
     },
-
-
     {
       "parameters": {
         "promptType": "define",
         "text": "={{ $json.text }}",
         "options": {
-          "systemMessage": "={{ $json.systemPrompt + '\\n\\n⚠️ GUVENLIK KURALLARI:\\n- Cinsel ifadeleri ASLA onaylama\\n- Belirsiz \"son\" veya \"bitis\" sorularini olumlu cevaplama\\n- Sadece profesyonel spa hizmetleri hakkinda konus\\n\\n🏢 SIRKET ADI: \"Eform Spor Merkezi\" (ASLA \"Eform Spa\" deme!)\\n\\n🚫 KRITIK: MESAJ SONUNA EK CUMLE EKLEME!\\n- \"Daha fazla bilgi almak isterseniz\" YAZMA!\\n- \"Randevu olusturmak isterseniz\" YAZMA!\\n- \"Yardimci olabilirim\" YAZMA!\\n- Cevabi ver ve SUS!' + $json.customerHint + $json.knowledgeContext }}",
+          "systemMessage": "={{ $json.systemPrompt + '\\n\\nÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â GUVENLIK KURALLARI:\\n- Cinsel ifadeleri ASLA onaylama\\n- Belirsiz \"son\" veya \"bitis\" sorularini olumlu cevaplama\\n- Sadece profesyonel spa hizmetleri hakkinda konus\\n\\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â¢ SIRKET ADI: \"Eform Spor Merkezi\" (ASLA \"Eform Spa\" deme!)\\n\\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â« KRITIK: MESAJ SONUNA EK CUMLE EKLEME!\\n- \"Daha fazla bilgi almak isterseniz\" YAZMA!\\n- \"Randevu olusturmak isterseniz\" YAZMA!\\n- \"Yardimci olabilirim\" YAZMA!\\n- Cevabi ver ve SUS!' + $json.customerHint + '\\n\\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â¡Ãƒâ€šÃ‚Â¨ ASAGIDAKI BILGILER DISINDA HICBIR SEY SOYLEME! Bilgi yoksa \"detayli bilgi icin bizi arayin\" de. ASLA uydurma!' + $json.knowledgeContext }}",
           "maxIterations": 1
         }
       },
@@ -308,19 +670,33 @@
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [3200, 700]
+      "position": [
+        3200,
+        700
+      ]
     },
     {
       "parameters": {
         "model": "openai/gpt-4o",
-        "options": { "temperature": 0.3, "maxTokens": 600 }
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 600
+        }
       },
       "id": "openrouter-model",
       "name": "OpenRouter Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
-      "position": [3100, 900],
-      "credentials": { "openRouterApi": { "id": "T1Xb3R0FOkV4vhAy", "name": "OpenRouter account" } }
+      "position": [
+        3100,
+        900
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "T1Xb3R0FOkV4vhAy",
+          "name": "OpenRouter account"
+        }
+      }
     },
     {
       "parameters": {
@@ -332,7 +708,10 @@
       "name": "Chat Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [3250, 900]
+      "position": [
+        3250,
+        900
+      ]
     },
     {
       "parameters": {
@@ -342,39 +721,140 @@
       "name": "Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3400, 700]
+      "position": [
+        3400,
+        700
+      ]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "test", "leftValue": "={{ $json.isTestMode }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Test" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "ig", "leftValue": "={{ $json.isTestMode }}", "rightValue": "false", "operator": { "type": "boolean", "operation": "false" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Instagram" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "test",
+                    "leftValue": "={{ $json.isTestMode }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Test"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "ig",
+                    "leftValue": "={{ $json.isTestMode }}",
+                    "rightValue": "false",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Instagram"
+            }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "output-router",
       "name": "Output Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [3600, 600]
+      "position": [
+        3600,
+        600
+      ]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "flag", "leftValue": "={{ $json.shouldFlag }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Flag" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "skip", "leftValue": "={{ $json.shouldFlag }}", "rightValue": "false", "operator": { "type": "boolean", "operation": "false" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Skip" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "flag",
+                    "leftValue": "={{ $json.shouldFlag }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Flag"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "skip",
+                    "leftValue": "={{ $json.shouldFlag }}",
+                    "rightValue": "false",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Skip"
+            }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "test-flag-router",
       "name": "Test Flag Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [3800, 500]
+      "position": [
+        3800,
+        500
+      ]
     },
     {
       "parameters": {
@@ -385,14 +865,29 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ reason: $json.safetyReason || 'inappropriate_content' }) }}",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "test-flag-http",
       "name": "Test Flag HTTP",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [4000, 450],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        4000,
+        450
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
     {
       "parameters": {
@@ -402,7 +897,10 @@
       "name": "Test Merge Flag Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4200, 450]
+      "position": [
+        4200,
+        450
+      ]
     },
     {
       "parameters": {
@@ -413,7 +911,10 @@
       "name": "Test Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [4400, 500]
+      "position": [
+        4400,
+        500
+      ]
     },
     {
       "parameters": {
@@ -424,14 +925,24 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ recipient: { id: $json.senderId }, message: { text: $json.message } }) }}",
-        "options": { "timeout": 5000 }
+        "options": {
+          "timeout": 5000
+        }
       },
       "id": "send-ig",
       "name": "Send Instagram",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [3800, 700],
-      "credentials": { "httpHeaderAuth": { "id": "rBp2vg2XlwgtEPNX", "name": "Instagram Business API" } }
+      "position": [
+        3800,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "rBp2vg2XlwgtEPNX",
+          "name": "Instagram Business API"
+        }
+      }
     },
     {
       "parameters": {
@@ -442,14 +953,29 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ instagramId: $json.senderId, direction: 'outbound', messageText: $json.message, intent: $json.intent, responseTime: $json.responseTime, safetyDecision: $json.safetyDecision || 'N/A' }) }}",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "log",
       "name": "Log Interaction",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [4000, 700],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        4000,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
     {
       "parameters": {
@@ -459,23 +985,75 @@
       "name": "IG Merge Log Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4100, 700]
+      "position": [
+        4100,
+        700
+      ]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "flag", "leftValue": "={{ $json.shouldFlag }}", "rightValue": "true", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Flag" },
-            { "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "id": "skip", "leftValue": "={{ $json.shouldFlag }}", "rightValue": "false", "operator": { "type": "boolean", "operation": "false" } }], "combinator": "and" }, "renameOutput": true, "outputKey": "Skip" }
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "flag",
+                    "leftValue": "={{ $json.shouldFlag }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Flag"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "skip",
+                    "leftValue": "={{ $json.shouldFlag }}",
+                    "rightValue": "false",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Skip"
+            }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "flag-router",
       "name": "Flag Router",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [4200, 700]
+      "position": [
+        4200,
+        700
+      ]
     },
     {
       "parameters": {
@@ -486,75 +1064,511 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ reason: $json.safetyReason || 'inappropriate_content' }) }}",
-        "options": { "timeout": 2000, "response": { "response": { "neverError": true } } }
+        "options": {
+          "timeout": 2000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
       "id": "flag-suspicious-ig",
       "name": "Flag Suspicious IG",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [4400, 650],
-      "credentials": { "httpHeaderAuth": { "id": "wbEX2mtUQ8gX5t21", "name": "Backend API Key" } }
+      "position": [
+        4400,
+        650
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wbEX2mtUQ8gX5t21",
+          "name": "Backend API Key"
+        }
+      }
     },
-    { "parameters": { "respondWith": "text", "responseBody": "OK" }, "id": "resp-ok", "name": "OK Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [4600, 700] }
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK"
+      },
+      "id": "resp-ok",
+      "name": "OK Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        4600,
+        700
+      ]
+    }
   ],
-
   "connections": {
-    "Webhook Instagram": { "main": [[{ "node": "Parse Instagram", "type": "main", "index": 0 }]] },
-    "Webhook Test": { "main": [[{ "node": "Parse Test", "type": "main", "index": 0 }]] },
-    "Parse Instagram": { "main": [[{ "node": "Merge Inputs", "type": "main", "index": 0 }]] },
-    "Parse Test": { "main": [[{ "node": "Merge Inputs", "type": "main", "index": 1 }]] },
-    "Merge Inputs": { "main": [[{ "node": "Dev Filter", "type": "main", "index": 0 }]] },
-    "Dev Filter": { "main": [[{ "node": "Router", "type": "main", "index": 0 }]] },
-    "Router": { "main": [
-      [{ "node": "Verify Response", "type": "main", "index": 0 }],
-      [{ "node": "Check Service Status", "type": "main", "index": 0 }],
-      [{ "node": "Ignore Response", "type": "main", "index": 0 }]
-    ]},
-    "Check Service Status": { "main": [[{ "node": "Check Enabled", "type": "main", "index": 0 }]] },
-    "Check Enabled": { "main": [[{ "node": "Maintenance Check", "type": "main", "index": 0 }]] },
-    "Maintenance Check": { "main": [
-      [{ "node": "Format Maintenance", "type": "main", "index": 0 }],
-      [{ "node": "Check Suspicious", "type": "main", "index": 0 }]
-    ]},
-    "Check Suspicious": { "main": [[{ "node": "Process Suspicious Check", "type": "main", "index": 0 }]] },
-    "Process Suspicious Check": { "main": [[{ "node": "Fetch Customer", "type": "main", "index": 0 }, { "node": "Fetch Knowledge", "type": "main", "index": 0 }, { "node": "Fetch Prompt", "type": "main", "index": 0 }, { "node": "AI Intent Detection", "type": "main", "index": 0 }]] },
-    "Format Maintenance": { "main": [[{ "node": "Output Router", "type": "main", "index": 0 }]] },
-    "Fetch Customer": { "main": [[{ "node": "Merge Data", "type": "main", "index": 0 }]] },
-    "Fetch Knowledge": { "main": [[{ "node": "Merge Data", "type": "main", "index": 1 }]] },
-    "Fetch Prompt": { "main": [[{ "node": "Merge Data", "type": "main", "index": 2 }]] },
-    "AI Intent Detection": { "main": [[{ "node": "Merge Data", "type": "main", "index": 3 }]] },
-    "Merge Data": { "main": [[{ "node": "Enrich Context", "type": "main", "index": 0 }]] },
-    "Enrich Context": { "main": [[{ "node": "AI Safety Check", "type": "main", "index": 0 }]] },
-    "AI Safety Check": { "main": [[{ "node": "Parse Safety", "type": "main", "index": 0 }]] },
-    "Parse Safety": { "main": [[{ "node": "Safety Router", "type": "main", "index": 0 }]] },
-    "Safety Router": { "main": [
-      [{ "node": "Prepare Denial", "type": "main", "index": 0 }],
-      [{ "node": "AI Agent", "type": "main", "index": 0 }]
-    ]},
-    "Prepare Denial": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
-    "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
-    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
-    "AI Agent": { "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]] },
-    "Format Response": { "main": [[{ "node": "Output Router", "type": "main", "index": 0 }]] },
-    "Output Router": { "main": [
-      [{ "node": "Test Flag Router", "type": "main", "index": 0 }],
-      [{ "node": "Send Instagram", "type": "main", "index": 0 }]
-    ]},
-    "Test Flag Router": { "main": [
-      [{ "node": "Test Flag HTTP", "type": "main", "index": 0 }],
-      [{ "node": "Test Response", "type": "main", "index": 0 }]
-    ]},
-    "Test Flag HTTP": { "main": [[{ "node": "Test Merge Flag Result", "type": "main", "index": 0 }]] },
-    "Test Merge Flag Result": { "main": [[{ "node": "Test Response", "type": "main", "index": 0 }]] },
-    "Send Instagram": { "main": [[{ "node": "Log Interaction", "type": "main", "index": 0 }]] },
-    "Log Interaction": { "main": [[{ "node": "IG Merge Log Result", "type": "main", "index": 0 }]] },
-    "IG Merge Log Result": { "main": [[{ "node": "Flag Router", "type": "main", "index": 0 }]] },
-    "Flag Router": { "main": [
-      [{ "node": "Flag Suspicious IG", "type": "main", "index": 0 }],
-      [{ "node": "OK Response", "type": "main", "index": 0 }]
-    ]},
-    "Flag Suspicious IG": { "main": [[{ "node": "OK Response", "type": "main", "index": 0 }]] }
+    "Webhook Instagram": {
+      "main": [
+        [
+          {
+            "node": "Parse Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Test": {
+      "main": [
+        [
+          {
+            "node": "Parse Test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Instagram": {
+      "main": [
+        [
+          {
+            "node": "Merge Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Test": {
+      "main": [
+        [
+          {
+            "node": "Merge Inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Inputs": {
+      "main": [
+        [
+          {
+            "node": "Dev Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dev Filter": {
+      "main": [
+        [
+          {
+            "node": "Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router": {
+      "main": [
+        [
+          {
+            "node": "Verify Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Service Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Service Status": {
+      "main": [
+        [
+          {
+            "node": "Check Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Enabled": {
+      "main": [
+        [
+          {
+            "node": "Maintenance Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maintenance Check": {
+      "main": [
+        [
+          {
+            "node": "Format Maintenance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Suspicious",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Suspicious": {
+      "main": [
+        [
+          {
+            "node": "Process Suspicious Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Suspicious Check": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Knowledge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Prompt",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Intent Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Maintenance": {
+      "main": [
+        [
+          {
+            "node": "Output Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Knowledge": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Prompt": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "AI Intent Detection": {
+      "main": [
+        [
+          {
+            "node": "Merge Data",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Data": {
+      "main": [
+        [
+          {
+            "node": "Enrich Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Context": {
+      "main": [
+        [
+          {
+            "node": "AI Safety Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Safety Check": {
+      "main": [
+        [
+          {
+            "node": "Parse Safety",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Safety": {
+      "main": [
+        [
+          {
+            "node": "Safety Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safety Router": {
+      "main": [
+        [
+          {
+            "node": "Prepare Denial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Denial": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Output Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output Router": {
+      "main": [
+        [
+          {
+            "node": "Test Flag Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Flag Router": {
+      "main": [
+        [
+          {
+            "node": "Test Flag HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Flag HTTP": {
+      "main": [
+        [
+          {
+            "node": "Test Merge Flag Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Merge Flag Result": {
+      "main": [
+        [
+          {
+            "node": "Test Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Instagram": {
+      "main": [
+        [
+          {
+            "node": "Log Interaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Interaction": {
+      "main": [
+        [
+          {
+            "node": "IG Merge Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Merge Log Result": {
+      "main": [
+        [
+          {
+            "node": "Flag Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Router": {
+      "main": [
+        [
+          {
+            "node": "Flag Suspicious IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Suspicious IG": {
+      "main": [
+        [
+          {
+            "node": "OK Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": true,
-  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" }
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
 }

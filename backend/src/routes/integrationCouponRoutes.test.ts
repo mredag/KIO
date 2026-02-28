@@ -1,7 +1,7 @@
 /**
  * Integration Coupon Routes Tests
  * 
- * Tests for n8n integration endpoints:
+ * Tests for integration endpoints:
  * - Token consumption
  * - Redemption claims
  * - Wallet lookup
@@ -457,23 +457,6 @@ describe('Integration Coupon Routes', () => {
       expect(response.body).toHaveProperty('components');
       expect(response.body.components).toHaveProperty('database');
       expect(response.body.components.database).toHaveProperty('status', 'up');
-      expect(response.body.components).toHaveProperty('n8nWebhook');
-      expect(response.body.components.n8nWebhook).toHaveProperty('status', 'not_configured');
-    });
-
-    it('should return degraded status when n8n webhook is down', async () => {
-      // Set a fake n8n webhook URL that will fail
-      process.env.N8N_WEBHOOK_URL = 'http://localhost:99999/webhook';
-
-      const response = await request(app)
-        .get('/api/integrations/coupons/health')
-        .expect(200);
-
-      expect(response.body.status).toBe('degraded');
-      expect(response.body.components.database.status).toBe('up');
-      expect(response.body.components.n8nWebhook.status).toBe('down');
-
-      delete process.env.N8N_WEBHOOK_URL;
     });
 
     it('should return unhealthy status when database is down', async () => {

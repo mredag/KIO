@@ -159,7 +159,7 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * Get knowledge context for n8n workflows
+   * Get knowledge context for AI workflows
    * Returns active entries grouped by category
    * Requirements: 7.1, 7.2, 7.3
    */

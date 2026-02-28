@@ -514,7 +514,7 @@
     "phoneNumber": "Telefon Numarası",
     "phoneNumberPlaceholder": "+905551234567",
     "phoneNumberHelp": "E.164 formatında telefon numarası girin (örn: +905551234567)",
-    "phoneNumberHelpFormats": "Kabul edilen formatlar: 5067070403, 05067070403, 905067070403",
+    "phoneNumberHelpFormats": "Kabul edilen formatlar: 5551234567, 05551234567, 905551234567",
     "sendToKiosk": "Kiosk'a Gönder",
     "sentToKiosk": "Kiosk'a Gönderildi",
     "sentToKioskMessage": "QR kod kiosk ekranında gösteriliyor",
@@ -650,7 +650,8 @@
       "intentBreakdown": "Niyet Dağılımı",
       "sentimentBreakdown": "Duygu Dağılımı",
       "dailyTrend": "Günlük Trend",
-      "platformDistribution": "Platform Dağılımı"
+      "platformDistribution": "Platform Dağılımı",
+      "positiveRate": "Pozitif Oran"
     },
     "intents": {
       "pricing": "Fiyat Sorgusu",

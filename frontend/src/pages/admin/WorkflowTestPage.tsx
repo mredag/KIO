@@ -1,361 +1,269 @@
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Send, Bot, AlertTriangle, CheckCircle, XCircle, HelpCircle, Loader2, Info, Zap } from 'lucide-react';
+﻿import { useState, useRef, useEffect } from 'react';
+import { Send, Bot, User, Trash2, RotateCcw, ChevronDown, Zap, Clock, Brain, MessageSquare } from 'lucide-react';
 import AdminLayout from '../../layouts/AdminLayout';
 
-interface TestResult {
-  status: string;
-  response: string;
-  intent: string;
-  safetyDecision: string;
-  safetyReason?: string;
-  processingTime?: number;
+interface ChatMessage {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  text: string;
+  timestamp: string;
+  analysis?: {
+    intentCategories: string[];
+    modelTier: string;
+    modelId: string;
+    isNewCustomer: boolean;
+    conversationLength: number;
+  };
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   responseTime?: number;
-  debug?: {
-    normalizedText?: string;
-    detectedIntent?: string;
-    knowledgeCategories?: string[];
-    contextLength?: number;
-    faqEntries?: string[];
-    knowledgeContextLength?: number;
-  };
-  aiContext?: {
-    systemPrompt: string;
-    knowledgeContext: string;
-    userMessage: string;
-  };
-  originalMessage?: string;
+  loading?: boolean;
 }
 
-interface IntentInfo {
-  description: string;
-  keywords: string[];
-  examples: string[];
+const QUICK_MESSAGES = [
+  { label: ' Masaj fiyatları', text: 'masaj fiyatları ne kadar' },
+  { label: ' Çalışma saatleri', text: 'saat kaça kadar açıksınız' },
+  { label: ' Adres', text: 'adresiniz nerede' },
+  { label: ' Üyelik', text: 'spor salonu üyelik fiyatları' },
+  { label: ' Çocuk kursları', text: 'çocuk kursları var mı' },
+  { label: ' Merhaba', text: 'merhaba bilgi almak istiyorum' },
+  { label: ' Kese köpük', text: 'kese köpük kim yapıyor' },
+  { label: ' Block test', text: 'mutlu son var mı' },
+  { label: ' Çoklu soru', text: 'masaj fiyatları ve çalışma saatleri nedir' },
+  { label: ' Pilates', text: 'reformer pilates var mı fiyatı ne kadar' },
+];
+
+function tierColor(tier: string) {
+  if (tier === 'light') return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+  if (tier === 'advanced') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+  return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300';
 }
 
 export default function WorkflowTestPage() {
-  useTranslation('admin');
-  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<TestResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showIntents, setShowIntents] = useState(false);
-  const [intents, setIntents] = useState<Record<string, IntentInfo> | null>(null);
-  const [testMode, setTestMode] = useState<'local' | 'n8n'>('n8n');
-  const n8nUrl = '/api/workflow-test/n8n';
+  const [senderId] = useState(() => `sim_${Date.now()}`);
+  const [showQuick, setShowQuick] = useState(true);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const testMessages = [
-    { label: 'FAQ: Kadınlar günü', message: 'kadınlar günü var mı' },
-    { label: 'FAQ: Kese köpük', message: 'kese köpük kim yapıyor' },
-    { label: 'FAQ: PT var mı', message: 'PT var mı' },
-    { label: 'FAQ: Ne getirmeliyim', message: 'yanımda ne getirmeliyim' },
-    { label: 'Fiyat sorgusu', message: 'masaj fiyatları ne kadar' },
-    { label: 'Üyelik', message: 'spor salonu üyelik fiyatları' },
-    { label: 'Çalışma saatleri', message: 'saat kaça kadar açıksınız' },
-    { label: 'Adres', message: 'adres nerede' },
-    { label: 'Merhaba', message: 'merhaba bilgi almak istiyorum' },
-    { label: '⚠️ Block test', message: 'mutlu son var mı' },
-  ];
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const handleTest = async () => {
-    if (!message.trim()) return;
-    
+  const sendMessage = async (text?: string) => {
+    const msg = (text || input).trim();
+    if (!msg || loading) return;
+    setInput('');
+    setShowQuick(false);
+
+    const userMsg: ChatMessage = {
+      id: `in_${Date.now()}`,
+      direction: 'inbound',
+      text: msg,
+      timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+    };
+    const loadingMsg: ChatMessage = {
+      id: `out_${Date.now()}`,
+      direction: 'outbound',
+      text: '',
+      timestamp: '',
+      loading: true,
+    };
+    setMessages(prev => [...prev, userMsg, loadingMsg]);
     setLoading(true);
-    setError(null);
-    setResult(null);
 
     try {
-      let response;
-      
-      if (testMode === 'n8n') {
-        // Call the real n8n workflow via backend proxy (avoids CSP issues)
-        response = await fetch(n8nUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ message: message.trim() })
-        });
-      } else {
-        // Local simulation (backend only)
-        response = await fetch('/api/workflow-test/simulate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ message: message.trim() })
-        });
+      const res = await fetch('/api/workflow-test/simulate-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message: msg, senderId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessages(prev => prev.map(m => m.loading ? {
+          ...m, loading: false, text: ` ${data.error || 'Hata oluştu'}`, timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        } : m));
+        return;
       }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      // Normalize response format (n8n returns slightly different structure)
-      const normalizedResult: TestResult = {
-        status: data.status || (data.response ? 'success' : 'error'),
-        response: data.response || data.message || 'No response',
-        intent: data.intent || 'unknown',
-        safetyDecision: data.safetyDecision || 'N/A',
-        safetyReason: data.safetyReason,
-        processingTime: data.processingTime || data.responseTime,
+      setMessages(prev => prev.map(m => m.loading ? {
+        ...m,
+        loading: false,
+        text: data.response,
+        timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        analysis: data.analysis,
+        usage: data.usage,
         responseTime: data.responseTime,
-        debug: data.debug,
-        originalMessage: data.originalMessage
-      };
-      
-      setResult(normalizedResult);
+      } : m));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setMessages(prev => prev.map(m => m.loading ? {
+        ...m, loading: false, text: ` Bağlantı hatası`, timestamp: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      } : m));
     } finally {
       setLoading(false);
+      inputRef.current?.focus();
     }
   };
 
-  const loadIntents = async () => {
+  const clearChat = async () => {
     try {
-      const response = await fetch('/api/workflow-test/intents', {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      setIntents(data.intents);
-      setShowIntents(true);
-    } catch (err) {
-      console.error('Failed to load intents:', err);
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'allowed':
-      case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'blocked':
-        return <XCircle className="w-5 h-5 text-red-500" />;
-      case 'unsure':
-        return <HelpCircle className="w-5 h-5 text-yellow-500" />;
-      case 'ignored':
-        return <AlertTriangle className="w-5 h-5 text-gray-500" />;
-      default:
-        return <Info className="w-5 h-5 text-blue-500" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'allowed':
-      case 'success':
-        return 'bg-green-50 border-green-200';
-      case 'blocked':
-        return 'bg-red-50 border-red-200';
-      case 'unsure':
-        return 'bg-yellow-50 border-yellow-200';
-      case 'ignored':
-        return 'bg-gray-50 border-gray-200';
-      default:
-        return 'bg-blue-50 border-blue-200';
-    }
+      await fetch(`/api/workflow-test/conversation/${senderId}`, { method: 'DELETE', credentials: 'include' });
+    } catch { /* ignore */ }
+    setMessages([]);
+    setShowQuick(true);
   };
 
   return (
     <AdminLayout>
-      <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Bot className="w-7 h-7" />
-          Workflow Test / Demo
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Test Instagram DM workflow without needing Instagram. Simulates the full n8n workflow locally.
-        </p>
-      </div>
-
-      {/* Quick Test Buttons */}
-      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-        <h3 className="font-medium mb-3">Quick Tests:</h3>
-        <div className="flex flex-wrap gap-2">
-          {testMessages.map((test, idx) => (
-            <button
-              key={idx}
-              onClick={() => setMessage(test.message)}
-              className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
-                test.label.includes('⚠️') 
-                  ? 'bg-red-50 border-red-200 hover:bg-red-100' 
-                  : 'bg-white border-gray-200 hover:bg-gray-100'
-              }`}
-            >
-              {test.label}
+      <div className="flex flex-col h-[calc(100vh-4rem)]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Instagram DM Simülatörü</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Ajan: Eform Instagram Asistanı  Sender: <code className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1 rounded">{senderId}</code>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowQuick(q => !q)} className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Hızlı mesajlar">
+              <ChevronDown className={`w-4 h-4 transition-transform ${showQuick ? 'rotate-180' : ''}`} />
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Input Form */}
-      <div className="mb-6">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleTest()}
-            placeholder="Type a message to test (e.g., 'kadınlar günü var mı')"
-            className="flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <button
-            onClick={handleTest}
-            disabled={loading || !message.trim()}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-            Test
-          </button>
-        </div>
-        
-        <div className="mt-3 flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setTestMode('n8n')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
-                testMode === 'n8n' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <Zap className="w-4 h-4" />
-              Real n8n Workflow
-            </button>
-            <button
-              onClick={() => setTestMode('local')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                testMode === 'local' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Local Simulation
+            <button onClick={clearChat} className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="Sohbeti temizle">
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
-          <button
-            onClick={loadIntents}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            View all intents →
-          </button>
         </div>
-        
-        {testMode === 'n8n' && (
-          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-2 text-sm text-blue-800">
-              <Zap className="w-4 h-4" />
-              <span className="font-medium">Real AI Mode:</span> Messages go through the actual n8n workflow on Pi (via backend proxy)
+        {/* Quick Messages */}
+        {showQuick && (
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_MESSAGES.map((q, i) => (
+                <button key={i} onClick={() => sendMessage(q.text)} disabled={loading}
+                  className="px-2.5 py-1 text-xs rounded-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50 transition-colors">
+                  {q.label}
+                </button>
+              ))}
             </div>
           </div>
         )}
-      </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/* Result Display */}
-      {result && (
-        <div className={`mb-6 p-4 border rounded-lg ${getStatusColor(result.status)}`}>
-          <div className="flex items-center gap-2 mb-3">
-            {getStatusIcon(result.status)}
-            <span className="font-medium capitalize">{result.status}</span>
-            <span className="text-sm text-gray-500">• {result.responseTime || result.processingTime}ms</span>
-            <span className="ml-auto px-2 py-0.5 bg-white rounded text-sm">
-              Intent: <strong>{result.intent}</strong>
-            </span>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg mb-4">
-            <h4 className="font-medium mb-2">Response:</h4>
-            <p className="whitespace-pre-wrap">{result.response}</p>
-          </div>
-
-          {result.safetyReason && (
-            <div className="text-sm text-gray-600 mb-2">
-              <strong>Safety:</strong> {result.safetyDecision} - {result.safetyReason}
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-gray-50 dark:bg-gray-950">
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 dark:text-gray-500">
+              <MessageSquare className="w-12 h-12 mb-3 opacity-50" />
+              <p className="text-sm">Instagram DM ajanını test etmek için bir mesaj gönderin</p>
+              <p className="text-xs mt-1">Gerçek pipeline: Intent Detection  Model Routing  Knowledge Fetch  AI Response</p>
             </div>
           )}
 
-          {result.debug && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
-                Debug Info
-              </summary>
-              <div className="mt-2 p-3 bg-gray-100 rounded text-sm font-mono">
-                <div><strong>Normalized:</strong> {result.debug.normalizedText}</div>
-                <div><strong>Detected Intent:</strong> {result.debug.detectedIntent}</div>
-                <div><strong>Knowledge Categories:</strong> {result.debug.knowledgeCategories?.join(', ')}</div>
-                <div><strong>Context Length:</strong> {result.debug.contextLength} chars</div>
-                {result.debug.faqEntries && result.debug.faqEntries.length > 0 && (
-                  <div><strong>FAQ Entries:</strong> {result.debug.faqEntries.join(', ')}</div>
+          {messages.map(msg => (
+            <div key={msg.id} className={`flex ${msg.direction === 'inbound' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[75%] ${msg.direction === 'inbound' ? 'order-1' : 'order-2'}`}>
+                {/* Avatar + Bubble */}
+                <div className={`flex items-end gap-2 ${msg.direction === 'inbound' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    msg.direction === 'inbound'
+                      ? 'bg-blue-500'
+                      : 'bg-gradient-to-br from-purple-500 to-pink-500'
+                  }`}>
+                    {msg.direction === 'inbound'
+                      ? <User className="w-3.5 h-3.5 text-white" />
+                      : <Bot className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  <div className={`rounded-2xl px-4 py-2.5 ${
+                    msg.direction === 'inbound'
+                      ? 'bg-blue-500 text-white rounded-br-md'
+                      : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded-bl-md'
+                  }`}>
+                    {msg.loading ? (
+                      <div className="flex items-center gap-1.5 py-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metadata (only for outbound AI responses) */}
+                {msg.direction === 'outbound' && !msg.loading && msg.analysis && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5 ml-9 text-[10px]">
+                    <span className={`px-1.5 py-0.5 rounded ${tierColor(msg.analysis.modelTier)}`}>
+                      <Zap className="w-2.5 h-2.5 inline mr-0.5" />
+                      {msg.analysis.modelTier}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                      {msg.analysis.modelId?.split('/').pop()}
+                    </span>
+                    {msg.analysis.intentCategories?.map(cat => (
+                      <span key={cat} className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                        <Brain className="w-2.5 h-2.5 inline mr-0.5" />{cat}
+                      </span>
+                    ))}
+                    {msg.responseTime && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
+                        <Clock className="w-2.5 h-2.5 inline mr-0.5" />{msg.responseTime}ms
+                      </span>
+                    )}
+                    {msg.usage?.total_tokens && (
+                      <span className="text-gray-400 dark:text-gray-500">{msg.usage.total_tokens} tok</span>
+                    )}
+                    {msg.analysis.isNewCustomer && (
+                      <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">yeni müşteri</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Timestamp */}
+                {!msg.loading && msg.timestamp && (
+                  <p className={`text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 ${msg.direction === 'inbound' ? 'text-right mr-9' : 'ml-9'}`}>
+                    {msg.timestamp}
+                  </p>
                 )}
               </div>
-            </details>
-          )}
-
-          {result.aiContext && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-800">
-                AI Context (what would be sent to AI)
-              </summary>
-              <div className="mt-2 p-3 bg-gray-100 rounded text-sm">
-                <div className="mb-2">
-                  <strong>System Prompt:</strong>
-                  <pre className="mt-1 whitespace-pre-wrap text-xs bg-white p-2 rounded">{result.aiContext.systemPrompt}</pre>
-                </div>
-                <div>
-                  <strong>Knowledge Context:</strong>
-                  <pre className="mt-1 whitespace-pre-wrap text-xs bg-white p-2 rounded max-h-96 overflow-auto">{result.aiContext.knowledgeContext}</pre>
-                </div>
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      {/* Intents Modal */}
-      {showIntents && intents && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowIntents(false)}>
-          <div className="bg-white rounded-lg p-6 max-w-2xl max-h-[80vh] overflow-auto" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-            <h2 className="text-xl font-bold mb-4">Supported Intents</h2>
-            <div className="space-y-4">
-              {Object.entries(intents).map(([key, info]: [string, IntentInfo]) => (
-                <div key={key} className="p-3 bg-gray-50 rounded-lg">
-                  <h3 className="font-medium">{key}</h3>
-                  <p className="text-sm text-gray-600">{info.description}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {info.keywords.map((kw: string, i: number) => (
-                      <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{kw}</span>
-                    ))}
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    Examples: {info.examples.join(' | ')}
-                  </div>
-                </div>
-              ))}
             </div>
+          ))}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Input */}
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+          <div className="flex gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              placeholder="Mesaj yaz..."
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 rounded-full border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50 placeholder-gray-400"
+              autoFocus
+            />
             <button
-              onClick={() => setShowIntents(false)}
-              className="mt-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              onClick={() => sendMessage()}
+              disabled={loading || !input.trim()}
+              className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              Close
+              {loading ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </div>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 text-center">
+            Pipeline: InstagramContextService  Knowledge Fetch  OpenRouter ({messages.filter(m => m.direction === 'outbound' && !m.loading).length} yanıt)
+          </p>
         </div>
-      )}
-    </div>
+      </div>
     </AdminLayout>
   );
 }

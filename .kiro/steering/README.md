@@ -1,141 +1,28 @@
-# Steering Files - Overview
+# Steering Files
 
-This directory contains steering rules that guide Kiro's behavior when working on this project.
+## Start Here: ULTIMATE_GUIDE.md
+Single source of truth — architecture, bug patterns, commands, API reference.
 
-## ⭐ START HERE: ULTIMATE_GUIDE.md
+## Files
 
-**The ULTIMATE_GUIDE.md is your single source of truth.** It contains:
-- Top 3 critical bug patterns with instant solutions
-- Quick decision tree (symptom → solution)
-- Essential commands (copy-paste ready)
-- Implementation checklists
-- Key code patterns
-- Deployment steps
-- Troubleshooting quick fixes
+| File | When to Use |
+|------|-------------|
+| `ULTIMATE_GUIDE.md` | Any task (95% of cases) |
+| `openclaw-development.md` | OpenClaw agent/hook changes, Instagram AI pipeline |
+| `ui-ux-testing.md` | After UI/UX changes — Puppeteer testing |
+| `deployment-raspberry-pi.md` | Deploying to Pi |
 
-**For 95% of tasks, the Ultimate Guide is all you need.** Only dive into detailed files for complex scenarios.
+## Quick Decision
 
-## 📚 Additional Steering Files
+| Need | File |
+|------|------|
+| Bug fix / error | ULTIMATE_GUIDE.md |
+| OpenClaw / Instagram AI | openclaw-development.md |
+| UI testing | ui-ux-testing.md |
+| Deploy to Pi | deployment-raspberry-pi.md |
 
-Only 2 additional files for specific scenarios:
+## External Docs (Context7 MCP)
 
-**ui-ux-testing.md** 🎨
-- Puppeteer testing workflow and server management
-- Viewport testing (mobile, tablet, desktop)
-- Accessibility checks and verification steps
-- Database persistence testing
+When you need latest docs for OpenClaw, use Context7 with library ID `/openclaw/openclaw`. The `openclaw-development.md` steering file has pre-built query examples and a summary of key API patterns.
 
-**deployment-raspberry-pi.md** 🚀
-- Remove test files before build
-- NODE_ENV=production requirement
-- Port configuration (3001 in prod)
-- Network portability and verification checklist
-
----
-
-
-
-## 🎯 Quick Decision Tree
-
-| Symptom | File to Check |
-|---------|---------------|
-| Empty `{}` in database | ULTIMATE_GUIDE.md → Pattern 1 |
-| Content not updating | ULTIMATE_GUIDE.md → Pattern 2 |
-| Property undefined | ULTIMATE_GUIDE.md → Pattern 3 |
-| Server won't start | ULTIMATE_GUIDE.md → Commands |
-| Any error | ULTIMATE_GUIDE.md → Decision Tree |
-| UI testing needed | ui-ux-testing.md |
-| Deploying to Pi | deployment-raspberry-pi.md |
-| n8n workflows | n8n-development.md (**connect to Pi via SSH!**) |
-
-## 🔴 n8n Note
-**n8n runs on the Raspberry Pi (192.168.1.137), not locally!**
-- Always use SSH with key: `ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.137`
-- Use n8n CLI commands, not browser automation
-- See `n8n-development.md` for full details
-- **WhatsApp:** `whatsapp-dynamic-automation.json`
-- **Instagram:** `instagram-dual-ai-suspicious-v1.json` (v9 with Suspicious User System!)
-- **Test Channel:** `/admin/workflow-test` - test AI without Instagram
-- **Suspicious Users:** `/admin/suspicious-users` - view/unflag suspicious users ✅ NEW
-- **⚠️ Import gotcha:** Rename workflow to force new import (same name = silent fail)
-- **⚠️ Test Channel:** When updating Instagram workflow, maintain test webhook compatibility!
-
----
-
-## 📁 File Structure
-
-```
-.kiro/steering/
-├── ULTIMATE_GUIDE.md          ⭐ START HERE (95% of tasks)
-├── README.md                  📖 This file
-├── ui-ux-testing.md          🎨 Puppeteer testing (when needed)
-├── deployment-raspberry-pi.md 🚀 Pi deployment (when needed)
-├── n8n-development.md        🤖 n8n workflows (WhatsApp + Instagram)
-└── n8n-ai-development.md     🤖 AI/OpenRouter patterns
-```
-
-**That's it!** Just 6 files total. Everything else is consolidated into ULTIMATE_GUIDE.md.
-
----
-
-## ✅ Best Practices
-
-**DO:**
-- Start with ULTIMATE_GUIDE.md for any task
-- Use detailed files only when needed
-- Update steering files when discovering new patterns
-- Follow the checklists before/after coding
-
-**DON'T:**
-- Skip the Ultimate Guide
-- Create new documentation files (unless requested)
-- Ignore the decision tree
-- Repeat solved problems
-
----
-
-## 🔄 Maintenance
-
-**When to Update:**
-- New critical bug pattern discovered
-- New solution found for common issue
-- Process improvement identified
-
-**How to Update:**
-1. Add to ULTIMATE_GUIDE.md if critical (top 3 patterns)
-2. Add to detailed file if comprehensive info needed
-3. Update decision tree in README if new symptom
-4. Test the solution before documenting
-
----
-
-## ✨ Success Metrics
-
-These steering files have solved:
-- ✅ Async setState bugs (empty survey answers)
-- ✅ Hardcoded content (questions not updating)
-- ✅ Data transformation errors (property access)
-- ✅ Server startup issues (port conflicts)
-- ✅ Database persistence problems
-- ✅ UI/UX regressions
-- ✅ Deployment issues (Pi)
-- ✅ WhatsApp coupon system (2025-12-01)
-- ✅ Instagram DM integration with analytics (2025-12-05)
-- ✅ Instagram AI hallucination fix (2026-01-06)
-- ✅ Turkish character normalization (2026-01-06)
-- ✅ Performance optimization - 85% faster (2026-01-06)
-- ✅ FAQ category (7 S.S.S. entries) + PT pricing (2026-01-16)
-- ✅ n8n workflow import gotcha fix (2026-01-16)
-- ✅ Workflow Test Channel - test AI without Instagram (2026-01-16)
-- ✅ AI Hint Pattern - context-aware guidance for ambiguous questions (2026-01-16)
-- ✅ Women's swimming course knowledge base entry (2026-01-16)
-- ✅ Suspicious User System - track repeat offenders (2026-01-18)
-
-**Result:** 100% test pass rate, production-ready system
-
----
-
-**Last Updated:** 2026-01-18  
-**Status:** ✅ Streamlined and optimized  
-**Total Files:** 6 (1 ultimate + 4 specialized + 1 readme)  
-**Coverage:** All critical patterns consolidated including FAQ + Test Channel + AI Hints + Suspicious Users
+**Last Updated:** 2026-02-26

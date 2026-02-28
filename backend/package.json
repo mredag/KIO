@@ -34,7 +34,10 @@
     "i18next-fs-backend": "^2.6.1",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
-    "qrcode": "^1.5.3"
+    "openai": "^6.21.0",
+    "qrcode": "^1.5.3",
+    "vectra": "^0.10.1",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
@@ -49,10 +52,12 @@
     "@types/puppeteer": "^7.0.4",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.3",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
     "@typescript-eslint/parser": "^6.17.0",
     "@vitest/ui": "^4.0.13",
     "eslint": "^8.56.0",
+    "fast-check": "^4.5.3",
     "puppeteer": "^24.31.0",
     "supertest": "^7.1.4",
     "tsx": "^4.7.0",

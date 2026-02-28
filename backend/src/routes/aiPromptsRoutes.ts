@@ -58,7 +58,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Get prompt by name (for n8n workflows)
+// Get prompt by name (for AI workflows)
 router.get('/by-name/:name', async (req: Request, res: Response) => {
   try {
     const { name } = req.params;

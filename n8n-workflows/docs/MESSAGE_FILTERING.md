@@ -131,13 +131,13 @@ In n8n UI (http://192.168.1.5:5678):
 1. **Backend API Key** (Header Auth)
    - Name: `Backend API Key`
    - Header Name: `Authorization`
-   - Header Value: `Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=`
+   - Header Value: `Bearer <YOUR_N8N_API_KEY>`
 
 2. **WhatsApp Access Token** (Header Auth)
    - Name: `WhatsApp Access Token`
    - Header Name: `Authorization`
-   - Header Value: `Bearer EAASoZBpRZBYVgBQALdL4H2aOumZB8z2XzTnsbMcD4sVuwB6FFQ9sA8t4erG3ZBOv2ZATpsvDFbCklnuIdSekEQz7JzpClZAfAQWB532ihZAZAlvwOnSPMlr3kH2jI9gZBvkccoKVeCIivPaDUcFpJQAADCZAaYroQM63vwdAYvxY6L7B8hy0GZATWniZCzhfZBRobTTcGULCLcHXV5BJRlzaPe1HEr10v0vst3phu5AZDZD`
-   - Custom field: `phoneNumberId` = `471153662739049`
+   - Header Value: `Bearer <YOUR_WHATSAPP_ACCESS_TOKEN>`
+   - Custom field: `phoneNumberId` = `<YOUR_PHONE_NUMBER_ID>`
 
 ### Step 4: Activate Workflow
 

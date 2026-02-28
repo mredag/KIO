@@ -9,16 +9,18 @@ dist/
 build/
 *.tsbuildinfo
 
-# Environment files
+# Environment files (NEVER commit secrets)
 .env
 .env.local
 .env.*.local
+backend/.env
 
-# Database
+# Database files
 *.db
 *.db-shm
 *.db-wal
 data/
+backend/data/
 
 # Logs
 logs/
@@ -41,6 +43,7 @@ Thumbs.db
 # Uploads
 public/uploads/
 uploads/
+backend/public/uploads/
 
 # Backups
 backups/
@@ -49,7 +52,7 @@ backups/
 # PM2
 .pm2/
 
-# Database export/import temp files (in root only)
+# Database export/import temp files
 /*-import.sql
 /*-export.json
 /massages-export.json
@@ -57,7 +60,7 @@ backups/
 /settings-import.sql
 /surveys-import.sql
 
-# Test files in root (contain tokens/sensitive data)
+# Test files in root (may contain tokens)
 /test-*.js
 /test-*.sh
 /test-*.json
@@ -69,29 +72,54 @@ backups/
 WHATSAPP_SETUP_PROGRESS.md
 PI_DEPLOYMENT_CHECKLIST.md
 NEXT_STEPS_N8N_WORKFLOW_SETUP.md
+DEPLOYMENT_SUMMARY.md
 
 # Screenshots (generated during testing)
+screenshots/
 *-screenshots/
 final-checkpoint-screenshots/
 backend/screenshots/
 
-# Kiro settings (local)
+# Kiro local settings and specs
 .kiro/settings/
+.kiro/specs/
 
 # Credentials (sensitive)
 n8n-workflows/CREDENTIALS.md
 **/credentials.json
 **/credentials-*.json
 
-# Test backups
+# Test backups and temp files
 backend/test-backups/
 backend/test-uploads/
 backend/test-*.db
+backend/tmp_*
 
 # Build error logs
 backend/build_errors.log
 backend/start_error.log
+backend/dev-startup.log
 
 # Test reports (generated)
 *-test-report.json
 *-test-report.md
+
+# OpenClaw config (contains API keys, bot tokens, gateway secrets)
+openclaw-config/
+
+# Reference/source directories (large, not needed in repo)
+openclaw-source/
+openclaw-migration/
+openclaw-mission-control-ref/
+mission-control-ref/
+
+# Docs with credentials
+docs/INSTAGRAM_DM_API_CREDENTIALS.md
+
+# Loose scripts (dev-only)
+run-pricing-analysis.ps1
+scripts/test-*.ps1
+
+# Compiled JS files in src (should only be in dist/)
+backend/src/**/*.js
+!backend/src/**/*.cjs

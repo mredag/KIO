@@ -4,8 +4,8 @@ import Database from 'better-sqlite3';
 export function createIntegrationAIPromptsRoutes(db: Database.Database) {
   const router = Router();
 
-// Get system message by prompt name (for n8n workflows)
-// No authentication required - this is called by n8n workflows
+// Get system message by prompt name (for AI workflows)
+// No authentication required — called by OpenClaw and other integrations
 router.get('/prompt/:name', async (req: Request, res: Response) => {
   try {
     const { name } = req.params;

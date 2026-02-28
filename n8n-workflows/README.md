@@ -67,7 +67,7 @@ Instagram kurulum: [docs/instagram-setup.md](docs/instagram-setup.md)
 Name: Backend API
 Type: Header Auth
 Header: Authorization
-Value: Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=
+Value: Bearer <YOUR_N8N_API_KEY>
 ```
 
 ### WhatsApp API
@@ -75,7 +75,7 @@ Value: Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=
 Name: WhatsApp API
 Type: Header Auth
 Header: Authorization
-Value: Bearer EAASoZBpRZBYVgBQ...
+Value: Bearer <YOUR_WHATSAPP_ACCESS_TOKEN>
 ```
 
 ### OpenRouter API (AI için)

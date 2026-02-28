@@ -1,269 +1,270 @@
 import AdminLayout from '../../layouts/AdminLayout';
 import { useDashboard, useAlerts } from '../../hooks/useAdminApi';
-import { formatDateTime, formatRelativeTime } from '../../lib/dateFormatter';
+import { useMCDashboard, useMCSchedulerStatus, useDispatchNow } from '../../hooks/useMissionControlApi';
+import { formatRelativeTime } from '../../lib/dateFormatter';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { KPICard } from '../../components/admin/KPICard';
-import { LazyLineChart, LazyBarChart } from '../../components/admin/LazyCharts';
-import { QuickActions } from '../../components/admin/QuickActions';
-import { ActivityFeed } from '../../components/admin/ActivityFeed';
+import { PrefetchLink } from '../../components/PrefetchLink';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 
+function GlassStat({ label, value, sub, href, accent = 'sky' }: {
+  label: string; value: number | string; sub?: string; href?: string; accent?: string;
+}) {
+  const accentMap: Record<string, string> = {
+    sky: 'from-sky-500/20 to-sky-500/0 border-sky-500/20',
+    green: 'from-emerald-500/20 to-emerald-500/0 border-emerald-500/20',
+    red: 'from-red-500/20 to-red-500/0 border-red-500/20',
+    amber: 'from-amber-500/20 to-amber-500/0 border-amber-500/20',
+    purple: 'from-purple-500/20 to-purple-500/0 border-purple-500/20',
+    indigo: 'from-indigo-500/20 to-indigo-500/0 border-indigo-500/20',
+  };
+  const card = (
+    <div className={`glass-panel p-4 bg-gradient-to-br ${accentMap[accent]} transition-all duration-300 hover:scale-[1.02]`}>
+      <p className="mc-label mb-1">{label}</p>
+      <p className="text-2xl font-bold text-gray-100 tracking-tight">{value ?? 0}</p>
+      {sub && <p className="text-[11px] text-gray-500 mt-1">{sub}</p>}
+    </div>
+  );
+  return href ? <PrefetchLink to={href} className="block">{card}</PrefetchLink> : card;
+}
+
+function SchedulerMini() {
+  const { data: scheduler } = useMCSchedulerStatus();
+  const dispatchNow = useDispatchNow();
+  if (!scheduler) return null;
+  return (
+    <div className="glass-panel p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${scheduler.isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
+          <span className="mc-label">Scheduler</span>
+        </div>
+        <button
+          onClick={() => dispatchNow.mutate()}
+          disabled={dispatchNow.isPending}
+          className="mc-btn mc-btn--primary text-[11px] px-2.5 py-1"
+        >
+          {dispatchNow.isPending ? '...' : 'Dispatch'}
+        </button>
+      </div>
+      <div className="grid grid-cols-4 gap-2 text-center">
+        {[
+          { v: scheduler.dispatched, l: 'Dispatched', c: 'text-sky-400' },
+          { v: scheduler.slaBreaches, l: 'SLA Breach', c: 'text-amber-400' },
+          { v: scheduler.deadLettered, l: 'Dead Letter', c: 'text-red-400' },
+          { v: scheduler.lastRunAt ? new Date(scheduler.lastRunAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--', l: 'Son Çalışma', c: 'text-gray-400 font-mono text-xs' },
+        ].map((s, i) => (
+          <div key={i}>
+            <p className={`text-lg font-bold ${s.c}`}>{s.v}</p>
+            <p className="text-[9px] text-gray-600 uppercase tracking-wider">{s.l}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
-  const { t } = useTranslation(['admin', 'common']);
-  const navigate = useNavigate();
-  const { data: status, isLoading, error } = useDashboard(true); // Enable auto-refresh on dashboard
-  const { data: alerts } = useAlerts(true); // Enable auto-refresh on dashboard
+  const { t: _t } = useTranslation(['admin', 'common']);
+  void _t; // keep i18n loaded
+  const { data: status, isLoading } = useDashboard(true);
+  const { data: alerts } = useAlerts(true);
+  const { data: mcData, isLoading: mcLoading } = useMCDashboard();
 
-  if (isLoading) {
+  if (isLoading || mcLoading) {
     return (
       <AdminLayout>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-6">
-            {t('admin:dashboard.title')}
-          </h1>
-          {/* Loading skeleton */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-            {[...Array(4)].map((_, i) => (
-              <SkeletonCard key={i} height="h-32" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <SkeletonCard height="h-80" />
-            <SkeletonCard height="h-80" />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[...Array(8)].map((_, i) => <SkeletonCard key={i} height="h-20" />)}
           </div>
         </div>
       </AdminLayout>
     );
   }
 
-  if (error) {
-    return (
-      <AdminLayout>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-6">
-            {t('admin:dashboard.title')}
-          </h1>
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-            <p className="text-red-800 dark:text-red-200">{t('common:messages.error')}</p>
-          </div>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (!status) {
-    return null;
-  }
-
-  // Format timestamp for display using Turkish format (currently unused but kept for future use)
-  // const formatTimestamp = (date: Date | string | null) => {
-  //   if (!date) return t('common:time.never', 'Hiç');
-  //   return formatDateTime(date);
-  // };
-
-  // Prepare KPI data
-  const kpiData = [
-    {
-      title: t('admin:dashboard.todaySurveys'),
-      value: status.todaySurveyCount || 0,
-      icon: '📋',
-      href: '/admin/survey-responses',
-      status: 'normal' as const,
-    },
-    {
-      title: t('admin:dashboard.totalSurveys'),
-      value: status.totalSurveyCount || 0,
-      icon: '📊',
-      href: '/admin/survey-responses',
-      status: 'normal' as const,
-    },
-    {
-      title: 'Active Coupons',
-      value: status.activeCoupons || 0,
-      icon: '🎟️',
-      href: '/admin/coupons/redemptions',
-      status: 'normal' as const,
-    },
-    {
-      title: t('admin:dashboard.kioskStatus'),
-      value: status.kioskOnline ? t('admin:dashboard.online') : t('admin:dashboard.offline'),
-      icon: '🖥️',
-      href: '/admin/kiosk-control',
-      status: status.kioskOnline ? ('success' as const) : ('critical' as const),
-    },
-  ];
-
-  // Prepare chart data (mock data for now - will be replaced with real data in subtask 10.2)
-  const surveyTrendData = status.surveyTrend || [];
-  const couponTrendData = status.couponTrend || [];
-
-  // Prepare quick actions
-  const quickActions = [
-    {
-      id: 'issue-coupon',
-      label: 'Issue Coupon',
-      icon: '🎟️',
-      action: 'navigate' as const,
-      target: '/admin/coupons/issue',
-      variant: 'primary' as const,
-    },
-    {
-      id: 'create-survey',
-      label: 'Create Survey',
-      icon: '📝',
-      action: 'navigate' as const,
-      target: '/admin/surveys/new',
-      variant: 'secondary' as const,
-    },
-    {
-      id: 'change-kiosk-mode',
-      label: 'Change Kiosk Mode',
-      icon: '🖥️',
-      action: 'navigate' as const,
-      target: '/admin/kiosk-control',
-      variant: 'success' as const,
-    },
-    {
-      id: 'create-backup',
-      label: 'Create Backup',
-      icon: '💾',
-      action: 'navigate' as const,
-      target: '/admin/backup',
-      variant: 'warning' as const,
-    },
-  ];
-
-  // Prepare activity feed items
-  const activityItems = (status.recentActivity || []).map((activity: any) => ({
-    id: activity.id,
-    type: activity.type || 'system',
-    message: activity.message,
-    timestamp: new Date(activity.timestamp),
-    href: activity.href,
-  }));
+  const d = mcData || {} as any;
+  const agents = d.agents || {};
+  const jobs = d.jobs || {};
+  const conversations = d.conversations || {};
+  const cost = d.cost || { today: { cost: 0, tokens: 0 }, total: { cost: 0, tokens: 0 } };
+  const events = d.recent_events || [];
+  const interactions = d.recent_interactions || [];
+  const igStats = d.instagram_dm_stats || {};
 
   return (
     <AdminLayout>
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-6">
-          {t('admin:dashboard.title')}
-        </h1>
+      <div className="space-y-5 mc-fade-up">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-100 tracking-tight">Komuta Merkezi</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Sistem durumu ve operasyonel özet</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
+              d.system_status === 'operational'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${d.system_status === 'operational' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+              {d.system_status === 'operational' ? 'Çalışıyor' : 'Sorun Var'}
+            </span>
+          </div>
+        </div>
 
-        {/* Alerts Section */}
+        {/* Alerts */}
         {alerts && alerts.length > 0 && (
-          <div className="mb-6">
-            <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-l-4 border-red-500 dark:border-red-400 rounded-lg p-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-red-500 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div className="ml-3 flex-1">
-                  <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                    ⚠️ Dikkat Gerektiren Durumlar ({alerts.length})
-                  </h3>
-                  <div className="mt-2 space-y-2">
-                    {alerts.slice(0, 5).map((alert: any) => (
-                      <div
-                        key={alert.id}
-                        className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => navigate(`/admin/surveys/${alert.surveyId}/analytics`)}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                alert.severity === 'critical' 
-                                  ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200' 
-                                  : alert.severity === 'warning'
-                                  ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200'
-                                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
-                              }`}>
-                                {alert.severity === 'critical' ? '🔴 Kritik' : alert.severity === 'warning' ? '🟠 Uyarı' : '📌 Takip'}
-                              </span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                {formatRelativeTime(alert.timestamp)}
-                              </span>
-                              <span className="text-xs text-gray-400 dark:text-gray-500">
-                                {formatDateTime(alert.timestamp)}
-                              </span>
-                            </div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50 mt-1">
-                              {alert.surveyTitle}
-                            </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                              "{alert.questionText}" - {alert.type === 'low_rating' ? `Puan: ${alert.answer}/5` : `Yanıt: ${alert.answer}`}
-                            </p>
-                          </div>
-                          <svg className="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {alerts.length > 5 && (
-                    <button
-                      onClick={() => navigate('/admin/survey-responses')}
-                      className="mt-3 text-sm text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200 font-medium"
-                    >
-                      Tümünü Gör ({alerts.length}) →
-                    </button>
-                  )}
-                </div>
-              </div>
+          <div className="glass-panel p-4 border-l-2 border-l-amber-500/60">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-amber-400">⚠️</span>
+              <span className="text-xs font-medium text-amber-300">Dikkat ({alerts.length})</span>
+            </div>
+            <div className="space-y-1.5">
+              {alerts.slice(0, 3).map((alert: any) => (
+                <PrefetchLink key={alert.id} to={`/admin/surveys/${alert.surveyId}/analytics`}
+                  className="block text-xs text-gray-400 hover:text-gray-200 transition-colors truncate">
+                  {alert.surveyTitle} — {alert.type === 'low_rating' ? `Puan: ${alert.answer}/5` : alert.answer}
+                  <span className="text-gray-600 ml-2">{formatRelativeTime(alert.timestamp)}</span>
+                </PrefetchLink>
+              ))}
             </div>
           </div>
         )}
 
-        {/* KPI Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {kpiData.map((kpi, index) => (
-            <KPICard
-              key={index}
-              title={kpi.title}
-              value={kpi.value}
-              icon={kpi.icon}
-              href={kpi.href}
-              status={kpi.status}
-              isLoading={isLoading}
-            />
+        {/* MC Stats Row 1 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <GlassStat label="Aktif Ajanlar" value={agents.active || 0} sub={`/ ${agents.total || 0} toplam`} href="/admin/mc/agents" accent="green" />
+          <GlassStat label="Kuyruk Derinliği" value={jobs.queue_depth || 0} sub={`${jobs.active_runs || 0} çalışıyor`} href="/admin/mc/workshop" accent="sky" />
+          <GlassStat label="Başarısız İşler" value={jobs.failed || 0} sub={`${jobs.dead_letter || 0} dead-letter`} href="/admin/mc/workshop" accent="red" />
+          <GlassStat label="Aktif Konuşmalar" value={conversations.active || 0} sub={`${conversations.total || 0} toplam`} href="/admin/mc/conversations" accent="purple" />
+        </div>
+
+        {/* MC Stats Row 2 + Business Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <GlassStat label="Bugünkü Maliyet" value={`$${(cost.today?.cost || 0).toFixed(4)}`} sub={`${(cost.today?.tokens || 0).toLocaleString()} token`} href="/admin/mc/costs" accent="amber" />
+          <GlassStat label="Toplam Maliyet" value={`$${(cost.total?.cost || 0).toFixed(4)}`} sub={`${(cost.total?.tokens || 0).toLocaleString()} token`} href="/admin/mc/costs" accent="amber" />
+          <GlassStat label="Anketler" value={status?.totalSurveyCount || 0} sub={`${status?.todaySurveyCount || 0} bugün`} href="/admin/survey-responses" accent="indigo" />
+          <GlassStat label="Aktif Kuponlar" value={status?.activeCoupons || 0} href="/admin/coupons/redemptions" accent="green" />
+        </div>
+
+        {/* Instagram DM Stats */}
+        <div>
+          <span className="mc-label text-[9px] ml-1">INSTAGRAM DM</span>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
+            <GlassStat label="Bugünkü DM" value={igStats.total_today || 0} accent="purple" />
+            <GlassStat label="Ort. Yanıt Süresi" value={`${igStats.avg_response_ms || 0}ms`} accent="sky" />
+            <GlassStat label="DM Maliyeti" value={`$${(igStats.cost_today || 0).toFixed(4)}`} accent="amber" />
+            <GlassStat label="Tekil Gönderici" value={igStats.unique_senders || 0} accent="green" />
+          </div>
+          {igStats.model_distribution?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2 ml-1">
+              {igStats.model_distribution.map((m: any) => (
+                <span key={m.model_used} className="px-2 py-0.5 rounded-full text-[10px] text-gray-400 bg-white/[0.04] border border-white/[0.06]">
+                  {m.model_used?.split('/').pop()}: {m.count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Scheduler */}
+        <SchedulerMini />
+
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { to: '/admin/mc/workshop', label: 'Workshop', color: 'bg-sky-600 hover:bg-sky-700' },
+            { to: '/admin/mc/agents', label: 'Ajanlar', color: 'bg-indigo-600 hover:bg-indigo-700' },
+            { to: '/admin/mc/jarvis', label: 'Jarvis AI', color: 'bg-purple-600 hover:bg-purple-700' },
+            { to: '/admin/mc/costs', label: 'API Kullanımı', color: 'bg-amber-600 hover:bg-amber-700' },
+          ].map(a => (
+            <PrefetchLink key={a.to} to={a.to} className={`px-3 py-1.5 ${a.color} text-white rounded-lg text-xs font-medium transition-colors`}>
+              {a.label}
+            </PrefetchLink>
           ))}
+          <button
+            onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+            className="px-3 py-1.5 bg-white/[0.06] text-gray-400 rounded-lg text-xs font-medium hover:bg-white/[0.1] transition-colors flex items-center gap-1.5"
+          >
+            Ara <kbd className="text-[9px] font-mono bg-white/[0.06] px-1 py-0.5 rounded">⌘K</kbd>
+          </button>
         </div>
 
-        {/* Charts Section - Lazy loaded for performance */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <LazyLineChart
-            data={surveyTrendData}
-            title="Survey Submissions (Last 7 Days)"
-            color="#0284c7"
-            isLoading={isLoading}
-            emptyMessage="No survey data available"
-          />
-          <LazyBarChart
-            data={couponTrendData}
-            title="Coupon Redemptions (This Week)"
-            color="#059669"
-            isLoading={isLoading}
-            emptyMessage="No coupon data available"
-          />
+        {/* Activity Feed + Instagram Messages */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Events */}
+          <div className="glass-panel p-4">
+            <h2 className="mc-label mb-3">SON OLAYLAR</h2>
+            {events.length === 0 ? (
+              <p className="text-xs text-gray-600">Henüz olay yok</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto sidebar-scroll">
+                {events.slice(0, 12).map((ev: any) => (
+                  <div key={ev.id} className="flex items-start gap-2.5 text-xs">
+                    <span className="text-gray-600 whitespace-nowrap font-mono text-[10px] mt-0.5">
+                      {new Date(ev.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] mr-1.5 ${
+                        ev.event_type === 'created' ? 'bg-emerald-500/10 text-emerald-400' :
+                        ev.event_type === 'status_change' ? 'bg-sky-500/10 text-sky-400' :
+                        ev.event_type === 'sla_breach' ? 'bg-amber-500/10 text-amber-400' :
+                        ev.event_type === 'auto_dispatched' ? 'bg-cyan-500/10 text-cyan-400' :
+                        ev.event_type?.includes('error') ? 'bg-red-500/10 text-red-400' :
+                        'bg-white/[0.04] text-gray-400'
+                      }`}>
+                        {ev.entity_type}
+                      </span>
+                      <span className="text-gray-400 break-words">{ev.message}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Instagram Messages */}
+          <div className="glass-panel p-4">
+            <h2 className="mc-label mb-3">SON INSTAGRAM MESAJLARI</h2>
+            {interactions.length === 0 ? (
+              <p className="text-xs text-gray-600">Henüz mesaj yok</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto sidebar-scroll">
+                {interactions.slice(0, 10).map((msg: any) => (
+                  <div key={msg.id} className="border-b border-white/[0.04] pb-2 last:border-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        msg.direction === 'inbound' ? 'bg-sky-500/10 text-sky-400' : 'bg-emerald-500/10 text-emerald-400'
+                      }`}>
+                        {msg.direction === 'inbound' ? '← Gelen' : '→ Giden'}
+                      </span>
+                      {msg.intent && msg.direction === 'inbound' && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400">{msg.intent}</span>
+                      )}
+                      <span className="text-[10px] text-gray-600 ml-auto font-mono">
+                        {new Date(msg.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 truncate">{msg.message_text}</p>
+                    {msg.ai_response && msg.ai_response !== msg.message_text && (
+                      <p className="text-[11px] text-gray-600 truncate mt-0.5">↳ {msg.ai_response}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Quick Actions and Activity Feed */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <QuickActions actions={quickActions} />
-          <ActivityFeed items={activityItems} maxItems={10} isLoading={isLoading} />
-        </div>
-
-        {/* Auto-refresh indicator */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Auto-refreshing every 10 seconds
+        {/* Footer */}
+        <div className="text-center">
+          <p className="text-[10px] text-gray-600 font-mono">
+            AUTO-REFRESH 10s · <kbd className="bg-white/[0.04] px-1 py-0.5 rounded">⌘K</kbd> HIZLI ARAMA
           </p>
         </div>
       </div>
     </AdminLayout>
   );
 }
+
+

@@ -13,12 +13,12 @@ function normalizePhoneNumber(phone: string): string {
   let digits = phone.replace(/\D/g, '');
   
   // Handle different formats:
-  // 905067070403 -> +905067070403
-  // 5067070403 -> +905067070403
-  // 05067070403 -> +905067070403
+  // 905551234567 -> +905551234567
+  // 5551234567 -> +905551234567
+  // 05551234567 -> +905551234567
   
   if (digits.startsWith('90') && digits.length === 12) {
-    // Already has country code: 905067070403
+    // Already has country code: 905551234567
     return '+' + digits;
   } else if (digits.startsWith('0') && digits.length === 11) {
     // Starts with 0: 05067070403
@@ -318,7 +318,7 @@ export default function CouponIssuePage() {
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="5067070403, 05067070403, 905067070403"
+                placeholder="5551234567, 05551234567, 905551234567"
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 dark:bg-gray-700 dark:text-gray-100"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">

@@ -2,14 +2,13 @@ import { Router, Request, Response } from 'express';
 
 /**
  * WhatsApp Webhook Routes
- * Handles Meta webhook verification and incoming messages
- * Messages are forwarded to n8n for processing
+ * Handles Meta webhook verification and incoming messages.
+ * TODO: Migrate WhatsApp processing to OpenClaw pipeline (currently no AI processing).
  */
 export function createWhatsappWebhookRoutes(): Router {
   const router = Router();
   
   const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'spa_kiosk_webhook_verify_2024';
-  const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/whatsapp';
 
   /**
    * GET /webhook/whatsapp - Webhook verification
@@ -33,8 +32,8 @@ export function createWhatsappWebhookRoutes(): Router {
 
   /**
    * POST /webhook/whatsapp - Receive incoming messages
-   * Meta sends POST requests with message data
-   * We acknowledge immediately and forward to n8n for processing
+   * Meta sends POST requests with message data.
+   * Acknowledges immediately. Processing will be handled by OpenClaw (not yet implemented).
    */
   router.post('/', async (req: Request, res: Response) => {
     const body = req.body;
@@ -42,7 +41,6 @@ export function createWhatsappWebhookRoutes(): Router {
     // Acknowledge receipt immediately (Meta requires 200 within 20 seconds)
     res.status(200).send('EVENT_RECEIVED');
 
-    // Log the message for debugging
     try {
       const entry = body?.entry?.[0];
       const changes = entry?.changes?.[0];
@@ -56,21 +54,9 @@ export function createWhatsappWebhookRoutes(): Router {
           text: message.text?.body || message.type,
           timestamp: message.timestamp
         });
-        
-        // Forward to n8n for processing
-        try {
-          console.log('[WhatsApp Webhook] Forwarding to n8n:', N8N_WEBHOOK_URL);
-          const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-          console.log('[WhatsApp Webhook] n8n response status:', n8nResponse.status);
-        } catch (n8nError) {
-          console.error('[WhatsApp Webhook] Failed to forward to n8n:', n8nError);
-        }
+        // TODO: Forward to OpenClaw for AI processing
       } else if (value?.statuses) {
-        console.log('[WhatsApp Webhook] Status update received (not forwarding)');
+        console.log('[WhatsApp Webhook] Status update received');
       }
     } catch (error) {
       console.error('[WhatsApp Webhook] Error parsing message:', error);

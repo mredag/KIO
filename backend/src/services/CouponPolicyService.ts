@@ -7,7 +7,7 @@
  * Features:
  * - Multiple reward tiers (e.g., 4 coupons = basic massage, 8 = premium)
  * - Admin can modify thresholds without code changes
- * - API endpoint for n8n/frontend to fetch current policy
+ * - API endpoint for frontend/OpenClaw to fetch current policy
  * - Cached for performance, refreshed on update
  */
 

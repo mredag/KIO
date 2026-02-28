@@ -1,6 +1,6 @@
 /**
  * Instagram Integration Routes
- * API endpoints for n8n Instagram workflow to fetch customer data and log interactions
+ * API endpoints for OpenClaw and admin panel to fetch customer data and log interactions
  */
 
 import { Router, Request, Response } from 'express';
@@ -26,6 +26,81 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
 
   // All routes require API key authentication
   router.use(apiKeyAuth);
+
+  /**
+   * POST /api/integrations/instagram/send
+   * Send an Instagram DM via Meta Graph API
+   * Called by OpenClaw agent/transform after processing
+   */
+  router.post('/send', async (req: Request, res: Response) => {
+    try {
+      const { recipientId, message } = req.body;
+      if (!recipientId || !message) {
+        res.status(400).json({ error: 'recipientId and message required' });
+        return;
+      }
+
+      const IG_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN;
+      const IG_ACCOUNT_ID = process.env.INSTAGRAM_ACCOUNT_ID;
+
+      if (!IG_TOKEN || !IG_ACCOUNT_ID) {
+        console.error('[IG Send] Missing INSTAGRAM_ACCESS_TOKEN or INSTAGRAM_ACCOUNT_ID');
+        res.status(500).json({ error: 'Instagram API not configured' });
+        return;
+      }
+
+      // Use graph.instagram.com for Instagram User Tokens (IGAA* tokens)
+      // graph.facebook.com only works with Facebook Page Tokens
+      const graphDomain = IG_TOKEN.startsWith('IGAA') ? 'graph.instagram.com' : 'graph.facebook.com';
+      const apiVersion = 'v25.0';
+
+      const metaRes = await fetch(`https://${graphDomain}/${apiVersion}/${IG_ACCOUNT_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${IG_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: { text: message },
+        }),
+      });
+
+      const data = await metaRes.json() as Record<string, unknown>;
+
+      if (!metaRes.ok) {
+        console.error('[IG Send] Meta API error:', data);
+        // Retry once on 5xx
+        if (metaRes.status >= 500) {
+          console.log('[IG Send] Retrying...');
+          const retryRes = await fetch(`https://${graphDomain}/${apiVersion}/${IG_ACCOUNT_ID}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${IG_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              recipient: { id: recipientId },
+              message: { text: message },
+            }),
+          });
+          const retryData = await retryRes.json() as Record<string, unknown>;
+          if (retryRes.ok) {
+            res.json({ success: true, messageId: retryData.message_id });
+            return;
+          }
+        }
+        res.status(metaRes.status).json({ error: 'Meta API error', details: data });
+        return;
+      }
+
+      console.log('[IG Send] Message sent to', recipientId);
+      res.json({ success: true, messageId: data.message_id });
+    } catch (error) {
+      console.error('[IG Send] Error:', error);
+      res.status(500).json({ error: 'Failed to send message' });
+    }
+  });
 
   /**
    * GET /api/integrations/instagram/customer/:instagramId
@@ -101,7 +176,9 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
         sentiment,
         aiResponse,
         responseTime,
-        username
+        username,
+        modelUsed,
+        tokensEstimated
       } = req.body;
 
       if (!instagramId || !direction || !messageText) {
@@ -140,9 +217,9 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
       // Insert interaction
       db.prepare(`
         INSERT INTO instagram_interactions 
-        (id, instagram_id, direction, message_text, intent, sentiment, ai_response, response_time_ms, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, instagramId, direction, messageText, intent, sentiment, aiResponse, responseTime, now);
+        (id, instagram_id, direction, message_text, intent, sentiment, ai_response, response_time_ms, model_used, tokens_estimated, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, instagramId, direction, messageText, intent, sentiment, aiResponse, responseTime, modelUsed || null, tokensEstimated || 0, now);
 
       res.json({ 
         success: true, 
@@ -371,7 +448,7 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
   /**
    * GET /api/integrations/instagram/block/check/:instagramId
    * Check if a user is currently blocked
-   * Used by n8n workflow before responding
+   * Used by OpenClaw pipeline before responding
    */
   router.get('/block/check/:instagramId', async (req: Request, res: Response) => {
     try {
@@ -393,7 +470,7 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
   /**
    * POST /api/integrations/instagram/block/:instagramId
    * Block a user temporarily after inappropriate message
-   * Called by n8n workflow when safety gate returns BLOCK
+   * Called by OpenClaw pipeline when safety gate returns BLOCK
    */
   router.post('/block/:instagramId', async (req: Request, res: Response) => {
     try {
@@ -468,6 +545,153 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
     } catch (error) {
       console.error('[Instagram API] Error fetching blocked users:', error);
       res.status(500).json({ error: 'Failed to fetch blocked users' });
+    }
+  });
+
+  // ==================== STATS & CONVERSATIONS (Agent Intelligence) ====================
+
+  /**
+   * GET /api/integrations/instagram/stats
+   * Real-time DM statistics for the Instagram agent's operational awareness
+   */
+  router.get('/stats', (_req: Request, res: Response) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const todayStats = db.prepare(`
+        SELECT 
+          COUNT(*) as total_today,
+          COUNT(CASE WHEN direction = 'outbound' THEN 1 END) as responses_today,
+          COUNT(DISTINCT instagram_id) as unique_senders,
+          AVG(CASE WHEN response_time_ms > 0 THEN response_time_ms END) as avg_response_time,
+          SUM(COALESCE(tokens_estimated, 0)) as total_tokens
+        FROM instagram_interactions
+        WHERE DATE(created_at) = ?
+      `).get(today) as any;
+
+      const modelDistribution = db.prepare(`
+        SELECT model_used, COUNT(*) as count
+        FROM instagram_interactions
+        WHERE DATE(created_at) = ? AND model_used IS NOT NULL
+        GROUP BY model_used
+        ORDER BY count DESC
+      `).all(today) as any[];
+
+      const intentBreakdown = db.prepare(`
+        SELECT intent, COUNT(*) as count
+        FROM instagram_interactions
+        WHERE DATE(created_at) = ? AND intent IS NOT NULL AND direction = 'inbound'
+        GROUP BY intent
+        ORDER BY count DESC
+        LIMIT 10
+      `).all(today) as any[];
+
+      const hourlyActivity = db.prepare(`
+        SELECT 
+          strftime('%H', created_at) as hour,
+          COUNT(*) as count
+        FROM instagram_interactions
+        WHERE DATE(created_at) = ?
+        GROUP BY strftime('%H', created_at)
+        ORDER BY hour
+      `).all(today) as any[];
+
+      res.json({
+        today: {
+          totalMessages: todayStats?.total_today || 0,
+          responsesGenerated: todayStats?.responses_today || 0,
+          uniqueSenders: todayStats?.unique_senders || 0,
+          avgResponseTimeMs: Math.round(todayStats?.avg_response_time || 0),
+          totalTokens: todayStats?.total_tokens || 0,
+        },
+        modelDistribution: modelDistribution.map((m: any) => ({ model: m.model_used, count: m.count })),
+        intentBreakdown: intentBreakdown.map((i: any) => ({ intent: i.intent, count: i.count })),
+        hourlyActivity: hourlyActivity.map((h: any) => ({ hour: h.hour, count: h.count })),
+      });
+    } catch (error) {
+      console.error('[Instagram API] Error fetching stats:', error);
+      res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+  });
+
+  /**
+   * GET /api/integrations/instagram/conversations
+   * Recent conversations grouped by customer, with message history
+   */
+  router.get('/conversations', (req: Request, res: Response) => {
+    try {
+      const limit = Number(req.query.limit) || 20;
+      const customerId = req.query.customerId as string | undefined;
+
+      if (customerId) {
+        // Single customer conversation history
+        const messages = db.prepare(`
+          SELECT id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, created_at
+          FROM instagram_interactions
+          WHERE instagram_id = ?
+          ORDER BY created_at DESC
+          LIMIT 50
+        `).all(customerId) as any[];
+
+        const customer = db.prepare(`
+          SELECT instagram_id, name, phone, interaction_count, last_interaction_at, created_at
+          FROM instagram_customers
+          WHERE instagram_id = ?
+        `).get(customerId) as any;
+
+        res.json({
+          customer: customer ? {
+            id: customer.instagram_id,
+            name: customer.name,
+            phone: customer.phone,
+            interactionCount: customer.interaction_count,
+            lastInteraction: customer.last_interaction_at,
+            firstSeen: customer.created_at,
+          } : null,
+          messages: messages.reverse().map((m: any) => ({
+            id: m.id,
+            direction: m.direction,
+            text: m.message_text,
+            intent: m.intent,
+            aiResponse: m.ai_response,
+            responseTimeMs: m.response_time_ms,
+            model: m.model_used,
+            tokens: m.tokens_estimated,
+            createdAt: m.created_at,
+          })),
+        });
+        return;
+      }
+
+      // List recent conversations (grouped by customer)
+      const conversations = db.prepare(`
+        SELECT 
+          i.instagram_id,
+          c.name,
+          COUNT(*) as message_count,
+          MAX(i.created_at) as last_message_at,
+          MIN(i.created_at) as first_message_at,
+          GROUP_CONCAT(DISTINCT i.model_used) as models_used
+        FROM instagram_interactions i
+        LEFT JOIN instagram_customers c ON i.instagram_id = c.instagram_id
+        GROUP BY i.instagram_id
+        ORDER BY last_message_at DESC
+        LIMIT ?
+      `).all(limit) as any[];
+
+      res.json({
+        conversations: conversations.map((c: any) => ({
+          customerId: c.instagram_id,
+          name: c.name,
+          messageCount: c.message_count,
+          lastMessageAt: c.last_message_at,
+          firstMessageAt: c.first_message_at,
+          modelsUsed: c.models_used ? c.models_used.split(',').filter(Boolean) : [],
+        })),
+      });
+    } catch (error) {
+      console.error('[Instagram API] Error fetching conversations:', error);
+      res.status(500).json({ error: 'Failed to fetch conversations' });
     }
   });
 

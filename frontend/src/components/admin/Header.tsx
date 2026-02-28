@@ -24,26 +24,19 @@ export default function Header({ onSearchClick, onMobileMenuToggle }: HeaderProp
     try {
       await logout.mutateAsync();
       navigate('/admin/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
+    } catch {
       navigate('/admin/login');
     }
   };
 
-  // Generate breadcrumbs based on current path
   const getBreadcrumbs = (): BreadcrumbItem[] => {
     const path = location.pathname;
-    
-    // Dashboard root - no breadcrumbs
-    if (path === '/admin' || path === '/admin/') {
-      return [];
-    }
+    if (path === '/admin' || path === '/admin/') return [];
 
     const breadcrumbs: BreadcrumbItem[] = [
-      { label: t('navigation.dashboard'), href: '/admin' }
+      { label: 'Dashboard', href: '/admin' }
     ];
 
-    // Map paths to breadcrumb labels
     const pathMap: Record<string, string> = {
       '/admin/massages': t('navigation.massages'),
       '/admin/surveys': t('navigation.surveys'),
@@ -52,97 +45,82 @@ export default function Header({ onSearchClick, onMobileMenuToggle }: HeaderProp
       '/admin/coupons/issue': t('navigation.issueToken'),
       '/admin/coupons/redemptions': t('navigation.redemptions'),
       '/admin/coupons/wallet': t('navigation.walletLookup'),
+      '/admin/coupons/settings': t('navigation.couponSettings'),
       '/admin/settings': t('navigation.settings'),
       '/admin/backup': t('navigation.backup'),
       '/admin/logs': t('navigation.logs'),
+      '/admin/interactions': 'Etkileşimler',
+      '/admin/services': t('navigation.services'),
+      '/admin/knowledge-base': 'Bilgi Bankası',
+      '/admin/ai-prompts': 'AI Promptları',
+      '/admin/workflow-test': 'DM Simülatör',
+      '/admin/blocked-users': 'Engelli Kullanıcılar',
+      '/admin/suspicious-users': 'Şüpheli Kullanıcılar',
+      '/admin/mc': 'Mission Control',
+      '/admin/mc/workshop': 'Workshop',
+      '/admin/mc/agents': 'Ajanlar',
+      '/admin/mc/conversations': 'Konuşmalar',
+      '/admin/mc/costs': 'API Kullanımı',
+      '/admin/mc/documents': 'Dokümanlar',
+      '/admin/mc/policies': 'Politikalar',
+      '/admin/mc/jarvis': 'Jarvis AI',
     };
 
-    // Check for exact match
     if (pathMap[path]) {
       breadcrumbs.push({ label: pathMap[path] });
       return breadcrumbs;
     }
 
-    // Handle nested paths (e.g., /admin/massages/new, /admin/massages/123)
     const segments = path.split('/').filter(Boolean);
-    
     if (segments.length >= 2) {
       const parentPath = `/${segments.slice(0, -1).join('/')}`;
-      
       if (pathMap[parentPath]) {
         breadcrumbs.push({ label: pathMap[parentPath], href: parentPath });
-        
-        // Add current page label
         const lastSegment = segments[segments.length - 1];
-        if (lastSegment === 'new') {
-          breadcrumbs.push({ label: t('common.new') || 'New' });
-        } else if (!isNaN(Number(lastSegment))) {
-          breadcrumbs.push({ label: t('common.edit') || 'Edit' });
-        } else {
-          breadcrumbs.push({ label: lastSegment });
-        }
+        if (lastSegment === 'new') breadcrumbs.push({ label: t('common.new') || 'Yeni' });
+        else if (!isNaN(Number(lastSegment))) breadcrumbs.push({ label: t('common.edit') || 'Düzenle' });
+        else breadcrumbs.push({ label: lastSegment });
       }
     }
-
     return breadcrumbs;
   };
 
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Left side: Mobile menu button + Breadcrumbs */}
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            {/* Mobile menu button */}
+    <header className="glass-header sticky top-0 z-30">
+      <div className="px-4 sm:px-6">
+        <div className="flex items-center justify-between h-12">
+          {/* Left: Mobile menu + Breadcrumbs */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             <button
               onClick={onMobileMenuToggle}
-              className="md:hidden p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-sky-400 dark:focus:ring-offset-gray-900"
+              className="md:hidden p-1.5 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-colors"
               aria-label="Toggle menu"
-              aria-expanded="false"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
 
-            {/* Breadcrumbs */}
             {breadcrumbs.length > 0 && (
-              <nav className="flex items-center space-x-2 min-w-0" aria-label="Breadcrumb">
-                <ol className="flex items-center space-x-2 min-w-0">
+              <nav className="flex items-center min-w-0" aria-label="Breadcrumb">
+                <ol className="flex items-center gap-1.5 min-w-0">
                   {breadcrumbs.map((crumb, index) => {
                     const isLast = index === breadcrumbs.length - 1;
-                    const isFirst = index === 0;
-                    
                     return (
-                      <li key={index} className="flex items-center space-x-2 min-w-0">
-                        {!isFirst && (
-                          <svg
-                            className="w-4 h-4 text-gray-400 dark:text-gray-600 flex-shrink-0"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
+                      <li key={index} className="flex items-center gap-1.5 min-w-0">
+                        {index > 0 && (
+                          <svg className="w-3 h-3 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         )}
                         {crumb.href && !isLast ? (
-                          <Link
-                            to={crumb.href}
-                            className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors truncate"
-                          >
+                          <Link to={crumb.href} className="text-xs text-gray-500 hover:text-gray-300 transition-colors truncate">
                             {crumb.label}
                           </Link>
                         ) : (
-                          <span
-                            className={`text-sm font-medium truncate ${
-                              isLast
-                                ? 'text-gray-900 dark:text-gray-100'
-                                : 'text-gray-600 dark:text-gray-400'
-                            }`}
-                            aria-current={isLast ? 'page' : undefined}
-                          >
+                          <span className={`text-xs truncate ${isLast ? 'text-gray-200 font-medium' : 'text-gray-500'}`} aria-current={isLast ? 'page' : undefined}>
                             {crumb.label}
                           </span>
                         )}
@@ -154,60 +132,50 @@ export default function Header({ onSearchClick, onMobileMenuToggle }: HeaderProp
             )}
           </div>
 
-          {/* Right side: Search + User menu */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Search button */}
+          {/* Right: Search + User */}
+          <div className="flex items-center gap-1.5">
             {onSearchClick && (
               <button
                 onClick={onSearchClick}
-                className="p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-sky-400 dark:focus:ring-offset-gray-900"
+                className="flex items-center gap-2 px-2.5 py-1 rounded-md text-gray-500 hover:text-gray-300 hover:bg-white/[0.06] transition-colors"
                 aria-label="Search"
-                title="Search (Ctrl+K)"
+                title="Ctrl+K"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
+                <kbd className="hidden sm:inline text-[10px] font-mono text-gray-600 bg-white/[0.06] px-1.5 py-0.5 rounded border border-white/[0.08]">⌘K</kbd>
               </button>
             )}
 
-            {/* User menu dropdown */}
             <div className="relative group">
               <button
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 dark:focus:ring-sky-400 dark:focus:ring-offset-gray-900"
+                className="flex items-center gap-2 px-2 py-1 rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-colors"
                 aria-label="User menu"
                 aria-haspopup="true"
-                aria-expanded="false"
               >
-                <div className="w-8 h-8 rounded-full bg-sky-600 dark:bg-sky-500 flex items-center justify-center">
-                  <span className="text-white font-medium text-sm">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center">
+                  <span className="text-white font-medium text-[10px]">
                     {user?.username?.charAt(0).toUpperCase() || 'A'}
                   </span>
                 </div>
-                <span className="hidden sm:inline text-sm font-medium">
+                <span className="hidden sm:inline text-xs font-medium text-gray-300">
                   {user?.username}
                 </span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
               </button>
 
-              {/* Dropdown menu */}
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+              <div className="absolute right-0 mt-1 w-44 glass-dropdown opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                 <div className="py-1">
-                  <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {user?.username}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Administrator
-                    </p>
+                  <div className="px-3 py-2 border-b border-white/[0.06]">
+                    <p className="text-xs font-medium text-gray-200">{user?.username}</p>
+                    <p className="text-[10px] text-gray-500 font-mono uppercase">Administrator</p>
                   </div>
                   <button
                     onClick={handleLogout}
                     disabled={logout.isPending}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:bg-white/[0.06] transition-colors disabled:opacity-50"
                   >
-                    {logout.isPending ? t('navigation.logout') + '...' : t('navigation.logout')}
+                    {logout.isPending ? 'Çıkış...' : t('navigation.logout')}
                   </button>
                 </div>
               </div>

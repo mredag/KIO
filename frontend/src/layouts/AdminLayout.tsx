@@ -20,7 +20,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const mainContentRef = useRef<HTMLElement>(null);
 
-  // Ctrl+K keyboard shortcut for search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -28,19 +27,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         setSearchModalOpen(true);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Prefetch likely next pages when route changes
   useEffect(() => {
     prefetchLikelyNextPages(location.pathname);
   }, [location.pathname]);
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
   const handleSkipToContent = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -48,72 +43,40 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     mainContentRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleToggleCollapse = () => {
-    setSidebarCollapsed(!sidebarCollapsed);
-  };
-
-  const handleMobileMenuToggle = () => {
-    setMobileSidebarOpen(!mobileSidebarOpen);
-  };
-
-  const handleCloseMobile = () => {
-    setMobileSidebarOpen(false);
-  };
-
-  const handleSearchClick = () => {
-    setSearchModalOpen(true);
-  };
-
-  const handleSearchClose = () => {
-    setSearchModalOpen(false);
-  };
-
   return (
     <>
-      {/* Skip to content link for keyboard navigation */}
-      <a
-        href="#main-content"
-        onClick={handleSkipToContent}
-        className={skipLinkClasses}
-      >
+      <a href="#main-content" onClick={handleSkipToContent} className={skipLinkClasses}>
         Skip to main content
       </a>
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex">
-        {/* Sidebar */}
+      <div className="min-h-screen glass-app-bg flex">
         <Sidebar
           isCollapsed={sidebarCollapsed}
-          onToggleCollapse={handleToggleCollapse}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           isMobileOpen={mobileSidebarOpen}
-          onCloseMobile={handleCloseMobile}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
         />
 
-        {/* Main content area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
           <Header
-            onMobileMenuToggle={handleMobileMenuToggle}
-            onSearchClick={handleSearchClick}
+            onMobileMenuToggle={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            onSearchClick={() => setSearchModalOpen(true)}
           />
 
-          {/* Main content */}
           <main
             id="main-content"
             ref={mainContentRef}
             tabIndex={-1}
             className="flex-1 overflow-auto focus:outline-none"
           >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
               {children}
             </div>
           </main>
         </div>
 
-        {/* Toast notifications */}
         <ToastContainer />
-
-        {/* Search modal */}
-        <SearchModal isOpen={searchModalOpen} onClose={handleSearchClose} />
+        <SearchModal isOpen={searchModalOpen} onClose={() => setSearchModalOpen(false)} />
       </div>
     </>
   );

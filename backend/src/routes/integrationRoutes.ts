@@ -69,7 +69,7 @@ const handleValidationErrors = (req: Request, res: Response, next: Function) => 
 };
 
 /**
- * Create integration routes for n8n workflows
+ * Create integration routes for external API consumers (OpenClaw, admin panel)
  * Requirements: 7.1, 7.2, 7.3, 2.4, 2.5, 8.1
  */
 export function createIntegrationRoutes(db: DatabaseService): Router {
@@ -134,7 +134,7 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
       // Log context request
       db.createLog({
         level: 'info',
-        message: 'Knowledge context requested by n8n workflow',
+        message: 'Knowledge context requested by API consumer',
         details: { 
           intent: intent || null,
           requestedCategories: requestedCategories || 'all',
@@ -147,6 +147,55 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
     } catch (error) {
       console.error('[Integration API] Error fetching knowledge context:', error);
       res.status(500).json({ error: 'Failed to fetch knowledge context' });
+    }
+  });
+
+  /**
+   * GET /api/integrations/knowledge/entries
+   * List all knowledge base entries (for agents)
+   */
+  router.get('/knowledge/entries', (_req: Request, res: Response) => {
+    try {
+      const entries = knowledgeBaseService.getAll();
+      res.json(entries);
+    } catch (error) {
+      console.error('[Integration API] Error fetching KB entries:', error);
+      res.status(500).json({ error: 'Failed to fetch knowledge base entries' });
+    }
+  });
+
+  /**
+   * PUT /api/integrations/knowledge/entries/:id
+   * Update a knowledge base entry (for agents like Forge)
+   */
+  router.put('/knowledge/entries/:id', (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const existing = knowledgeBaseService.getById(id);
+      if (!existing) {
+        res.status(404).json({ error: 'Knowledge base entry not found', id });
+        return;
+      }
+
+      const updates: any = {};
+      if (req.body.value !== undefined) updates.value = req.body.value;
+      if (req.body.description !== undefined) updates.description = req.body.description;
+      if (req.body.category !== undefined) updates.category = req.body.category;
+      if (req.body.key_name !== undefined) updates.key_name = req.body.key_name;
+      if (req.body.is_active !== undefined) updates.is_active = req.body.is_active;
+
+      const entry = knowledgeBaseService.update(id, updates);
+
+      db.createLog({
+        level: 'info',
+        message: 'Knowledge base entry updated via API',
+        details: { entryId: id, category: entry.category, keyName: entry.key_name, version: entry.version },
+      });
+
+      res.json(entry);
+    } catch (error) {
+      console.error('[Integration API] Error updating KB entry:', error);
+      res.status(500).json({ error: 'Failed to update knowledge base entry' });
     }
   });
 
@@ -168,7 +217,7 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
         return;
       }
 
-      // Return simple enabled status for n8n workflow
+      // Return simple enabled status for API consumers
       res.json({
         serviceName: service.service_name,
         enabled: service.enabled === 1,

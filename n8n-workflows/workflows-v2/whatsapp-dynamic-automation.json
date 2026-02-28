@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\n\n// Verification check (GET request)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\n// Parse webhook payload\nconst body = input.body || input;\nconst value = body?.entry?.[0]?.changes?.[0]?.value;\n\n// Ignore status updates (delivery receipts)\nif (value?.statuses) {\n  return [{ json: { route: 'ignore', reason: 'status_update' } }];\n}\n\n// Check for messages\nconst messages = value?.messages;\nif (!messages || !messages[0]) {\n  return [{ json: { route: 'ignore', reason: 'no_messages' } }];\n}\n\nconst msg = messages[0];\n\n// Only process text messages\nif (!msg.text || !msg.text.body) {\n  return [{ json: { route: 'ignore', reason: 'not_text' } }];\n}\n\n// Ignore specific phone numbers\nconst ignoredPhones = ['905302500558'];\nif (ignoredPhones.includes(msg.from)) {\n  return [{ json: { route: 'ignore', reason: 'blocked_number' } }];\n}\n\nconst text = msg.text.body.trim();\nconst textLower = text.toLowerCase();\nconst phone = msg.from;\nlet token = null;\nlet route = 'ignore';\n\n// IMPORTANT: Check specific phrases BEFORE regex patterns!\n// Check claim commands first (before kupon regex catches 'kupon kullan')\nif (textLower === 'kupon kullan' || textLower === 'kullan' || textLower === 'claim' || textLower === 'redeem') {\n  route = 'claim';\n} else if (textLower === 'durum' || textLower === 'bakiye' || textLower === 'balance') {\n  route = 'balance';\n} else if (textLower === 'iptal' || textLower === 'dur' || textLower === 'stop') {\n  route = 'optout';\n} else if (textLower === 'yardim' || textLower === 'yardım' || textLower === 'help' || textLower === '?') {\n  route = 'help';\n} else {\n  // Now check for coupon token pattern (kupon <code>)\n  const kuponMatch = text.match(/^kupon\\s+([A-Za-z0-9]+)$/i);\n  if (kuponMatch) {\n    route = 'coupon';\n    token = kuponMatch[1].toUpperCase();\n  }\n}\n\nreturn [{ json: { route, phone, token, text } }];"
+        "jsCode": "const input = $input.first().json;\n\n// Verification check (GET request)\nif (input.query && input.query['hub.mode'] === 'subscribe' && input.query['hub.challenge']) {\n  return [{ json: { route: 'verify', challenge: input.query['hub.challenge'] } }];\n}\n\n// Parse webhook payload\nconst body = input.body || input;\nconst value = body?.entry?.[0]?.changes?.[0]?.value;\n\n// Ignore status updates (delivery receipts)\nif (value?.statuses) {\n  return [{ json: { route: 'ignore', reason: 'status_update' } }];\n}\n\n// Check for messages\nconst messages = value?.messages;\nif (!messages || !messages[0]) {\n  return [{ json: { route: 'ignore', reason: 'no_messages' } }];\n}\n\nconst msg = messages[0];\n\n// Only process text messages\nif (!msg.text || !msg.text.body) {\n  return [{ json: { route: 'ignore', reason: 'not_text' } }];\n}\n\n// Ignore specific phone numbers\nconst ignoredPhones = ['905302500558'];\nif (ignoredPhones.includes(msg.from)) {\n  return [{ json: { route: 'ignore', reason: 'blocked_number' } }];\n}\n\nconst text = msg.text.body.trim();\nconst textLower = text.toLowerCase();\nconst phone = msg.from;\nlet token = null;\nlet route = 'ignore';\n\n// IMPORTANT: Check specific phrases BEFORE regex patterns!\n// Check claim commands first (before kupon regex catches 'kupon kullan')\nif (textLower === 'kupon kullan' || textLower === 'kullan' || textLower === 'claim' || textLower === 'redeem') {\n  route = 'claim';\n} else if (textLower === 'durum' || textLower === 'bakiye' || textLower === 'balance') {\n  route = 'balance';\n} else if (textLower === 'iptal' || textLower === 'dur' || textLower === 'stop') {\n  route = 'optout';\n} else if (textLower === 'yardim' || textLower === 'yardÃ„Â±m' || textLower === 'help' || textLower === '?') {\n  route = 'help';\n} else {\n  // Now check for coupon token pattern (kupon <code>)\n  const kuponMatch = text.match(/^kupon\\s+([A-Za-z0-9]+)$/i);\n  if (kuponMatch) {\n    route = 'coupon';\n    token = kuponMatch[1].toUpperCase();\n  }\n}\n\nreturn [{ json: { route, phone, token, text } }];"
       },
       "id": "parse",
       "name": "Parse",
@@ -32,7 +32,7 @@
         "url": "http://localhost:3001/api/integrations/services/whatsapp/status",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_N8N_API_KEY>" }] },
         "options": { "response": { "response": { "neverError": true } }, "timeout": 3000 }
       },
       "id": "check-service-status",
@@ -43,7 +43,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const statusResponse = $input.first().json;\nconst parseData = $('Parse').first().json;\n\n// Check if service is enabled\nconst isEnabled = statusResponse.enabled === true;\n\nif (!isEnabled) {\n  // Service is disabled - return maintenance message\n  return [{ \n    json: { \n      route: 'maintenance',\n      phone: parseData.phone,\n      message: '🔧 Sistem bakımda. Lütfen daha sonra tekrar deneyin.'\n    } \n  }];\n}\n\n// Service is enabled - continue with normal routing\nreturn [{ \n  json: { \n    ...parseData,\n    serviceEnabled: true\n  } \n}];"
+        "jsCode": "const statusResponse = $input.first().json;\nconst parseData = $('Parse').first().json;\n\n// Check if service is enabled\nconst isEnabled = statusResponse.enabled === true;\n\nif (!isEnabled) {\n  // Service is disabled - return maintenance message\n  return [{ \n    json: { \n      route: 'maintenance',\n      phone: parseData.phone,\n      message: 'Ã°Å¸â€Â§ Sistem bakÃ„Â±mda. LÃƒÂ¼tfen daha sonra tekrar deneyin.'\n    } \n  }];\n}\n\n// Service is enabled - continue with normal routing\nreturn [{ \n  json: { \n    ...parseData,\n    serviceEnabled: true\n  } \n}];"
       },
       "id": "check-enabled",
       "name": "Check Enabled",
@@ -86,7 +86,7 @@
         "url": "http://localhost:3001/api/integrations/coupons/consume",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_N8N_API_KEY>" }] },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"phone\":\"{{ $json.phone }}\",\"token\":\"{{ $json.token }}\"}",
@@ -100,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg;\nlet intent = 'coupon_submit';\nlet sentiment = 'neutral';\n\nif (r.error) {\n  // Turkish error messages based on error code\n  const code = r.error.code;\n  if (code === 'INVALID_TOKEN') {\n    msg = '❌ Bu kupon kodu gecersiz. Lutfen kodu kontrol edin.';\n    sentiment = 'negative';\n  } else if (code === 'ALREADY_USED') {\n    msg = '❌ Bu kupon daha once kullanilmis.';\n    sentiment = 'negative';\n  } else if (code === 'EXPIRED_TOKEN') {\n    msg = '❌ Bu kuponun suresi dolmus.';\n    sentiment = 'negative';\n  } else {\n    msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n    sentiment = 'negative';\n  }\n} else {\n  msg = `✅ Kupon eklendi! Bakiye: ${r.balance || 0}/4`;\n  sentiment = 'positive';\n}\n\nreturn [{ json: { phone: p, message: msg, intent, sentiment, inboundText: originalText } }];"
+        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg;\nlet intent = 'coupon_submit';\nlet sentiment = 'neutral';\n\nif (r.error) {\n  // Turkish error messages based on error code\n  const code = r.error.code;\n  if (code === 'INVALID_TOKEN') {\n    msg = 'Ã¢ÂÅ’ Bu kupon kodu gecersiz. Lutfen kodu kontrol edin.';\n    sentiment = 'negative';\n  } else if (code === 'ALREADY_USED') {\n    msg = 'Ã¢ÂÅ’ Bu kupon daha once kullanilmis.';\n    sentiment = 'negative';\n  } else if (code === 'EXPIRED_TOKEN') {\n    msg = 'Ã¢ÂÅ’ Bu kuponun suresi dolmus.';\n    sentiment = 'negative';\n  } else {\n    msg = 'Ã¢ÂÅ’ Bir hata olustu. Lutfen tekrar deneyin.';\n    sentiment = 'negative';\n  }\n} else {\n  msg = `Ã¢Å“â€¦ Kupon eklendi! Bakiye: ${r.balance || 0}/4`;\n  sentiment = 'positive';\n}\n\nreturn [{ json: { phone: p, message: msg, intent, sentiment, inboundText: originalText } }];"
       },
       "id": "fmt-coupon",
       "name": "Fmt Coupon",
@@ -114,7 +114,7 @@
         "url": "=http://localhost:3001/api/integrations/coupons/wallet/{{ encodeURIComponent($json.phone) }}",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_N8N_API_KEY>" }] },
         "options": { "response": { "response": { "neverError": true } } }
       },
       "id": "api-balance",
@@ -125,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r=$input.first().json;\nconst p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg=r.error?'📊 Henüz kuponunuz yok.':`📊 Bakiye: ${r.couponCount||0}/4`;\nreturn [{json:{phone:p,message:msg,intent:'balance_check',sentiment:'neutral',inboundText:originalText}}];"
+        "jsCode": "const r=$input.first().json;\nconst p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nlet msg=r.error?'Ã°Å¸â€œÅ  HenÃƒÂ¼z kuponunuz yok.':`Ã°Å¸â€œÅ  Bakiye: ${r.couponCount||0}/4`;\nreturn [{json:{phone:p,message:msg,intent:'balance_check',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-balance",
       "name": "Fmt Balance",
@@ -139,7 +139,7 @@
         "url": "http://localhost:3001/api/integrations/coupons/claim",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_N8N_API_KEY>" }] },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"phone\":\"{{ $json.phone }}\"}",
@@ -153,7 +153,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst err = r.error;\nlet msg;\nlet sentiment = 'neutral';\n\nif (err) {\n  const bal = err.balance || 0;\n  const needed = err.needed || (4 - bal);\n  const threshold = err.threshold || 4;\n  msg = `❌ Yeterli kupon yok. Mevcut: ${bal}/${threshold}. ${needed} kupon daha gerekiyor.`;\n  sentiment = 'negative';\n} else if (r.ok && r.redemptionId) {\n  if (r.isNew === false) {\n    // Existing pending - remind user\n    msg = `⏳ Zaten bekleyen bir kullanim talebiniz var!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;\n    sentiment = 'neutral';\n  } else {\n    msg = `🎉 Tebrikler! Ucretsiz masaj hakkiniz onaylandi!\\n🎫 Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n    sentiment = 'positive';\n  }\n} else {\n  msg = '❌ Bir hata olustu. Lutfen tekrar deneyin.';\n  sentiment = 'negative';\n}\n\nreturn [{ json: { phone: p, message: msg, intent: 'redemption', sentiment, inboundText: originalText } }];"
+        "jsCode": "const r = $input.first().json;\nconst p = $('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst err = r.error;\nlet msg;\nlet sentiment = 'neutral';\n\nif (err) {\n  const bal = err.balance || 0;\n  const needed = err.needed || (4 - bal);\n  const threshold = err.threshold || 4;\n  msg = `Ã¢ÂÅ’ Yeterli kupon yok. Mevcut: ${bal}/${threshold}. ${needed} kupon daha gerekiyor.`;\n  sentiment = 'negative';\n} else if (r.ok && r.redemptionId) {\n  if (r.isNew === false) {\n    // Existing pending - remind user\n    msg = `Ã¢ÂÂ³ Zaten bekleyen bir kullanim talebiniz var!\\nÃ°Å¸Å½Â« Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin. Onaylandiktan sonra yeni kupon toplayabilirsiniz.`;\n    sentiment = 'neutral';\n  } else {\n    msg = `Ã°Å¸Å½â€° Tebrikler! Ucretsiz masaj hakkiniz onaylandi!\\nÃ°Å¸Å½Â« Kod: ${r.redemptionId}\\nResepsiyona bu kodu gosterin.`;\n    sentiment = 'positive';\n  }\n} else {\n  msg = 'Ã¢ÂÅ’ Bir hata olustu. Lutfen tekrar deneyin.';\n  sentiment = 'negative';\n}\n\nreturn [{ json: { phone: p, message: msg, intent: 'redemption', sentiment, inboundText: originalText } }];"
       },
       "id": "fmt-claim",
       "name": "Fmt Claim",
@@ -167,7 +167,7 @@
         "url": "http://localhost:3001/api/integrations/knowledge/context",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_N8N_API_KEY>" }] },
         "options": { "response": { "response": { "neverError": true } }, "timeout": 3000 }
       },
       "id": "fetch-knowledge",
@@ -178,7 +178,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst knowledge=$input.first().json;\n\n// Build help message from knowledge base\nlet msg = '🎫 Kupon Sistemi Yardım\\n\\n';\n\n// Add services info if available\nif (knowledge.services) {\n  const services = Object.values(knowledge.services);\n  if (services.length > 0) {\n    msg += '📌 Hizmetler:\\n';\n    services.slice(0, 3).forEach(s => msg += `• ${s}\\n`);\n    msg += '\\n';\n  }\n}\n\n// Add hours if available\nif (knowledge.hours) {\n  msg += '🕐 Çalışma Saatleri:\\n';\n  Object.values(knowledge.hours).forEach(h => msg += `• ${h}\\n`);\n  msg += '\\n';\n}\n\n// Add commands\nmsg += '📱 Komutlar:\\n';\nmsg += '• DURUM - Bakiye sorgula\\n';\nmsg += '• KUPON <KOD> - Kupon ekle\\n';\nmsg += '• KUPON KULLAN - Hediye al\\n';\nmsg += '• IPTAL - Bildirimleri kapat';\n\n// Add contact if available\nif (knowledge.contact && knowledge.contact.phone) {\n  msg += `\\n\\n📞 İletişim: ${knowledge.contact.phone}`;\n}\n\nreturn [{json:{phone:p,message:msg,intent:'help',sentiment:'neutral',inboundText:originalText}}];"
+        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nconst knowledge=$input.first().json;\n\n// Build help message from knowledge base\nlet msg = 'Ã°Å¸Å½Â« Kupon Sistemi YardÃ„Â±m\\n\\n';\n\n// Add services info if available\nif (knowledge.services) {\n  const services = Object.values(knowledge.services);\n  if (services.length > 0) {\n    msg += 'Ã°Å¸â€œÅ’ Hizmetler:\\n';\n    services.slice(0, 3).forEach(s => msg += `Ã¢â‚¬Â¢ ${s}\\n`);\n    msg += '\\n';\n  }\n}\n\n// Add hours if available\nif (knowledge.hours) {\n  msg += 'Ã°Å¸â€¢Â Ãƒâ€¡alÃ„Â±Ã…Å¸ma Saatleri:\\n';\n  Object.values(knowledge.hours).forEach(h => msg += `Ã¢â‚¬Â¢ ${h}\\n`);\n  msg += '\\n';\n}\n\n// Add commands\nmsg += 'Ã°Å¸â€œÂ± Komutlar:\\n';\nmsg += 'Ã¢â‚¬Â¢ DURUM - Bakiye sorgula\\n';\nmsg += 'Ã¢â‚¬Â¢ KUPON <KOD> - Kupon ekle\\n';\nmsg += 'Ã¢â‚¬Â¢ KUPON KULLAN - Hediye al\\n';\nmsg += 'Ã¢â‚¬Â¢ IPTAL - Bildirimleri kapat';\n\n// Add contact if available\nif (knowledge.contact && knowledge.contact.phone) {\n  msg += `\\n\\nÃ°Å¸â€œÅ¾ Ã„Â°letiÃ…Å¸im: ${knowledge.contact.phone}`;\n}\n\nreturn [{json:{phone:p,message:msg,intent:'help',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-help",
       "name": "Fmt Help",
@@ -188,7 +188,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nreturn [{json:{phone:p,message:'✅ Bildirimler kapatıldı.',intent:'optout',sentiment:'neutral',inboundText:originalText}}];"
+        "jsCode": "const p=$('Check Enabled').first().json.phone;\nconst originalText = $('Check Enabled').first().json.text;\nreturn [{json:{phone:p,message:'Ã¢Å“â€¦ Bildirimler kapatÃ„Â±ldÃ„Â±.',intent:'optout',sentiment:'neutral',inboundText:originalText}}];"
       },
       "id": "fmt-optout",
       "name": "Fmt OptOut",
@@ -237,7 +237,7 @@
         "url": "http://localhost:3001/api/integrations/whatsapp/interaction",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_N8N_API_KEY>" }] },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"phone\":\"{{ $json.phone }}\",\"direction\":\"{{ $json.direction }}\",\"messageText\":\"{{ $json.messageText }}\",\"intent\":\"{{ $json.intent }}\",\"sentiment\":\"{{ $json.sentiment }}\"}",
@@ -267,10 +267,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://graph.facebook.com/v18.0/471153662739049/messages",
+        "url": "https://graph.facebook.com/v18.0/<YOUR_PHONE_NUMBER_ID>/messages",
         "authentication": "none",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer EAASoZBpRZBYVgBQI9tq7dTqVxCtB5SIHUKYZBcnsdGxpcU5xmmivOno8AUvQhsFLD0TiBEX71aCYP6NldygAA36fzuZCKK7ZApU7LBGXQiUTR0SLEnZC4AxZAvc6UD7qtkQMXGhZAEzrS6fFvooEu7As0AuqUBBDkJpRomKU3lJ4fQ5l8LCbg2clZAN0vegcX185tegZDZD" }] },
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "Bearer <YOUR_WHATSAPP_ACCESS_TOKEN>" }] },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{ $json.phone }}\",\"text\":{\"body\":\"{{ $json.message }}\"}}",

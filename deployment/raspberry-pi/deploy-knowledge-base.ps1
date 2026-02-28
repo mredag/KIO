@@ -65,6 +65,6 @@ Write-Host "Deployment complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps" -ForegroundColor Cyan
 Write-Host "1. Test knowledge base API at http://192.168.1.5:3001/api/admin/knowledge-base" -ForegroundColor White
-Write-Host "2. Update n8n workflows to use /api/integrations/knowledge/context" -ForegroundColor White
+Write-Host "2. Knowledge API: /api/integrations/knowledge/context" -ForegroundColor White
 Write-Host "3. Test service settings at http://192.168.1.5:3001/api/admin/services" -ForegroundColor White
 Write-Host ""

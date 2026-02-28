@@ -30,7 +30,7 @@ You've already completed:
 ### Required Credentials
 1. **Instagram Access Token** (you have this):
    ```
-   IGAATRkaY1kWFBZAGFvTnZACd0ZAMUy1peklsTUtWczVISjBRWjN0a2s2RnlIcUFreEM5WkRrT3VSNi13VHpUYzc0TUJnaHR2MTNvMTRsUXVpS1MxaWRBSlFvMEQwTENkVkhwRC1kUjQ1ZAUtzOEtqN083cmltYnRwUjN3b2I4WmgxUQZDZD
+   <YOUR_INSTAGRAM_ACCESS_TOKEN>
    ```
 
 2. **Google Gemini API Key** (for AI):

@@ -116,7 +116,7 @@ export default function AIPromptsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI System Prompts</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            n8n workflow'larında kullanılacak AI sistem mesajlarını yönetin
+            AI entegrasyonlarında kullanılacak sistem mesajlarını yönetin
           </p>
         </div>
         <button
@@ -226,7 +226,7 @@ export default function AIPromptsPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    İsim (n8n'de kullanılacak) *
+                    İsim (API'de kullanılacak) *
                   </label>
                   <input
                     type="text"
@@ -239,7 +239,7 @@ export default function AIPromptsPage() {
                     required
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    n8n workflow'unda bu isimle çağrılacak
+                    API üzerinden bu isimle çağrılacak
                   </p>
                 </div>
 

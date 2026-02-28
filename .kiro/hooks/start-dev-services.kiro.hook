@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Start All Dev Services",
+  "description": "Starts dev services in order: cloudflared, OpenClaw (:18789), backend Node 18 (:3001), frontend (:3000). Reuses already-running services. Health checks included.",
+  "version": "2",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "powershell -ExecutionPolicy Bypass -File deployment/start-dev-all.ps1",
+    "timeout": 120
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Stop All Dev Services",
+  "description": "Stops dev services by port (not blind kill-all). Supports -Only and -KeepCloudflared flags.",
+  "version": "2",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "powershell -ExecutionPolicy Bypass -File deployment/stop-dev-all.ps1",
+    "timeout": 30
+  }
+}

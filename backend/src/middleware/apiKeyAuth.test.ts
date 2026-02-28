@@ -1,7 +1,7 @@
 /**
  * API Key Authentication Middleware Tests
  * 
- * Tests API key authentication for integration endpoints
+ * Tests API key authentication for OpenClaw/external integration endpoints
  * Requirements: 16.2, 16.3
  */
 
@@ -121,7 +121,7 @@ describe('apiKeyAuth middleware', () => {
 
     expect(mockNext).toHaveBeenCalled();
     expect(mockRes.status).not.toHaveBeenCalled();
-    expect(mockReq.apiClient).toBe('n8n');
+    expect(mockReq.apiClient).toBe('integration');
   });
 
   it('should return 500 if N8N_API_KEY is not configured', () => {
@@ -151,7 +151,7 @@ describe('apiKeyAuth middleware', () => {
 
     apiKeyAuth(mockReq as Request, mockRes as Response, mockNext);
 
-    expect(mockReq.apiClient).toBe('n8n');
+    expect(mockReq.apiClient).toBe('integration');
     expect(mockNext).toHaveBeenCalled();
   });
 });

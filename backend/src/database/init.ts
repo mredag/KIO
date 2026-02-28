@@ -158,6 +158,34 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.log('ai_system_prompts table created successfully');
   }
   
+  // Jarvis Task Orchestration tables (mc_jarvis_sessions, mc_jarvis_messages)
+  // Uses CREATE TABLE IF NOT EXISTS — safe to run on every startup
+  try {
+    const { runJarvisMigration } = require('./migrate-jarvis.cjs');
+    runJarvisMigration(db);
+  } catch (error: any) {
+    console.error('Jarvis migration failed:', error.message);
+  }
+
+  // Instagram DM Intelligence — model_used, tokens_estimated columns + MC indexes
+  try {
+    const igCols = db.prepare('PRAGMA table_info(instagram_interactions)').all() as Array<{ name: string }>;
+    const igColNames = igCols.map(c => c.name);
+    if (!igColNames.includes('model_used')) {
+      db.prepare('ALTER TABLE instagram_interactions ADD COLUMN model_used TEXT').run();
+      console.log('Added model_used column to instagram_interactions');
+    }
+    if (!igColNames.includes('tokens_estimated')) {
+      db.prepare('ALTER TABLE instagram_interactions ADD COLUMN tokens_estimated INTEGER DEFAULT 0').run();
+      console.log('Added tokens_estimated column to instagram_interactions');
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mc_conversations_channel_customer ON mc_conversations(channel, customer_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_instagram_interactions_model ON instagram_interactions(model_used)');
+    console.log('Instagram Intelligence migration complete');
+  } catch (error: any) {
+    console.error('Instagram Intelligence migration failed:', error.message);
+  }
+
   // Seed default data
   seedDatabase(db);
   

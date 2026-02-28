@@ -14,7 +14,8 @@ declare global {
 
 /**
  * API Key authentication middleware for integration endpoints
- * Verifies Bearer token in Authorization header matches N8N_API_KEY
+ * Verifies Bearer token in Authorization header matches N8N_API_KEY env var
+ * (env var name is legacy — it's a generic integration API key)
  * Requirements: 16.2, 16.3
  */
 export function apiKeyAuth(
@@ -82,7 +83,7 @@ export function apiKeyAuth(
   }
 
   // Attach apiClient identifier for logging
-  req.apiClient = 'n8n';
+  req.apiClient = 'integration';
 
   // Authentication successful
   next();

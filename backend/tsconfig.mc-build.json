@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": false,
+    "strict": false
+  },
+  "include": ["src/routes/missionControlRoutes.ts"],
+  "exclude": ["**/*.test.ts", "src/e2e/**"]
+}

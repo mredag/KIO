@@ -4,7 +4,7 @@ inclusion: manual
 
 # Raspberry Pi Deployment
 
-**Pi:** 192.168.1.7 | **User:** eform-kio | **Node:** 20.x | **OS:** Debian 13
+**Pi:** 192.168.1.9 | **User:** eform-kio | **Node:** 20.x | **OS:** Debian 13
 
 ## Critical Rules
 
@@ -18,10 +18,10 @@ inclusion: manual
 
 ```bash
 # 1. Transfer (exclude node_modules, dist, .git)
-scp -r backend/ frontend/ package.json eform-kio@192.168.1.7:~/spa-kiosk/
+scp -r backend/ frontend/ package.json eform-kio@192.168.1.9:~/spa-kiosk/
 
 # 2. On Pi: install, build, start
-ssh eform-kio@192.168.1.7 << 'EOF'
+ssh eform-kio@192.168.1.9 << 'EOF'
 cd ~/spa-kiosk
 npm install
 cd backend && find src -name "*.test.ts" -delete && npm run build

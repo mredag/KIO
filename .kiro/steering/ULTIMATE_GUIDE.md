@@ -20,7 +20,7 @@ Dev Machine (Windows)
 │   └── WhatsApp workflow     — Keyword routing (KUPON/DURUM/KULLAN)
 └── Frontend (served by backend in prod)
 
-Raspberry Pi (192.168.1.7)
+Raspberry Pi (192.168.1.9)
 ├── Backend (PM2, port 3001) — same as above
 ├── n8n (systemd, port 5678) — WhatsApp workflow
 └── OpenClaw (planned)       — Instagram AI (not yet deployed to Pi)
@@ -768,10 +768,10 @@ TELEGRAM_ADMIN_CHAT_ID=<from @userinfobot>
 
 ```powershell
 # SSH
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.7
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.9
 
 # SCP
-scp -i "$env:USERPROFILE\.ssh\id_ed25519_pi" <local> eform-kio@192.168.1.7:<remote>
+scp -i "$env:USERPROFILE\.ssh\id_ed25519_pi" <local> eform-kio@192.168.1.9:<remote>
 
 # n8n commands (via SSH)
 n8n list:workflow 2>/dev/null
@@ -784,7 +784,7 @@ sudo systemctl restart n8n
 ```powershell
 # Use SQL files — PowerShell escaping is problematic
 fsWrite("temp_query.sql", "SELECT * FROM knowledge_base;")
-scp -i ... temp_query.sql eform-kio@192.168.1.7:/tmp/
+scp -i ... temp_query.sql eform-kio@192.168.1.9:/tmp/
 ssh -i ... "sqlite3 ~/spa-kiosk/backend/data/kiosk.db < /tmp/temp_query.sql"
 ssh -i ... "pm2 restart kiosk-backend"  # Required after changes
 ```
@@ -799,4 +799,4 @@ ssh -i ... "pm2 restart kiosk-backend"  # Required after changes
 ---
 
 **Last Updated:** 2026-02-27
-**Status:** ✅ Production on Pi (192.168.1.7), OpenClaw Instagram pipeline working with Kimi K2 (dev), Instagram DM Intelligence (context service, model routing, Turkish char normalization, context-aware follow-ups, MC integration), Direct Response Pipeline (light+standard tiers bypass OpenClaw, ~5-7s total), Pipeline Config Service (dynamic config in mc_policies, runtime-editable via API), Policy Agent (ResponsePolicyService — 8-rule validation + faithfulness scoring + direct OpenRouter correction, fallback creates Workshop jobs), Meta Graph API connected via graph.instagram.com (IGAA token valid, v25.0), DM Kontrol Merkezi (live feed, pipeline health, errors, model routing, test mode toggle, policy badges per message), DM Simulator (`/api/workflow-test/simulate-agent` — full pipeline without Meta/OpenClaw, results in DM Kontrol feed), Mission Control UI (glassmorphism dark theme, 10 active MC pages — cleaned up from 17), Jarvis Data Bridge working (JSONL polling with heartbeat filter, DM quality review, planning chat, task execution, `buildSystemContext` injects last 20 DMs + pipeline health), AutoPilot autonomous agent engine (4 triggers, cron scanner, AgentDispatchService), Real-Time Activity Feed, Agent Lifecycle Orchestrator, Enhanced Dashboard with comparison metrics, KB migrated to 61 entries with Turkish diacritics, anti-hallucination architecture (formatted KB, faithfulness scoring, "SADECE BİLGİ BANKASINI KULLAN" framing), full backend build via tsconfig.build.json, heartbeat target set to "none". UI cleanup (2026-02-26): removed Approvals, Comms, Documents, Gateways, Skills, Tags, AI Prompts, Blocked/Suspicious Users from sidebar (backend routes preserved). Closed-Loop DM Quality System (2026-02-27): EscalationService + TelegramNotificationService + Telegram webhook — routes policy violations/audit findings/DM failures to analyst agent or Telegram admin with inline approve/reject buttons + 🌐 Panel URL fallback. TelegramCallbackPoller auto-reconciles with OpenClaw (30s check, defers when gateway is up, resumes when down). Jarvis subagent fix: AGENTS.md updated to enforce HTTP API access (no direct SQLite), buildSystemContext enriched with recent DMs + health stats. OpenClaw AGENTS.md: added `/esc` text commands for escalation handling via Telegram chat.
+**Status:** ✅ Production on Pi (192.168.1.9), OpenClaw Instagram pipeline working with Kimi K2 (dev), Instagram DM Intelligence (context service, model routing, Turkish char normalization, context-aware follow-ups, MC integration), Direct Response Pipeline (light+standard tiers bypass OpenClaw, ~5-7s total), Pipeline Config Service (dynamic config in mc_policies, runtime-editable via API), Policy Agent (ResponsePolicyService — 8-rule validation + faithfulness scoring + direct OpenRouter correction, fallback creates Workshop jobs), Meta Graph API connected via graph.instagram.com (IGAA token valid, v25.0), DM Kontrol Merkezi (live feed, pipeline health, errors, model routing, test mode toggle, policy badges per message), DM Simulator (`/api/workflow-test/simulate-agent` — full pipeline without Meta/OpenClaw, results in DM Kontrol feed), Mission Control UI (glassmorphism dark theme, 10 active MC pages — cleaned up from 17), Jarvis Data Bridge working (JSONL polling with heartbeat filter, DM quality review, planning chat, task execution, `buildSystemContext` injects last 20 DMs + pipeline health), AutoPilot autonomous agent engine (4 triggers, cron scanner, AgentDispatchService), Real-Time Activity Feed, Agent Lifecycle Orchestrator, Enhanced Dashboard with comparison metrics, KB migrated to 61 entries with Turkish diacritics, anti-hallucination architecture (formatted KB, faithfulness scoring, "SADECE BİLGİ BANKASINI KULLAN" framing), full backend build via tsconfig.build.json, heartbeat target set to "none". UI cleanup (2026-02-26): removed Approvals, Comms, Documents, Gateways, Skills, Tags, AI Prompts, Blocked/Suspicious Users from sidebar (backend routes preserved). Closed-Loop DM Quality System (2026-02-27): EscalationService + TelegramNotificationService + Telegram webhook — routes policy violations/audit findings/DM failures to analyst agent or Telegram admin with inline approve/reject buttons + 🌐 Panel URL fallback. TelegramCallbackPoller auto-reconciles with OpenClaw (30s check, defers when gateway is up, resumes when down). Jarvis subagent fix: AGENTS.md updated to enforce HTTP API access (no direct SQLite), buildSystemContext enriched with recent DMs + health stats. OpenClaw AGENTS.md: added `/esc` text commands for escalation handling via Telegram chat.

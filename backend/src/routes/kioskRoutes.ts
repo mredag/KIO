@@ -9,6 +9,14 @@ import {
 } from '../middleware/validationMiddleware.js';
 import i18n from '../i18n/config.js';
 
+function formatUptime(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+
+  return `${hours}h ${minutes}m ${seconds}s`;
+}
+
 /**
  * Create kiosk routes
  * Handles all kiosk-facing API endpoints
@@ -72,11 +80,14 @@ export function createKioskRoutes(
    * Requirements: 19.2 - Backend availability check
    */
   router.get('/health', (_req: Request, res: Response) => {
-    res.json({ 
-      status: 'ok', 
+    const uptimeSeconds = process.uptime();
+
+    res.json({
+      status: 'ok',
       timestamp: new Date().toISOString(),
-      version: "1.0.0",
-      gitCommit: "latest"
+      version: '1.0.0',
+      gitCommit: 'latest',
+      uptime: formatUptime(uptimeSeconds),
     });
   });
 

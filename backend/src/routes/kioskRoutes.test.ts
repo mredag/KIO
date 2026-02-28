@@ -36,6 +36,10 @@ describe('Kiosk Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('status', 'ok');
       expect(response.body).toHaveProperty('timestamp');
+      expect(response.body).toHaveProperty('version', '1.0.0');
+      expect(response.body).toHaveProperty('gitCommit', 'latest');
+      expect(response.body).toHaveProperty('uptime');
+      expect(response.body.uptime).toMatch(/^\d+h \d+m \d+s$/);
     });
   });
 

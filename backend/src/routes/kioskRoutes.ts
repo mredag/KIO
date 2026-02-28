@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import { totalmem, freemem } from 'os';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { QRCodeService } from '../services/QRCodeService.js';
 import { kioskEventService } from '../services/KioskEventService.js';
@@ -82,6 +83,7 @@ export function createKioskRoutes(
   router.get('/health', (_req: Request, res: Response) => {
     const uptimeSeconds = process.uptime();
     const environment = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+    const usedMemoryMb = Number(((totalmem() - freemem()) / (1024 * 1024)).toFixed(2));
 
     res.json({
       status: 'ok',
@@ -91,6 +93,7 @@ export function createKioskRoutes(
       gitCommit: 'latest',
       uptime: formatUptime(uptimeSeconds),
       environment,
+      totalMemoryUsageMb: usedMemoryMb,
     });
   });
 

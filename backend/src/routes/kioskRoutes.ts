@@ -81,6 +81,7 @@ export function createKioskRoutes(
    */
   router.get('/health', (_req: Request, res: Response) => {
     const uptimeSeconds = process.uptime();
+    const environment = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
     res.json({
       status: 'ok',
@@ -88,6 +89,7 @@ export function createKioskRoutes(
       version: '1.0.0',
       gitCommit: 'latest',
       uptime: formatUptime(uptimeSeconds),
+      environment,
     });
   });
 

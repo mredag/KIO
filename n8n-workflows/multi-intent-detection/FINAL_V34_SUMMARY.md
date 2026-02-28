@@ -3,7 +3,7 @@
 **Date:** 2026-02-11  
 **Status:** ✅ Deployed and Active  
 **Pass Rate:** 70% (7/10) - **+10% improvement from v33**  
-**Pi IP:** 192.168.1.7
+**Pi IP:** 192.168.1.9
 
 ---
 
@@ -183,9 +183,9 @@ More capable model might better understand the JSON array requirement.
 
 **Workflow:** Instagram v34 Multi-Intent (50 tokens)  
 **ID:** NEW_WORKFLOW_V34  
-**Status:** ✅ Active on Pi (192.168.1.7)  
-**Test Webhook:** http://192.168.1.7:5678/webhook/test  
-**Production Webhook:** http://192.168.1.7:5678/webhook/instagram
+**Status:** ✅ Active on Pi (192.168.1.9)  
+**Test Webhook:** http://192.168.1.9:5678/webhook/test  
+**Production Webhook:** http://192.168.1.9:5678/webhook/instagram
 
 **Key Improvements:**
 - ✅ PT pricing question works correctly

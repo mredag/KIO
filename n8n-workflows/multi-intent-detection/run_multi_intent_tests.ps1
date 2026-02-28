@@ -21,7 +21,7 @@ foreach ($test in $tests) {
     
     try {
         $body = "{`"message`": `"$($test.Q)`"}"
-        $result = Invoke-RestMethod -Uri "http://192.168.1.7:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
+        $result = Invoke-RestMethod -Uri "http://192.168.1.9:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
         
         $hasHours = $result.response -match 'saat|acik|kapali|calisma'
         $hasPricing = $result.response -match 'fiyat|TL|ucret'

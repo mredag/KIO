@@ -1,7 +1,7 @@
-﻿# Multi-Intent Detection - Complete Guide
+# Multi-Intent Detection - Complete Guide
 
 **Status:** ✅ v34 Deployed (70% pass rate)  
-**Pi IP:** 192.168.1.7  
+**Pi IP:** 192.168.1.9  
 **Last Updated:** 2026-02-11
 
 ---
@@ -77,7 +77,7 @@
 
 ### Quick Test (Single Question)
 ```powershell
-$body = '{"message": "your question here"}'; Invoke-RestMethod -Uri "http://192.168.1.7:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
+$body = '{"message": "your question here"}'; Invoke-RestMethod -Uri "http://192.168.1.9:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
 ```
 
 ### Full Test Suite
@@ -153,29 +153,29 @@ System Prompt + Knowledge Context + User Message → Response
 ### Deploy New Version
 ```powershell
 # 1. Copy workflow to Pi
-scp -i "$env:USERPROFILE\.ssh\id_ed25519_pi" workflow.json eform-kio@192.168.1.7:/tmp/
+scp -i "$env:USERPROFILE\.ssh\id_ed25519_pi" workflow.json eform-kio@192.168.1.9:/tmp/
 
 # 2. Import
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.7 "n8n import:workflow --input=/tmp/workflow.json 2>/dev/null"
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.9 "n8n import:workflow --input=/tmp/workflow.json 2>/dev/null"
 
 # 3. Activate
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.7 "n8n update:workflow --id=NEW_WORKFLOW_VXX --active=true 2>/dev/null"
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.9 "n8n update:workflow --id=NEW_WORKFLOW_VXX --active=true 2>/dev/null"
 
 # 4. Restart n8n
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.7 "sudo systemctl restart n8n"
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.9 "sudo systemctl restart n8n"
 
 # 5. Wait and test
 Start-Sleep -Seconds 12
-$body = '{"message": "test question"}'; Invoke-RestMethod -Uri "http://192.168.1.7:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
+$body = '{"message": "test question"}'; Invoke-RestMethod -Uri "http://192.168.1.9:5678/webhook/test" -Method POST -Body $body -ContentType "application/json"
 ```
 
 ### Check Status
 ```powershell
 # List workflows
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.7 "n8n list:workflow 2>/dev/null | grep -i multi"
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.9 "n8n list:workflow 2>/dev/null | grep -i multi"
 
 # Check n8n status
-ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.7 "systemctl status n8n --no-pager"
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519_pi" eform-kio@192.168.1.9 "systemctl status n8n --no-pager"
 ```
 
 ---

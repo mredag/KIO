@@ -4,13 +4,13 @@ inclusion: manual
 
 # Raspberry Pi Deployment
 
-**Pi:** 192.168.1.9 | **User:** eform-kio | **Node:** 20.x | **OS:** Debian 13
+**Pi:** 192.168.1.8 | **User:** eform-kio | **Node:** 20.x | **OS:** Debian 13
 
 ## Critical Rules
 
 1. Remove test files before build: `find src -name "*.test.ts" -delete`
 2. Set `NODE_ENV=production` in `.env`
-3. Never copy `node_modules` — always `npm install` on Pi
+3. Never copy `node_modules` â€” always `npm install` on Pi
 4. Frontend served on port 3001 (not 3000) in production
 5. Use relative URLs (`/api`) for network portability
 
@@ -18,10 +18,10 @@ inclusion: manual
 
 ```bash
 # 1. Transfer (exclude node_modules, dist, .git)
-scp -r backend/ frontend/ package.json eform-kio@192.168.1.9:~/spa-kiosk/
+scp -r backend/ frontend/ package.json eform-kio@192.168.1.8:~/spa-kiosk/
 
 # 2. On Pi: install, build, start
-ssh eform-kio@192.168.1.9 << 'EOF'
+ssh eform-kio@192.168.1.8 << 'EOF'
 cd ~/spa-kiosk
 npm install
 cd backend && find src -name "*.test.ts" -delete && npm run build

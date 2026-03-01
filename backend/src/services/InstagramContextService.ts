@@ -51,8 +51,17 @@ export interface FollowUpContextHint {
   sourceMessage: string;
 }
 
+export type ResponseMode = 'answer_directly' | 'answer_then_clarify' | 'clarify_only';
+
+export interface ResponseDirective {
+  mode: ResponseMode;
+  instruction: string;
+  rationale: string;
+}
+
 export interface ContextualIntentResult extends IntentResult {
   followUpHint: FollowUpContextHint | null;
+  responseDirective: ResponseDirective;
 }
 
 export const MODEL_CONFIG = {
@@ -86,14 +95,28 @@ export interface MessageAnalysis {
   conversationHistory: ConversationEntry[];
   formattedHistory: string;
   intentCategories: string[];
-  matchedKeywords: string[];  // from detectIntent
+  matchedKeywords: string[];  // AI semantic signals (legacy field name kept for compatibility)
   followUpHint: FollowUpContextHint | null;
+  responseDirective: ResponseDirective;
   tierReason: string;         // from classifyModelTier
   modelTier: ModelTier;
   modelId: string;
   isNewCustomer: boolean;
   totalInteractions: number;  // all-time count for customer summary
 }
+
+interface AIContextPlan extends ContextualIntentResult {
+  tier: ModelTier;
+  tierReason: string;
+}
+
+const VALID_INTENT_CATEGORIES = new Set(['services', 'pricing', 'hours', 'policies', 'contact', 'faq', 'general']);
+const VALID_RESPONSE_MODES = new Set<ResponseMode>(['answer_directly', 'answer_then_clarify', 'clarify_only']);
+const DEFAULT_RESPONSE_DIRECTIVE: ResponseDirective = {
+  mode: 'answer_directly',
+  instruction: 'Bu mesaji bagimsiz bir soru olarak ele al. Bildigin net bilgiyi dogrudan ver. Gerekirse en fazla bir kisa netlestirme sorusu sor.',
+  rationale: 'Varsayilan guvenli davranis',
+};
 
 /**
  * Compute Turkish relative time string from a created_at timestamp.
@@ -146,16 +169,18 @@ export class InstagramContextService {
         const conversationHistory = this.getConversationHistory(senderId);
         const totalInteractions = this.getTotalInteractionCount(senderId);
         const formattedHistory = this.formatConversationHistory(conversationHistory);
-        const intentResult = await this.detectIntentWithContextAI(messageText, conversationHistory);
-        const { tier: modelTier, modelId, reason: tierReason } = this.classifyModelTier(messageText, intentResult.categories);
+        const contextPlan = await this.planMessageContextAI(messageText, conversationHistory);
+        const { tier: modelTier, tierReason } = contextPlan;
+        const modelId = MODEL_CONFIG[modelTier].modelId;
         const isNewCustomer = totalInteractions === 0;
 
         return {
           conversationHistory,
           formattedHistory,
-          intentCategories: intentResult.categories,
-          matchedKeywords: intentResult.keywords,
-          followUpHint: intentResult.followUpHint,
+          intentCategories: contextPlan.categories,
+          matchedKeywords: contextPlan.keywords,
+          followUpHint: contextPlan.followUpHint,
+          responseDirective: contextPlan.responseDirective,
           tierReason,
           modelTier,
           modelId,
@@ -170,6 +195,7 @@ export class InstagramContextService {
           intentCategories: ['general', 'faq'],
           matchedKeywords: [],
           followUpHint: null,
+          responseDirective: DEFAULT_RESPONSE_DIRECTIVE,
           tierReason: 'Varsayılan model (hata durumu) → standard',
           modelTier: 'standard',
           modelId: MODEL_CONFIG.standard.modelId,
@@ -265,12 +291,179 @@ export class InstagramContextService {
     return result;
   }
 
+  private getRecentContextWindow(history: ConversationEntry[], limit: number = 8): ConversationEntry[] {
+    if (history.length <= limit) {
+      return history;
+    }
+
+    return history.slice(-limit);
+  }
+
+  private buildContextPlannerPrompt(messageText: string, history: ConversationEntry[]): string {
+    const payload = {
+      currentMessage: messageText,
+      recentHistory: this.getRecentContextWindow(history).map(entry => ({
+        direction: entry.direction,
+        messageText: entry.messageText,
+        relativeTime: entry.relativeTime,
+      })),
+    };
+
+    return [
+      'Sen bir Instagram DM icin hizli ve guvenilir yanit plani ureten Turkce analiz motorusun.',
+      'Gorevin, yanit uretecek modele yapisal bir karar paketi hazirlamak.',
+      '',
+      'Her zaman asagidaki alanlari doldur:',
+      '- categories: Yanit icin gereken bilgi kategorileri. Gecerli degerler: services, pricing, hours, policies, contact, faq, general',
+      '- semanticSignals: Literal keyword degil, kisa semantik niyet etiketleri',
+      '- followUpHint: Sadece bu mesaj acikca onceki konunun devamiysa doldur. Konu net degilse null',
+      '- responseDirective.mode: answer_directly, answer_then_clarify, clarify_only',
+      '- responseDirective.instruction: Yanit modeline verilecek kisa operasyon talimati',
+      '- responseDirective.rationale: Neden bu davranis secildi',
+      '- tier: light, standard, advanced',
+      '- tierReason: Tier seciminin kisa nedeni',
+      '',
+      'Zorunlu kurallar:',
+      '- Konusma gecmisini sadece mevcut mesaj eksik, bagimsiz okunamayan veya acikca onceki konuya referans veren bir devam mesajiysa kullan.',
+      '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
+      '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',
+      '- Mumsen cevaplanabilen kismi cevaplat; sadece gerekli ise sonunda tek bir kisa netlestirme sorusu oner.',
+      '- Yanit sadece gecerli JSON olsun.',
+      '',
+      'JSON semasi ornegi:',
+      '{',
+      '  "categories": ["pricing", "hours"],',
+      '  "semanticSignals": ["multi_intent_info_request", "pricing_scope_ambiguous"],',
+      '  "followUpHint": null,',
+      '  "responseDirective": {',
+      '    "mode": "answer_then_clarify",',
+      '    "instruction": "Saat gibi net bilgileri ver. Fiyat kapsami belirsizse sonunda tek bir kisa netlestirme sorusu sor.",',
+      '    "rationale": "Mesaj genis ve yeni bir sorgu; eski konuya zorlanmamali."',
+      '  },',
+      '  "tier": "standard",',
+      '  "tierReason": "Normal coklu boyutlu bilgi talebi"',
+      '}',
+      '',
+      'INPUT:',
+      JSON.stringify(payload, null, 2),
+    ].join('\n');
+  }
+
+  private extractJsonText(rawContent: string): string {
+    const trimmed = rawContent.trim();
+    const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fencedMatch?.[1]) {
+      return fencedMatch[1].trim();
+    }
+
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return trimmed.slice(firstBrace, lastBrace + 1);
+    }
+
+    return trimmed;
+  }
+
+  private normalizeCategories(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return ['general', 'faq'];
+    }
+
+    const categories = value
+      .map(item => String(item).trim().toLowerCase())
+      .filter(category => VALID_INTENT_CATEGORIES.has(category));
+
+    const deduped = [...new Set(categories)];
+    return deduped.length > 0 ? deduped : ['general', 'faq'];
+  }
+
+  private normalizeSemanticSignals(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    const signals = value
+      .map(item => String(item).trim().toLowerCase())
+      .filter(Boolean)
+      .map(signal => signal.replace(/\s+/g, '_'));
+
+    return [...new Set(signals)].slice(0, 8);
+  }
+
+  private normalizeFollowUpHint(value: unknown): FollowUpContextHint | null {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const raw = value as Record<string, unknown>;
+    const topicLabel = String(raw.topicLabel ?? '').trim();
+    const rewrittenQuestion = String(raw.rewrittenQuestion ?? '').trim();
+    const sourceMessage = String(raw.sourceMessage ?? '').trim();
+
+    if (!topicLabel || !rewrittenQuestion || !sourceMessage) {
+      return null;
+    }
+
+    return {
+      topicLabel,
+      rewrittenQuestion,
+      sourceMessage,
+    };
+  }
+
+  private normalizeResponseDirective(value: unknown): ResponseDirective {
+    if (!value || typeof value !== 'object') {
+      return DEFAULT_RESPONSE_DIRECTIVE;
+    }
+
+    const raw = value as Record<string, unknown>;
+    const modeValue = String(raw.mode ?? '').trim() as ResponseMode;
+    const mode = VALID_RESPONSE_MODES.has(modeValue) ? modeValue : DEFAULT_RESPONSE_DIRECTIVE.mode;
+    const instruction = String(raw.instruction ?? '').trim() || DEFAULT_RESPONSE_DIRECTIVE.instruction;
+    const rationale = String(raw.rationale ?? '').trim() || DEFAULT_RESPONSE_DIRECTIVE.rationale;
+
+    return {
+      mode,
+      instruction,
+      rationale,
+    };
+  }
+
+  private normalizeModelTier(value: unknown): ModelTier {
+    const tier = String(value ?? '').trim().toLowerCase();
+    if (tier === 'light' || tier === 'standard' || tier === 'advanced') {
+      return tier;
+    }
+
+    return 'standard';
+  }
+
+  private buildFallbackResponseDirective(categories: string[]): ResponseDirective {
+    if (categories.includes('pricing') && categories.includes('hours') && !categories.includes('services')) {
+      return {
+        mode: 'answer_then_clarify',
+        instruction: 'Saat gibi net bilgileri ver. Fiyat kapsami belirsizse sadece bir kisa netlestirme sorusu sor.',
+        rationale: 'Coklu niyet var, fiyat kapsami belirsiz olabilir.',
+      };
+    }
+
+    if (categories.includes('pricing') && !categories.includes('services')) {
+      return {
+        mode: 'answer_then_clarify',
+        instruction: 'Eger fiyat kapsaminda belirsizlik varsa tek cumlelik bir netlestirme sorusu sor; aksi halde dogrudan cevap ver.',
+        rationale: 'Fiyat sorusu konu belirtmiyor olabilir.',
+      };
+    }
+
+    return DEFAULT_RESPONSE_DIRECTIVE;
+  }
+
 
   /**
-   * AI-powered intent detection using GPT-4o-mini.
-   * Falls back to keyword matching if API call fails.
+   * Legacy single-message intent detector kept as a fallback utility.
    */
-  async detectIntentAI(messageText: string): Promise<IntentResult> {
+  private async legacyDetectIntentAI(messageText: string): Promise<IntentResult> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       console.warn('[InstagramContextService] No API key — falling back to keyword matching');
@@ -334,6 +527,112 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       console.log('[InstagramContextService] Falling back to keyword matching for message:', messageText.substring(0, 50));
       return this.detectIntentKeywords(messageText);
     }
+  }
+
+  private buildFallbackContextPlan(messageText: string, history: ConversationEntry[]): AIContextPlan {
+    const currentIntent = this.detectIntentKeywords(messageText);
+    const recentInbound = this.getRecentInboundForContext(history);
+    const historyIntents = recentInbound.map(entry => this.detectIntentKeywords(entry.messageText));
+    const contextCategories = new Set(currentIntent.categories);
+    const hasModifier = currentIntent.categories.some(category => ['pricing', 'hours', 'contact', 'policies'].includes(category));
+    const hasTopic = currentIntent.categories.includes('services');
+
+    if (hasModifier && !hasTopic) {
+      for (const historyIntent of historyIntents) {
+        if (historyIntent.categories.includes('services')) {
+          contextCategories.add('services');
+          break;
+        }
+      }
+    }
+
+    const categories = [...contextCategories];
+    const tier = this.classifyModelTier(messageText, categories);
+
+    return {
+      categories,
+      keywords: currentIntent.keywords,
+      followUpHint: null,
+      responseDirective: this.buildFallbackResponseDirective(categories),
+      tier: tier.tier,
+      tierReason: `${tier.reason} (legacy fallback)`,
+    };
+  }
+
+  private parseAIContextPlan(rawContent: string): AIContextPlan {
+    const parsed = JSON.parse(this.extractJsonText(rawContent)) as Record<string, unknown>;
+    const categories = this.normalizeCategories(parsed.categories);
+
+    return {
+      categories,
+      keywords: this.normalizeSemanticSignals(parsed.semanticSignals),
+      followUpHint: this.normalizeFollowUpHint(parsed.followUpHint),
+      responseDirective: this.normalizeResponseDirective(parsed.responseDirective),
+      tier: this.normalizeModelTier(parsed.tier),
+      tierReason: String(parsed.tierReason ?? '').trim() || 'AI varsayilan plan -> standard',
+    };
+  }
+
+  private async planMessageContextAI(messageText: string, history: ConversationEntry[]): Promise<AIContextPlan> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      console.warn('[InstagramContextService] No API key - using legacy fallback planner');
+      return this.buildFallbackContextPlan(messageText, history);
+    }
+
+    try {
+      const prompt = this.buildContextPlannerPrompt(messageText, history);
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://spa-kiosk.local',
+          'X-Title': 'SPA Context Planner',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [
+            { role: 'system', content: 'Only return valid JSON.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 350,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.status}`);
+      }
+
+      const data = await response.json() as any;
+      const content = data?.choices?.[0]?.message?.content?.trim();
+      if (!content) {
+        throw new Error('Empty response from API');
+      }
+
+      const plan = this.parseAIContextPlan(content);
+      if (plan.followUpHint) {
+        console.log('[InstagramContextService] AI follow-up plan resolved: "%s" -> "%s"',
+          plan.followUpHint.sourceMessage,
+          plan.followUpHint.rewrittenQuestion);
+      }
+
+      return plan;
+    } catch (error) {
+      console.error('[InstagramContextService] AI context planner failed:', error);
+      console.log('[InstagramContextService] Falling back to legacy planner for message:', messageText.substring(0, 80));
+      return this.buildFallbackContextPlan(messageText, history);
+    }
+  }
+
+  async detectIntentAI(messageText: string): Promise<IntentResult> {
+    const plan = await this.planMessageContextAI(messageText, []);
+    return {
+      categories: plan.categories,
+      keywords: plan.keywords,
+    };
   }
 
   /**
@@ -485,6 +784,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       return {
         ...currentIntent,
         followUpHint,
+        responseDirective: this.buildFallbackResponseDirective(currentIntent.categories),
       };
     }
 
@@ -515,14 +815,18 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       categories: [...contextCategories],
       keywords: contextKeywords,
       followUpHint,
+      responseDirective: this.buildFallbackResponseDirective([...contextCategories]),
     };
   }
 
   async detectIntentWithContextAI(messageText: string, history: ConversationEntry[]): Promise<ContextualIntentResult> {
-    const currentIntent = await this.detectIntentAI(messageText);
-    const recentInbound = this.getRecentInboundForContext(history);
-    const historyIntents = await Promise.all(recentInbound.map(entry => this.detectIntentAI(entry.messageText)));
-    return this.enrichIntentWithConversationContext(currentIntent, recentInbound, historyIntents);
+    const plan = await this.planMessageContextAI(messageText, history);
+    return {
+      categories: plan.categories,
+      keywords: plan.keywords,
+      followUpHint: plan.followUpHint,
+      responseDirective: plan.responseDirective,
+    };
   }
 
   /**
@@ -534,10 +838,13 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
    * @deprecated Use detectIntentWithContextAI() for better accuracy.
    */
   detectIntentWithContext(messageText: string, history: ConversationEntry[]): ContextualIntentResult {
-    const currentIntent = this.detectIntent(messageText);
-    const recentInbound = this.getRecentInboundForContext(history);
-    const historyIntents = recentInbound.map(entry => this.detectIntent(entry.messageText));
-    return this.enrichIntentWithConversationContext(currentIntent, recentInbound, historyIntents);
+    const fallbackPlan = this.buildFallbackContextPlan(messageText, history);
+    return {
+      categories: fallbackPlan.categories,
+      keywords: fallbackPlan.keywords,
+      followUpHint: fallbackPlan.followUpHint,
+      responseDirective: fallbackPlan.responseDirective,
+    };
   }
 
   serializeIntentResult(result: IntentResult): string {

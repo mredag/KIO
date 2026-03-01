@@ -48,6 +48,11 @@ export interface PipelineTrace {
       rewrittenQuestion: string;
       sourceMessage: string;
     } | null;
+    responseDirective?: {
+      mode: 'answer_directly' | 'answer_then_clarify' | 'clarify_only';
+      instruction: string;
+      rationale: string;
+    };
   };
   knowledgeCategoriesFetched: string[];
   knowledgeFetchStatus: 'success' | 'fail' | 'skipped';
@@ -549,6 +554,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               })),
               formattedForAI: analysis.formattedHistory.substring(0, 500), // Preview
               followUpHint: analysis.followUpHint,
+              responseDirective: analysis.responseDirective,
             };
           } catch (contextErr: any) {
             // Context service error — use defaults and record error
@@ -558,6 +564,11 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               intentCategories: ['general', 'faq'],
               matchedKeywords: [],
               followUpHint: null,
+              responseDirective: {
+                mode: 'answer_directly' as const,
+                instruction: 'Bu mesaji bagimsiz bir soru olarak ele al. Bildigin net bilgiyi dogrudan ver. Gerekirse en fazla bir kisa netlestirme sorusu sor.',
+                rationale: 'Varsayilan guvenli davranis',
+              },
               tierReason: 'Varsayılan model (hata durumu) → standard',
               modelTier: 'standard' as const,
               modelId: 'moonshotai/kimi-k2',
@@ -597,27 +608,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
               VALUES (?, ?, 'inbound', ?, ?, ?, ?)
             `).run(inboundId, senderId, messageText, intentStr, executionId, now);
-            console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
-          } catch (inboundLogErr) {
-            console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
-          }
-
-          // Log inbound message to DB FIRST — so conversation history is available
-          // for the AI response. Without this, getConversationHistory() returns stale data.
-          try {
-            // Ensure customer exists (FK constraint) before logging interaction
-            const now = new Date().toISOString();
-            db.prepare(`
-              INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
-              VALUES (?, 0, ?, ?)
-              ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
-            `).run(senderId, now, now);
-
-            const inboundId = randomUUID();
-            db.prepare(`
-              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
-              VALUES (?, ?, 'inbound', ?, ?, ?, ?)
-            `).run(inboundId, senderId, messageText, analysis.intentCategories.join(','), executionId, now);
             console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
           } catch (inboundLogErr) {
             console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
@@ -714,6 +704,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 knowledgeContext: formattedKnowledge,
                 conversationHistory: analysis.formattedHistory,
                 followUpHint: analysis.followUpHint,
+                responseDirective: analysis.responseDirective,
                 customerSummary,
                 isNewCustomer: analysis.isNewCustomer,
                 tierConfig,
@@ -749,6 +740,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 `KRITIK: Yanitindaki HER bilgi asagidaki BILGI_BANKASI'ndan gelmeli. BILGI_BANKASI'nda OLMAYAN bilgi YAZMA.`,
                 `Sadece musterinin sorusuna cevap ver. Sorulmayan bilgiyi PAYLASMA.`,
                 `Musteri "merhaba" dediyse: sadece selamla + "Size nasil yardimci olabilirim?" de. Baska bilgi VERME.`,
+                `YANIT MODU: ${analysis.responseDirective.mode}`,
+                `YANIT TALIMATI: ${analysis.responseDirective.instruction}`,
+                `YANIT GEREKCESI: ${analysis.responseDirective.rationale}`,
                 analysis.followUpHint ? `DEVAM EDEN KONU: ${analysis.followUpHint.topicLabel}` : '',
                 analysis.followUpHint ? `BU MESAJI SU NET SORU GIBI ELE AL: ${analysis.followUpHint.rewrittenQuestion}` : '',
                 analysis.followUpHint ? `MUSTERIYE TEKRAR "HANGI HIZMET" DIYE SORMA.` : '',

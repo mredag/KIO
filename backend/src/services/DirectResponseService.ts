@@ -13,6 +13,7 @@
 
 import type { DirectResponseTierConfig } from './PipelineConfigService.js';
 import type { FollowUpContextHint } from './InstagramContextService.js';
+import type { ResponseDirective } from './InstagramContextService.js';
 
 export interface DirectResponseResult {
   response: string | null;
@@ -38,12 +39,13 @@ export class DirectResponseService {
     knowledgeContext: string;
     conversationHistory: string;
     followUpHint?: FollowUpContextHint | null;
+    responseDirective?: ResponseDirective;
     customerSummary: string;
     isNewCustomer: boolean;
     tierConfig: DirectResponseTierConfig;
     systemPrompt: string;
   }): Promise<DirectResponseResult> {
-    const { customerMessage, conversationHistory, followUpHint, customerSummary, tierConfig, systemPrompt } = params;
+    const { customerMessage, conversationHistory, followUpHint, responseDirective, customerSummary, tierConfig, systemPrompt } = params;
 
     if (!this.apiKey) {
       return {
@@ -72,6 +74,15 @@ export class DirectResponseService {
     } else {
       console.log('[DirectResponse] NO conversation history provided');
     }
+    if (responseDirective) {
+      console.log('[DirectResponse] Applying response directive:', responseDirective.mode);
+      systemParts.push('YANIT PLANI:');
+      systemParts.push(`- Mod: ${responseDirective.mode}`);
+      systemParts.push(`- Talimat: ${responseDirective.instruction}`);
+      systemParts.push(`- Gerekce: ${responseDirective.rationale}`);
+      systemParts.push('- Sorulmayan bilgiyi yayma, tek adimlik netlestirme disina cikma.');
+      systemParts.push('');
+    }
     if (followUpHint) {
       console.log('[DirectResponse] Applying follow-up hint:', followUpHint.rewrittenQuestion);
       systemParts.push('DEVAM EDEN KONU KURALI:');
@@ -91,6 +102,10 @@ export class DirectResponseService {
     if (followUpHint) {
       userParts.push(`\nKod notu: Bu mesaj onceki "${followUpHint.topicLabel}" konusunun devamidir.`);
       userParts.push(`\nBu mesaji su net soru gibi ele al: ${followUpHint.rewrittenQuestion}`);
+    }
+    if (responseDirective) {
+      userParts.push(`\nYanit modu: ${responseDirective.mode}`);
+      userParts.push(`\nYanit talimati: ${responseDirective.instruction}`);
     }
     if (customerSummary) {
       userParts.push(`\nMüşteri: ${customerSummary}`);

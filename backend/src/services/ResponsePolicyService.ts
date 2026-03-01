@@ -247,8 +247,11 @@ GÖREV:
 ÖNEMLİ:
 - Selamlama, nezaket ifadeleri, "size yardımcı olabilirim" gibi genel cümleler iddia DEĞİLDİR — bunları atla
 - Sadece SOMUT BİLGİ içeren iddiaları kontrol et (sayılar, isimler, adresler, saatler)
-- Fiyat formatı farklı olabilir (800₺ vs 800 TL) — sayısal değer aynıysa DOĞRU say
+- Fiyat formatı farklı olabilir (800₺ vs 800 TL, "800₺" vs "800 TL" vs "800 lira") — sayısal değer aynıysa DOĞRU say
+- Fiyat gösterimi farklı olabilir ("24 saat: 14.000₺" vs "24 saat → 14.000₺" vs "24 saat 14.000₺") — sayısal değer aynıysa DOĞRU say
+- Asistan tüm fiyatları listelemek zorunda DEĞİL — BILGI_BANKASI'nda olan fiyatlardan bir kısmını vermesi DOĞRU'dur
 - Adres bilgisinde mahalle, sokak, bina adı BİREBİR aynı olmalı — yakın ama farklı = UYDURMA
+- Emoji ve format farkları SORUN DEĞİL — içerik aynıysa DOĞRU say
 
 MUSTERI_MESAJI: ${context.customerMessage}
 

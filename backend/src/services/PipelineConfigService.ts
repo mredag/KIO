@@ -68,9 +68,9 @@ const DEFAULT_CONFIG: PipelineConfig = {
       },
       standard: {
         enabled: true,
-        modelId: 'moonshotai/kimi-k2',
+        modelId: 'openai/gpt-4o-mini',
         maxTokens: 500,
-        temperature: 0.4,
+        temperature: 0.3,
         skipPolicyValidation: false,
       },
       advanced: {

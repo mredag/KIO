@@ -178,7 +178,8 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
         responseTime,
         username,
         modelUsed,
-        tokensEstimated
+        tokensEstimated,
+        executionId
       } = req.body;
 
       if (!instagramId || !direction || !messageText) {
@@ -217,9 +218,9 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
       // Insert interaction
       db.prepare(`
         INSERT INTO instagram_interactions 
-        (id, instagram_id, direction, message_text, intent, sentiment, ai_response, response_time_ms, model_used, tokens_estimated, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, instagramId, direction, messageText, intent, sentiment, aiResponse, responseTime, modelUsed || null, tokensEstimated || 0, now);
+        (id, instagram_id, direction, message_text, intent, sentiment, ai_response, response_time_ms, model_used, tokens_estimated, execution_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, instagramId, direction, messageText, intent, sentiment, aiResponse, responseTime, modelUsed || null, tokensEstimated || 0, executionId || null, now);
 
       res.json({ 
         success: true, 

@@ -167,7 +167,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.error('Jarvis migration failed:', error.message);
   }
 
-  // Instagram DM Intelligence — model_used, tokens_estimated columns + MC indexes
+  // Instagram DM Intelligence — model_used, tokens_estimated, execution_id columns + MC indexes
   try {
     const igCols = db.prepare('PRAGMA table_info(instagram_interactions)').all() as Array<{ name: string }>;
     const igColNames = igCols.map(c => c.name);
@@ -179,8 +179,13 @@ export function initializeDatabase(dbPath: string): Database.Database {
       db.prepare('ALTER TABLE instagram_interactions ADD COLUMN tokens_estimated INTEGER DEFAULT 0').run();
       console.log('Added tokens_estimated column to instagram_interactions');
     }
+    if (!igColNames.includes('execution_id')) {
+      db.prepare('ALTER TABLE instagram_interactions ADD COLUMN execution_id TEXT').run();
+      console.log('Added execution_id column to instagram_interactions');
+    }
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_mc_conversations_channel_customer ON mc_conversations(channel, customer_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_instagram_interactions_model ON instagram_interactions(model_used)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_instagram_interactions_execution ON instagram_interactions(execution_id)');
     console.log('Instagram Intelligence migration complete');
   } catch (error: any) {
     console.error('Instagram Intelligence migration failed:', error.message);
@@ -246,6 +251,10 @@ export function initializeDatabase(dbPath: string): Database.Database {
       db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN media_type TEXT').run();
       console.log('Added media_type column to whatsapp_interactions');
     }
+    if (!waColNames.includes('execution_id')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN execution_id TEXT').run();
+      console.log('Added execution_id column to whatsapp_interactions');
+    }
 
     // 4. Recreate unified_interactions view with new columns
     db.exec('DROP VIEW IF EXISTS unified_interactions');
@@ -255,14 +264,14 @@ export function initializeDatabase(dbPath: string): Database.Database {
         id, 'whatsapp' as platform, phone as customer_id,
         direction, message_text, intent, sentiment, ai_response,
         response_time_ms, model_used, tokens_estimated, model_tier,
-        pipeline_trace, pipeline_error, created_at
+        pipeline_trace, pipeline_error, execution_id, created_at
       FROM whatsapp_interactions
       UNION ALL
       SELECT 
         id, 'instagram' as platform, instagram_id as customer_id,
         direction, message_text, intent, sentiment, ai_response,
         response_time_ms, model_used, tokens_estimated, model_tier,
-        pipeline_trace, pipeline_error, created_at
+        pipeline_trace, pipeline_error, execution_id, created_at
       FROM instagram_interactions
     `);
 

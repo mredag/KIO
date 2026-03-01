@@ -144,4 +144,74 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.keywords).toEqual(['contact_request']);
     expect(result.responseDirective.mode).toBe('answer_directly');
   });
+
+  it('analyzeMessage sends only recent deduplicated turns to the planner', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+
+    const oldTimestamp = minutesAgo(35);
+    const recentInboundTimestamp = minutesAgo(1);
+    const recentOutboundTimestamp = minutesAgo(0.5);
+    let plannerPayload: any = null;
+
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      const prompt = String(body.messages?.[1]?.content ?? '');
+      const marker = 'INPUT:\n';
+      plannerPayload = JSON.parse(prompt.slice(prompt.indexOf(marker) + marker.length));
+
+      return createAiResponse({
+        categories: ['pricing', 'hours', 'services'],
+        semanticSignals: ['recent_follow_up', 'specific_topic_retained'],
+        followUpHint: {
+          topicLabel: 'cocuklar icin yuzme dersi',
+          rewrittenQuestion: 'cocuklar icin yuzme dersi fiyat nedir saat kacta ne zaman',
+          sourceMessage: 'cocuklar icin yuzme dersi varmi',
+        },
+        responseDirective: {
+          mode: 'answer_directly',
+          instruction: 'Ayni konunun devamı olarak ele al ve mevcut bilgiyi o hizmete göre ver.',
+          rationale: 'Hemen onceki mesaj net bir konu belirtiyor.',
+        },
+        tier: 'standard',
+        tierReason: 'Kisa ama baglama dayali coklu bilgi sorusu',
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rows = [
+      { direction: 'outbound', message_text: 'Evet, cocuklar icin yuzme dersi mevcut.', created_at: recentOutboundTimestamp },
+      { direction: 'inbound', message_text: 'cocuklar icin yuzme dersi varmi', created_at: recentInboundTimestamp },
+      { direction: 'outbound', message_text: 'Eski yanit', created_at: oldTimestamp },
+      { direction: 'inbound', message_text: 'eski soru', created_at: oldTimestamp },
+      { direction: 'inbound', message_text: 'eski soru', created_at: oldTimestamp },
+    ];
+
+    const fakeDb = {
+      prepare(sql: string) {
+        if (sql.includes('ORDER BY created_at DESC')) {
+          return { all: () => rows };
+        }
+
+        if (sql.includes('COUNT(*) as c')) {
+          return { get: () => ({ c: 9 }) };
+        }
+
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    } as any;
+
+    const service = new InstagramContextService(fakeDb);
+    const analysis = await service.analyzeMessage('ig-user', 'fiyat nedir saat kacta ne zaman');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(plannerPayload).not.toBeNull();
+    expect(plannerPayload.recentHistory).toHaveLength(2);
+    expect(plannerPayload.recentHistory.map((entry: any) => entry.messageText)).toEqual([
+      'cocuklar icin yuzme dersi varmi',
+      'Evet, cocuklar icin yuzme dersi mevcut.',
+    ]);
+    expect(analysis.conversationHistory).toHaveLength(2);
+    expect(analysis.formattedHistory).toContain('cocuklar icin yuzme dersi varmi');
+    expect(analysis.formattedHistory).not.toContain('eski soru');
+  });
 });

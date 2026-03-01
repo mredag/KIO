@@ -166,7 +166,7 @@ export class InstagramContextService {
 
   async analyzeMessage(senderId: string, messageText: string): Promise<MessageAnalysis> {
       try {
-        const conversationHistory = this.getConversationHistory(senderId);
+        const conversationHistory = this.getRecentContextWindow(this.getConversationHistory(senderId));
         const totalInteractions = this.getTotalInteractionCount(senderId);
         const formattedHistory = this.formatConversationHistory(conversationHistory);
         const contextPlan = await this.planMessageContextAI(messageText, conversationHistory);
@@ -219,12 +219,14 @@ export class InstagramContextService {
       `).all(senderId, limit) as { direction: 'inbound' | 'outbound'; message_text: string; created_at: string }[];
 
       // Reverse to get chronological order (oldest first)
-      return rows.reverse().map(row => ({
+      const entries = rows.reverse().map(row => ({
         direction: row.direction,
         messageText: row.message_text,
         createdAt: row.created_at,
         relativeTime: computeRelativeTime(row.created_at),
       }));
+
+      return this.dedupeHistoryEntries(entries);
     } catch (error) {
       console.error('[InstagramContextService] getConversationHistory error:', error);
       return [];
@@ -291,12 +293,41 @@ export class InstagramContextService {
     return result;
   }
 
-  private getRecentContextWindow(history: ConversationEntry[], limit: number = 8): ConversationEntry[] {
-    if (history.length <= limit) {
-      return history;
+  private dedupeHistoryEntries(entries: ConversationEntry[]): ConversationEntry[] {
+    const deduped: ConversationEntry[] = [];
+
+    for (const entry of entries) {
+      const previous = deduped[deduped.length - 1];
+      const isExactDuplicate = previous
+        && previous.direction === entry.direction
+        && previous.messageText === entry.messageText
+        && previous.createdAt === entry.createdAt;
+
+      if (!isExactDuplicate) {
+        deduped.push(entry);
+      }
     }
 
-    return history.slice(-limit);
+    return deduped;
+  }
+
+  private getRecentContextWindow(history: ConversationEntry[], limit: number = 8, maxAgeMinutes: number = 10): ConversationEntry[] {
+    const dedupedHistory = this.dedupeHistoryEntries(history);
+    const cutoffMs = Date.now() - (maxAgeMinutes * 60 * 1000);
+    const recentHistory = dedupedHistory.filter(entry => {
+      const timestamp = new Date(entry.createdAt).getTime();
+      return !Number.isNaN(timestamp) && timestamp >= cutoffMs;
+    });
+
+    if (recentHistory.length === 0) {
+      return [];
+    }
+
+    if (recentHistory.length <= limit) {
+      return recentHistory;
+    }
+
+    return recentHistory.slice(-limit);
   }
 
   private buildContextPlannerPrompt(messageText: string, history: ConversationEntry[]): string {
@@ -324,6 +355,7 @@ export class InstagramContextService {
       '- tierReason: Tier seciminin kisa nedeni',
       '',
       'Zorunlu kurallar:',
+      '- En yeni 1-2 mesaj en guclu baglamdir; daha eski mesajlar sadece ayni kisa konusma zincirindeyse dikkate alinmali.',
       '- Konusma gecmisini sadece mevcut mesaj eksik, bagimsiz okunamayan veya acikca onceki konuya referans veren bir devam mesajiysa kullan.',
       '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
       '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',

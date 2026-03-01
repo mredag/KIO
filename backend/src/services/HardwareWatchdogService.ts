@@ -518,7 +518,7 @@ export class HardwareWatchdogService {
     return this.db.prepare(`
       SELECT id, event_type, message, metadata, created_at
       FROM mc_events
-      WHERE entity_type = 'hardware' AND event_type = 'hardware_check'
+      WHERE entity_type = 'system' AND event_type = 'hardware_check'
       ORDER BY created_at DESC
       LIMIT ?
     `).all(limit);
@@ -528,7 +528,7 @@ export class HardwareWatchdogService {
     return this.db.prepare(`
       SELECT id, event_type, message, metadata, created_at
       FROM mc_events
-      WHERE entity_type = 'hardware' AND message LIKE '%uyarı%'
+      WHERE entity_type = 'system' AND event_type = 'hardware_check' AND message LIKE '%uyarı%'
       ORDER BY created_at DESC
       LIMIT ?
     `).all(limit);
@@ -554,11 +554,10 @@ export class HardwareWatchdogService {
   private emitEvent(entityId: string, entityType: string, eventType: string, message: string, metadata?: any): void {
     try {
       this.db.prepare(`
-        INSERT INTO mc_events (id, entity_type, entity_id, event_type, message, metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO mc_events (entity_type, entity_id, event_type, message, metadata, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
       `).run(
-        `hw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        entityType,
+        'system',
         entityId,
         eventType,
         message,
@@ -575,7 +574,7 @@ export class HardwareWatchdogService {
       const cutoff = new Date(Date.now() - this.config.snapshotRetentionHours * 3600000).toISOString();
       this.db.prepare(`
         DELETE FROM mc_events
-        WHERE entity_type = 'hardware' AND event_type = 'hardware_check' AND created_at < ?
+        WHERE entity_type = 'system' AND event_type = 'hardware_check' AND created_at < ?
       `).run(cutoff);
     } catch {}
   }

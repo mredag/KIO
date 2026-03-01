@@ -363,7 +363,7 @@ export class HardwareWatchdogService {
 
     try {
       const typeOut = execSync('cat /sys/class/thermal/cooling_device0/type 2>/dev/null', { timeout: 3000 }).toString().trim();
-      driverLoaded = typeOut === 'cooling_fan';
+      driverLoaded = typeOut === 'cooling_fan' || typeOut === 'pwm-fan';
     } catch {}
 
     if (driverLoaded) {

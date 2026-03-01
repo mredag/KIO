@@ -397,6 +397,10 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
           const API_KEY = process.env.N8N_API_KEY || ''; // legacy env var name
           const startTime = Date.now();
+          
+          // Generate unique execution ID for this DM pipeline run
+          const executionId = `EXE-${randomUUID().substring(0, 8)}`;
+          console.log('[Instagram Webhook] Starting pipeline execution: %s', executionId);
 
           // Initialize trace and error tracking
           const trace: Partial<PipelineTrace> = {};
@@ -433,9 +437,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
               const inboundId = randomUUID();
               db.prepare(`
-                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, created_at)
-                VALUES (?, ?, 'inbound', ?, ?, ?)
-              `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, now);
+                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
+                VALUES (?, ?, 'inbound', ?, ?, ?, ?)
+              `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, executionId, now);
 
               const replyText = sexualDecision.action === 'block_message'
                 ? SEXUAL_BLOCK_MESSAGE
@@ -448,8 +452,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
               const outboundId = randomUUID();
               db.prepare(`
-                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, created_at, pipeline_trace)
-                VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?)
+                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, execution_id, created_at, pipeline_trace)
+                VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?)
               `).run(
                 outboundId,
                 senderId,
@@ -457,6 +461,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 outboundIntent,
                 replyText,
                 sexualDecision.modelUsed,
+                executionId,
                 new Date().toISOString(),
                 JSON.stringify(trace),
               );
@@ -557,10 +562,10 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
             const inboundId = randomUUID();
             db.prepare(`
-              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, created_at)
-              VALUES (?, ?, 'inbound', ?, ?, ?)
-            `).run(inboundId, senderId, messageText, analysis.intentCategories.join(','), now);
-            console.log('[Instagram Webhook] Inbound message logged to DB');
+              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
+              VALUES (?, ?, 'inbound', ?, ?, ?, ?)
+            `).run(inboundId, senderId, messageText, analysis.intentCategories.join(','), executionId, now);
+            console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
           } catch (inboundLogErr) {
             console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
           }
@@ -928,6 +933,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   responseTime: Date.now() - startTime,
                   modelUsed: actualModelUsed,
                   tokensEstimated: trace.tokensEstimated,
+                  executionId,
                 }),
               });
               console.log('[Instagram Webhook] Interaction logged');

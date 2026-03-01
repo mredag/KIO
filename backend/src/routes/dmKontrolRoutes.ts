@@ -71,6 +71,7 @@ function mapRowToItem(row: any) {
     pipelineTrace: safeJsonParse(row.pipeline_trace),
     pipelineError: safeJsonParse(row.pipeline_error),
     mediaType: row.media_type || null,
+    executionId: row.execution_id || null,
     createdAt: row.created_at,
     // Keep backward compat for Instagram-only consumers
     instagramId: row.channel === 'instagram' ? (row.customer_id || row.instagram_id) : undefined,
@@ -100,7 +101,7 @@ router.get('/feed', (req: Request, res: Response) => {
       const total = db.prepare('SELECT COUNT(*) as count FROM instagram_interactions').get() as any;
       const rows = db.prepare(`
         SELECT id, instagram_id as customer_id, 'instagram' as channel, direction, message_text, intent, sentiment, ai_response,
-               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, NULL as media_type, created_at
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, execution_id, NULL as media_type, created_at
         FROM instagram_interactions
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
@@ -111,7 +112,7 @@ router.get('/feed', (req: Request, res: Response) => {
       const total = db.prepare('SELECT COUNT(*) as count FROM whatsapp_interactions').get() as any;
       const rows = db.prepare(`
         SELECT id, phone as customer_id, 'whatsapp' as channel, direction, message_text, intent, sentiment, ai_response,
-               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, media_type, created_at
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, execution_id, media_type, created_at
         FROM whatsapp_interactions
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
@@ -125,17 +126,93 @@ router.get('/feed', (req: Request, res: Response) => {
 
       const rows = db.prepare(`
         SELECT id, phone as customer_id, 'whatsapp' as channel, direction, message_text, intent, sentiment, ai_response,
-               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, media_type, created_at
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, execution_id, media_type, created_at
         FROM whatsapp_interactions
         UNION ALL
         SELECT id, instagram_id as customer_id, 'instagram' as channel, direction, message_text, intent, sentiment, ai_response,
-               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, NULL as media_type, created_at
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, execution_id, NULL as media_type, created_at
         FROM instagram_interactions
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
       `).all(limit, offset) as any[];
       res.json({ items: rows.map(mapRowToItem), total, offset, limit });
     }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2.5. GET /execution/:executionId — Execution detail for debugging
+router.get('/execution/:executionId', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const { executionId } = req.params;
+
+    // Fetch all messages (inbound + outbound) with this execution_id from both channels
+    const igRows = db.prepare(`
+      SELECT id, instagram_id as customer_id, 'instagram' as channel, direction, message_text, intent, sentiment, ai_response,
+             response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, execution_id, created_at
+      FROM instagram_interactions
+      WHERE execution_id = ?
+      ORDER BY created_at ASC
+    `).all(executionId) as any[];
+
+    const waRows = db.prepare(`
+      SELECT id, phone as customer_id, 'whatsapp' as channel, direction, message_text, intent, sentiment, ai_response,
+             response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, execution_id, created_at
+      FROM whatsapp_interactions
+      WHERE execution_id = ?
+      ORDER BY created_at ASC
+    `).all(executionId) as any[];
+
+    const allRows = [...igRows, ...waRows].sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    if (allRows.length === 0) {
+      res.status(404).json({ error: 'Execution not found' });
+      return;
+    }
+
+    // Parse pipeline_trace and pipeline_error
+    const messages = allRows.map(row => ({
+      id: row.id,
+      customerId: row.customer_id,
+      channel: row.channel,
+      direction: row.direction,
+      messageText: row.message_text,
+      intent: row.intent,
+      sentiment: row.sentiment,
+      aiResponse: row.ai_response,
+      responseTimeMs: row.response_time_ms,
+      modelUsed: row.model_used,
+      tokensEstimated: row.tokens_estimated,
+      modelTier: row.model_tier,
+      pipelineTrace: safeJsonParse(row.pipeline_trace),
+      pipelineError: safeJsonParse(row.pipeline_error),
+      executionId: row.execution_id,
+      createdAt: row.created_at,
+    }));
+
+    // Extract key info from the outbound message (if exists)
+    const outbound = messages.find(m => m.direction === 'outbound');
+    const inbound = messages.find(m => m.direction === 'inbound');
+
+    res.json({
+      executionId,
+      channel: messages[0].channel,
+      customerId: messages[0].customerId,
+      inboundMessage: inbound?.messageText || null,
+      outboundMessage: outbound?.aiResponse || null,
+      modelUsed: outbound?.modelUsed || null,
+      modelTier: outbound?.modelTier || null,
+      responseTimeMs: outbound?.responseTimeMs || null,
+      tokensEstimated: outbound?.tokensEstimated || null,
+      pipelineTrace: outbound?.pipelineTrace || null,
+      pipelineError: outbound?.pipelineError || null,
+      messages,
+      createdAt: inbound?.createdAt || messages[0].createdAt,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

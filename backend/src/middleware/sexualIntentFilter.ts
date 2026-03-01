@@ -13,7 +13,7 @@ export type SexualIntentDecision =
 
 const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
-const DEFAULT_MODEL = 'moonshotai/kimi-k2';
+const DEFAULT_MODEL = 'openai/gpt-4o-mini';
 
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;

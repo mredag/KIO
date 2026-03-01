@@ -53,7 +53,7 @@ export const MODEL_CONFIG = {
     singleCategoryMatch: ['hours', 'contact', 'services', 'pricing', 'faq'] as string[],
   },
   standard: {
-    modelId: 'moonshotai/kimi-k2',
+    modelId: 'openai/gpt-4o-mini',
   },
   advanced: {
     modelId: 'openai/gpt-4o-mini',

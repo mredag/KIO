@@ -61,7 +61,8 @@ Aşağıdaki kurallara göre yanıtı kontrol et:
 8. FIYAT TUTARSIZLIĞI: Yanıtta BILGI_BANKASI'nda OLMAYAN bir fiyat uydurulmuş mu? Fiyatların birebir aynı formatta olması gerekmez — önemli olan sayısal değerlerin doğru olması. Asistan fiyatları farklı formatta (örn. "800₺" yerine "800 TL") yazabilir, bu SORUN DEĞİL. Sadece bilgi bankasında hiç olmayan bir fiyat yazılmışsa FAIL ver. NOT: Müşteri fiyat sorduğunda, yanıtta fiyat bilgisi varsa bu DOĞRU'dur — fiyat sorulduğu için fiyat verilmesi normaldir.
 9. YANIT UYGUNLUĞU: Yanıt müşterinin sorusuyla alakalı mı? Müşteri ne sorduysa o cevaplanmalı. ANCAK ek yardımcı bilgi (telefon, adres, iletişim) vermek SORUN DEĞİL. Örnekler:
    - Müşteri "merhaba" dediyse → yanıt sadece selamlama + "nasıl yardımcı olabilirim?" olmalı. Fiyat listesi, adres, saat bilgisi gibi SORULMAYAN detaylı bilgi verilmişse FAIL.
-   - Müşteri fiyat sorduysa → fiyat bilgisi + telefon/iletişim bilgisi vermek DOĞRU. Sadece fiyat sorulduğunda adres veya saat bilgisi verilmemeli (ama telefon numarası vermek sorun değil).
+   - Müşteri GENEL fiyat sorduysa ("fiyat nedir", "ne kadar") → yanıt ya fiyat listesi vermeli ya da "hangi hizmet için?" diye sormalı ya da telefon numarasına yönlendirmeli. Bunların hepsi DOĞRU.
+   - Müşteri SPESİFİK fiyat sorduysa ("masaj fiyatları") → fiyat bilgisi + telefon/iletişim bilgisi vermek DOĞRU. Sadece fiyat sorulduğunda adres veya saat bilgisi verilmemeli (ama telefon numarası vermek sorun değil).
    - Müşteri adres sorduysa → adres + telefon/iletişim bilgisi vermek DOĞRU. Sadece adres sorulduğunda fiyat listesi verilmemeli.
    - Yanıt BILGI_BANKASI'ndan SORULMAYAN bilgileri rastgele döküyorsa FAIL — bu "papağan yanıt" hatasıdır.
    - Kısa bir selamlama mesajına uzun bilgi dolu yanıt verilmişse FAIL.

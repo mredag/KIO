@@ -575,6 +575,11 @@ function LiveFeedTab() {
 
                   {/* Metadata */}
                   <div className="flex items-center gap-2 shrink-0">
+                    {dm.executionId && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-700/40 text-gray-400 border border-gray-600/30 font-mono" title="Execution ID">
+                        {dm.executionId}
+                      </span>
+                    )}
                     <QualityDot responseTimeMs={dm.responseTimeMs} />
                     <TierBadge tier={dm.modelTier} modelUsed={dm.modelUsed} />
                     {trace?.policyValidation && trace.policyValidation.status !== 'pass' && trace.policyValidation.status !== 'skipped' && (
@@ -653,6 +658,11 @@ function LiveFeedTab() {
 
                             {/* Metadata row */}
                             <div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-500 flex-wrap">
+                              {msg.executionId && (
+                                <span className="px-1.5 py-0.5 rounded bg-gray-700/40 text-gray-400 border border-gray-600/30 font-mono text-[9px]" title="Execution ID">
+                                  {msg.executionId}
+                                </span>
+                              )}
                               {msg.modelUsed && <span className="font-mono">{msg.modelUsed.split('/').pop()}</span>}
                               {msg.modelTier && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[9px] border ${TIER_COLORS[msg.modelTier] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>

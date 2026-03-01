@@ -208,7 +208,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       } catch { /* knowledge fetch failed, continue */ }
 
       // Format KB from raw JSON to clean labeled text (anti-hallucination)
-      const formattedKnowledge = InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
+      const formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
 
       // ═══ STAGE 3: Direct Response via OpenRouter (same as webhook) ═══
       const pipelineConfig = pipelineConfigService.getConfig();

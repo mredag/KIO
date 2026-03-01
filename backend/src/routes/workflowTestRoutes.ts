@@ -95,7 +95,10 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const analysis = contextService.analyzeMessage(senderId, text);
 
       // ═══ STAGE 2: Knowledge Fetch + Format (same as webhook) ═══
-      const categoriesParam = analysis.intentCategories.join(',');
+      // Always include 'contact' — phone/address are in system prompt and fallback
+      const kbCategories: Set<string> = new Set(analysis.intentCategories);
+      kbCategories.add('contact');
+      const categoriesParam = Array.from(kbCategories).join(',');
       const API_KEY = process.env.N8N_API_KEY || '';
       let knowledgeContext = '';
       let knowledgeEntriesCount = 0;

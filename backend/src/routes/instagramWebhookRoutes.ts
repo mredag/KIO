@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -413,6 +414,27 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             console.error('[Instagram Webhook] Context service error (using defaults):', contextErr);
           }
 
+          // Log inbound message to DB FIRST — so conversation history is available
+          // for the AI response. Without this, getConversationHistory() returns stale data.
+          try {
+            // Ensure customer exists (FK constraint) before logging interaction
+            const now = new Date().toISOString();
+            db.prepare(`
+              INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
+              VALUES (?, 0, ?, ?)
+              ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
+            `).run(senderId, now, now);
+
+            const inboundId = randomUUID();
+            db.prepare(`
+              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, created_at)
+              VALUES (?, ?, 'inbound', ?, ?, ?)
+            `).run(inboundId, senderId, messageText, analysis.intentCategories.join(','), now);
+            console.log('[Instagram Webhook] Inbound message logged to DB');
+          } catch (inboundLogErr) {
+            console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
+          }
+
           // Push inbound DM event
           try {
             DmSSEManager.getInstance().pushEvent({
@@ -434,7 +456,12 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
           try {
             // Fetch category-filtered knowledge context
-            const categoriesParam = analysis.intentCategories.join(',');
+            // Always include 'contact' — the phone number and address are referenced
+            // in the system prompt and fallback message, so the policy agent needs
+            // to see them to avoid false "hallucination" flags.
+            const categories: Set<string> = new Set(analysis.intentCategories);
+            categories.add('contact');
+            const categoriesParam = Array.from(categories).join(',');
             const [knowledgeRes] = await Promise.allSettled([
               fetch(`http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
                 { headers: { 'Authorization': `Bearer ${API_KEY}` } }),
@@ -454,7 +481,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
 
             // Update trace — knowledge fetch stage
-            trace.knowledgeCategoriesFetched = analysis.intentCategories;
+            trace.knowledgeCategoriesFetched = Array.from(categories);
             trace.knowledgeFetchStatus = (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) ? 'success' : 'fail';
             trace.knowledgeEntriesCount = knowledgeEntriesCount;
 
@@ -809,7 +836,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               // INSERT mc_cost_ledger
               db.prepare(`
                 INSERT INTO mc_cost_ledger (agent_id, model, provider, input_tokens, output_tokens, cost, job_source, created_at)
-                VALUES ('instagram', ?, 'openrouter', ?, ?, ?, 'instagram', datetime('now'))
+                VALUES ('instagram-dm', ?, 'openrouter', ?, ?, ?, 'instagram', datetime('now'))
               `).run(actualModelUsedMC, Math.round(totalTokensForCost * 0.6), Math.round(totalTokensForCost * 0.4), estimatedCost);
 
               // INSERT mc_events

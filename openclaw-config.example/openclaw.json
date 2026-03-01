@@ -44,16 +44,25 @@
       {
         "id": "main",
         "identity": { "name": "Jarvis" },
-        "subagents": { "allowAgents": ["nexus", "forge", "atlas", "ledger", "instagram"] }
+        "subagents": { "allowAgents": ["nexus", "forge", "atlas", "ledger", "instagram", "whatsapp"] }
       },
       {
         "id": "forge",
         "name": "forge",
         "model": "openai-codex/gpt-5.3-codex",
         "identity": { "name": "Forge" }
+      },
+      {
+        "id": "whatsapp",
+        "workspace": "~/.openclaw/workspace-whatsapp",
+        "model": "openrouter/moonshotai/kimi-k2",
+        "identity": { "name": "Eform WhatsApp Asistan" }
       }
     ]
   },
+  "bindings": [
+    { "agentId": "whatsapp", "match": { "channel": "whatsapp" } }
+  ],
   "hooks": {
     "enabled": true,
     "path": "/hooks",
@@ -69,6 +78,13 @@
         "sessionKey": "hook:instagram:{{senderId}}",
         "messageTemplate": "{{message}}",
         "deliver": false
+      },
+      {
+        "id": "whatsapp-lifecycle",
+        "match": { "channel": "whatsapp", "event": "lifecycle" },
+        "action": "webhook",
+        "url": "http://localhost:3001/webhook/openclaw/whatsapp",
+        "method": "POST"
       }
     ]
   },
@@ -84,6 +100,12 @@
       "dmPolicy": "allowlist",
       "allowFrom": ["<YOUR_TELEGRAM_CHAT_ID>"],
       "streaming": "off"
+    },
+    "whatsapp": {
+      "dmPolicy": "open",
+      "groupPolicy": "disabled",
+      "sendReadReceipts": true,
+      "textChunkLimit": 4000
     }
   }
 }

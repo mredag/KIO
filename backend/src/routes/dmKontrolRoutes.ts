@@ -4,9 +4,11 @@ import { join } from 'path';
 import type Database from 'better-sqlite3';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
+import { WhatsAppPipelineConfigService } from '../services/WhatsAppPipelineConfigService.js';
 
 let _db: Database.Database | null = null;
 let _pipelineConfig: PipelineConfigService | null = null;
+let _waPipelineConfig: WhatsAppPipelineConfigService | null = null;
 
 function getDb(): Database.Database {
   if (!_db) throw new Error('DM Kontrol routes not initialized');
@@ -56,7 +58,8 @@ function getDateFilter(period: string): string {
 function mapRowToItem(row: any) {
   return {
     id: row.id,
-    instagramId: row.instagram_id,
+    customerId: row.customer_id || row.instagram_id || row.phone,
+    channel: row.channel || 'instagram',
     direction: row.direction,
     messageText: row.message_text,
     intent: row.intent,
@@ -67,7 +70,10 @@ function mapRowToItem(row: any) {
     tokensEstimated: row.tokens_estimated,
     pipelineTrace: safeJsonParse(row.pipeline_trace),
     pipelineError: safeJsonParse(row.pipeline_error),
+    mediaType: row.media_type || null,
     createdAt: row.created_at,
+    // Keep backward compat for Instagram-only consumers
+    instagramId: row.channel === 'instagram' ? (row.customer_id || row.instagram_id) : undefined,
   };
 }
 
@@ -81,26 +87,55 @@ router.get('/stream', (req: Request, res: Response) => {
   dmSSE.addClient(res);
 });
 
-// 2. GET /feed — Paginated recent DMs
+// 2. GET /feed — Paginated recent DMs (unified: Instagram + WhatsApp)
 router.get('/feed', (req: Request, res: Response) => {
   try {
     const db = getDb();
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
     const offset = parseInt(req.query.offset as string) || 0;
+    const channel = req.query.channel as string | undefined;
 
-    const total = db.prepare('SELECT COUNT(*) as count FROM instagram_interactions').get() as any;
-    const rows = db.prepare(`
-      SELECT id, instagram_id, direction, message_text, intent, ai_response,
-             response_time_ms, model_used, model_tier, tokens_estimated,
-             pipeline_trace, pipeline_error, created_at
-      FROM instagram_interactions
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `).all(limit, offset) as any[];
+    if (channel === 'instagram') {
+      // Instagram only
+      const total = db.prepare('SELECT COUNT(*) as count FROM instagram_interactions').get() as any;
+      const rows = db.prepare(`
+        SELECT id, instagram_id as customer_id, 'instagram' as channel, direction, message_text, intent, sentiment, ai_response,
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, NULL as media_type, created_at
+        FROM instagram_interactions
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(limit, offset) as any[];
+      res.json({ items: rows.map(mapRowToItem), total: total.count, offset, limit });
+    } else if (channel === 'whatsapp') {
+      // WhatsApp only
+      const total = db.prepare('SELECT COUNT(*) as count FROM whatsapp_interactions').get() as any;
+      const rows = db.prepare(`
+        SELECT id, phone as customer_id, 'whatsapp' as channel, direction, message_text, intent, sentiment, ai_response,
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, media_type, created_at
+        FROM whatsapp_interactions
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(limit, offset) as any[];
+      res.json({ items: rows.map(mapRowToItem), total: total.count, offset, limit });
+    } else {
+      // Unified feed — both channels
+      const totalIg = db.prepare('SELECT COUNT(*) as count FROM instagram_interactions').get() as any;
+      const totalWa = db.prepare('SELECT COUNT(*) as count FROM whatsapp_interactions').get() as any;
+      const total = totalIg.count + totalWa.count;
 
-    const items = rows.map(mapRowToItem);
-
-    res.json({ items, total: total.count, offset, limit });
+      const rows = db.prepare(`
+        SELECT id, phone as customer_id, 'whatsapp' as channel, direction, message_text, intent, sentiment, ai_response,
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, media_type, created_at
+        FROM whatsapp_interactions
+        UNION ALL
+        SELECT id, instagram_id as customer_id, 'instagram' as channel, direction, message_text, intent, sentiment, ai_response,
+               response_time_ms, model_used, tokens_estimated, model_tier, pipeline_trace, pipeline_error, NULL as media_type, created_at
+        FROM instagram_interactions
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(limit, offset) as any[];
+      res.json({ items: rows.map(mapRowToItem), total, offset, limit });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -128,73 +163,108 @@ router.get('/conversations/:instagramId', (req: Request, res: Response) => {
   }
 });
 
-// 4. GET /health — Pipeline health metrics
+// Helper: compute health metrics for a single table
+function computeHealthMetrics(db: Database.Database, table: string, dateFilter: string) {
+  const totalRow = db.prepare(`SELECT COUNT(*) as count FROM ${table} WHERE ${dateFilter}`).get() as any;
+  const totalDMs: number = totalRow.count;
+
+  const successRow = db.prepare(
+    `SELECT COUNT(*) as count FROM ${table} WHERE ${dateFilter} AND (pipeline_error IS NULL OR pipeline_error = '')`
+  ).get() as any;
+  const successRate = totalDMs > 0 ? (successRow.count / totalDMs) * 100 : 0;
+
+  const avgRow = db.prepare(
+    `SELECT AVG(response_time_ms) as avg FROM ${table} WHERE ${dateFilter} AND response_time_ms IS NOT NULL`
+  ).get() as any;
+  const avgResponseTimeMs = avgRow.avg || 0;
+
+  const costRow = db.prepare(
+    `SELECT SUM(tokens_estimated) as total FROM ${table} WHERE ${dateFilter} AND tokens_estimated IS NOT NULL`
+  ).get() as any;
+  const totalEstimatedCost = (costRow.total || 0) * 0.000001;
+
+  const modelRows = db.prepare(`
+    SELECT model_used, model_tier, COUNT(*) as count
+    FROM ${table}
+    WHERE ${dateFilter} AND model_used IS NOT NULL
+    GROUP BY model_used
+  `).all() as any[];
+  const totalWithModel = modelRows.reduce((sum: number, r: any) => sum + r.count, 0);
+  const modelDistribution = modelRows.map((r: any) => ({
+    tier: r.model_tier || 'unknown',
+    model: r.model_used,
+    count: r.count,
+    percentage: totalWithModel > 0 ? Math.round((r.count / totalWithModel) * 100 * 10) / 10 : 0,
+  }));
+
+  const greenRow = db.prepare(
+    `SELECT COUNT(*) as count FROM ${table} WHERE ${dateFilter} AND response_time_ms IS NOT NULL AND response_time_ms < 5000`
+  ).get() as any;
+  const yellowRow = db.prepare(
+    `SELECT COUNT(*) as count FROM ${table} WHERE ${dateFilter} AND response_time_ms IS NOT NULL AND response_time_ms >= 5000 AND response_time_ms <= 15000`
+  ).get() as any;
+  const redRow = db.prepare(
+    `SELECT COUNT(*) as count FROM ${table} WHERE ${dateFilter} AND response_time_ms IS NOT NULL AND response_time_ms > 15000`
+  ).get() as any;
+
+  return {
+    totalDMs,
+    successRate: Math.round(successRate * 10) / 10,
+    avgResponseTimeMs: Math.round(avgResponseTimeMs),
+    totalEstimatedCost: Math.round(totalEstimatedCost * 1000000) / 1000000,
+    modelDistribution,
+    responseTimeDistribution: {
+      green: greenRow.count,
+      yellow: yellowRow.count,
+      red: redRow.count,
+    },
+  };
+}
+
+// 4. GET /health — Pipeline health metrics (combined + per-channel)
 router.get('/health', (req: Request, res: Response) => {
   try {
     const db = getDb();
     const period = (req.query.period as string) || 'today';
     const dateFilter = getDateFilter(period);
 
-    // Total DMs
-    const totalRow = db.prepare(`SELECT COUNT(*) as count FROM instagram_interactions WHERE ${dateFilter}`).get() as any;
-    const totalDMs: number = totalRow.count;
+    const instagram = computeHealthMetrics(db, 'instagram_interactions', dateFilter);
+    const whatsapp = computeHealthMetrics(db, 'whatsapp_interactions', dateFilter);
 
-    // Success rate (DMs without pipeline_error)
-    const successRow = db.prepare(
-      `SELECT COUNT(*) as count FROM instagram_interactions WHERE ${dateFilter} AND (pipeline_error IS NULL OR pipeline_error = '')`
-    ).get() as any;
-    const successRate = totalDMs > 0 ? (successRow.count / totalDMs) * 100 : 0;
+    // Combined metrics
+    const totalDMs = instagram.totalDMs + whatsapp.totalDMs;
+    const successCount = Math.round(instagram.totalDMs * instagram.successRate / 100) + Math.round(whatsapp.totalDMs * whatsapp.successRate / 100);
+    const successRate = totalDMs > 0 ? Math.round((successCount / totalDMs) * 100 * 10) / 10 : 0;
 
-    // Avg response time
-    const avgRow = db.prepare(
-      `SELECT AVG(response_time_ms) as avg FROM instagram_interactions WHERE ${dateFilter} AND response_time_ms IS NOT NULL`
-    ).get() as any;
-    const avgResponseTimeMs = avgRow.avg || 0;
+    // Weighted average response time
+    const igResponseTotal = instagram.avgResponseTimeMs * instagram.totalDMs;
+    const waResponseTotal = whatsapp.avgResponseTimeMs * whatsapp.totalDMs;
+    const avgResponseTimeMs = totalDMs > 0 ? Math.round((igResponseTotal + waResponseTotal) / totalDMs) : 0;
 
-    // Total estimated cost
-    const costRow = db.prepare(
-      `SELECT SUM(tokens_estimated) as total FROM instagram_interactions WHERE ${dateFilter} AND tokens_estimated IS NOT NULL`
-    ).get() as any;
-    const totalEstimatedCost = (costRow.total || 0) * 0.000001;
+    const totalEstimatedCost = Math.round((instagram.totalEstimatedCost + whatsapp.totalEstimatedCost) * 1000000) / 1000000;
 
-    // Model distribution
-    const modelRows = db.prepare(`
-      SELECT model_used, model_tier, COUNT(*) as count
-      FROM instagram_interactions
-      WHERE ${dateFilter} AND model_used IS NOT NULL
-      GROUP BY model_used
-    `).all() as any[];
-    const totalWithModel = modelRows.reduce((sum: number, r: any) => sum + r.count, 0);
-    const modelDistribution = modelRows.map((r: any) => ({
-      tier: r.model_tier || 'unknown',
-      model: r.model_used,
-      count: r.count,
-      percentage: totalWithModel > 0 ? Math.round((r.count / totalWithModel) * 100 * 10) / 10 : 0,
-    }));
+    // Merge model distributions
+    const modelDistribution = [...instagram.modelDistribution, ...whatsapp.modelDistribution];
 
-    // Response time distribution
-    const greenRow = db.prepare(
-      `SELECT COUNT(*) as count FROM instagram_interactions WHERE ${dateFilter} AND response_time_ms IS NOT NULL AND response_time_ms < 5000`
-    ).get() as any;
-    const yellowRow = db.prepare(
-      `SELECT COUNT(*) as count FROM instagram_interactions WHERE ${dateFilter} AND response_time_ms IS NOT NULL AND response_time_ms >= 5000 AND response_time_ms <= 15000`
-    ).get() as any;
-    const redRow = db.prepare(
-      `SELECT COUNT(*) as count FROM instagram_interactions WHERE ${dateFilter} AND response_time_ms IS NOT NULL AND response_time_ms > 15000`
-    ).get() as any;
+    // Merge response time distributions
+    const responseTimeDistribution = {
+      green: instagram.responseTimeDistribution.green + whatsapp.responseTimeDistribution.green,
+      yellow: instagram.responseTimeDistribution.yellow + whatsapp.responseTimeDistribution.yellow,
+      red: instagram.responseTimeDistribution.red + whatsapp.responseTimeDistribution.red,
+    };
 
     res.json({
+      // Combined (backward compatible — same shape as before)
       totalDMs,
-      successRate: Math.round(successRate * 10) / 10,
-      avgResponseTimeMs: Math.round(avgResponseTimeMs),
-      totalEstimatedCost: Math.round(totalEstimatedCost * 1000000) / 1000000,
+      successRate,
+      avgResponseTimeMs,
+      totalEstimatedCost,
       modelDistribution,
-      responseTimeDistribution: {
-        green: greenRow.count,
-        yellow: yellowRow.count,
-        red: redRow.count,
-      },
+      responseTimeDistribution,
       period,
+      // Per-channel breakdown
+      instagram,
+      whatsapp,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -242,7 +312,7 @@ router.get('/errors', (req: Request, res: Response) => {
   }
 });
 
-// 6. GET /model-stats — Model routing statistics
+// 6. GET /model-stats — Model routing statistics (unified: Instagram + WhatsApp)
 router.get('/model-stats', (req: Request, res: Response) => {
   try {
     const db = getDb();
@@ -253,18 +323,27 @@ router.get('/model-stats', (req: Request, res: Response) => {
       SELECT
         model_used as modelId,
         model_tier as modelTier,
+        channel,
         COUNT(*) as messageCount,
         AVG(response_time_ms) as avgResponseTimeMs,
         AVG(tokens_estimated) as avgTokens,
         SUM(tokens_estimated) as totalTokens
-      FROM instagram_interactions
-      WHERE ${dateFilter} AND model_used IS NOT NULL
-      GROUP BY model_used
+      FROM (
+        SELECT model_used, model_tier, response_time_ms, tokens_estimated, created_at, 'instagram' as channel
+        FROM instagram_interactions
+        WHERE ${dateFilter} AND model_used IS NOT NULL
+        UNION ALL
+        SELECT model_used, model_tier, response_time_ms, tokens_estimated, created_at, 'whatsapp' as channel
+        FROM whatsapp_interactions
+        WHERE ${dateFilter} AND model_used IS NOT NULL
+      )
+      GROUP BY model_used, channel
     `).all() as any[];
 
     const models = rows.map((r: any) => ({
       modelId: r.modelId,
       modelTier: r.modelTier || 'unknown',
+      channel: r.channel,
       messageCount: r.messageCount,
       avgResponseTimeMs: Math.round(r.avgResponseTimeMs || 0),
       avgTokens: Math.round(r.avgTokens || 0),
@@ -423,11 +502,51 @@ router.post('/pipeline-config/reset', (_req: Request, res: Response) => {
   }
 });
 
+// 12. GET /wa-pipeline-config — Current WhatsApp pipeline config
+router.get('/wa-pipeline-config', (_req: Request, res: Response) => {
+  try {
+    if (!_waPipelineConfig) {
+      return res.status(500).json({ error: 'WhatsApp pipeline config not initialized' });
+    }
+    const config = _waPipelineConfig.getConfig();
+    res.json(config);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 13. PATCH /wa-pipeline-config — Update WhatsApp pipeline config (partial merge)
+router.patch('/wa-pipeline-config', (req: Request, res: Response) => {
+  try {
+    if (!_waPipelineConfig) {
+      return res.status(500).json({ error: 'WhatsApp pipeline config not initialized' });
+    }
+    const updated = _waPipelineConfig.updateConfig(req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. POST /wa-pipeline-config/reset — Reset WhatsApp pipeline config to defaults
+router.post('/wa-pipeline-config/reset', (_req: Request, res: Response) => {
+  try {
+    if (!_waPipelineConfig) {
+      return res.status(500).json({ error: 'WhatsApp pipeline config not initialized' });
+    }
+    const config = _waPipelineConfig.resetConfig();
+    res.json(config);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Factory export ---
 
 export function createDmKontrolRoutes(db: Database.Database): Router {
   _db = db;
   _pipelineConfig = new PipelineConfigService(db);
+  _waPipelineConfig = new WhatsAppPipelineConfigService(db);
   runDmKontrolMigration(db);
   return router;
 }

@@ -77,7 +77,7 @@ function extractClassification(content: string, modelUsed: string): SexualIntent
 }
 
 export function decideSexualIntent(classification: SexualIntentClassification): SexualIntentDecision {
-  const sexualScore = classification.isSexual ? classification.confidence : 1 - classification.confidence;
+  const sexualScore = classification.isSexual ? classification.confidence : 0;
 
   if (sexualScore >= HIGH_THRESHOLD) {
     return {

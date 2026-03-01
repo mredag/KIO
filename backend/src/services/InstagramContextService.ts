@@ -110,12 +110,25 @@ interface AIContextPlan extends ContextualIntentResult {
   tierReason: string;
 }
 
+interface ContextDependency {
+  dependsOnPriorTopic: boolean;
+  topicLabel: string | null;
+  sourceMessage: string | null;
+  rationale: string;
+}
+
 const VALID_INTENT_CATEGORIES = new Set(['services', 'pricing', 'hours', 'policies', 'contact', 'faq', 'general']);
 const VALID_RESPONSE_MODES = new Set<ResponseMode>(['answer_directly', 'answer_then_clarify', 'clarify_only']);
 const DEFAULT_RESPONSE_DIRECTIVE: ResponseDirective = {
   mode: 'answer_directly',
   instruction: 'Bu mesaji bagimsiz bir soru olarak ele al. Bildigin net bilgiyi dogrudan ver. Gerekirse en fazla bir kisa netlestirme sorusu sor.',
   rationale: 'Varsayilan guvenli davranis',
+};
+const DEFAULT_CONTEXT_DEPENDENCY: ContextDependency = {
+  dependsOnPriorTopic: false,
+  topicLabel: null,
+  sourceMessage: null,
+  rationale: 'Bagimsiz soru varsayildi',
 };
 
 /**
@@ -347,7 +360,7 @@ export class InstagramContextService {
       'Her zaman asagidaki alanlari doldur:',
       '- categories: Yanit icin gereken bilgi kategorileri. Gecerli degerler: services, pricing, hours, policies, contact, faq, general',
       '- semanticSignals: Literal keyword degil, kisa semantik niyet etiketleri',
-      '- followUpHint: Sadece bu mesaj acikca onceki konunun devamiysa doldur. Konu net degilse null',
+      '- contextDependency: { dependsOnPriorTopic, topicLabel, sourceMessage, rationale }',
       '- responseDirective.mode: answer_directly, answer_then_clarify, clarify_only',
       '- responseDirective.instruction: Yanit modeline verilecek kisa operasyon talimati',
       '- responseDirective.rationale: Neden bu davranis secildi',
@@ -357,6 +370,9 @@ export class InstagramContextService {
       'Zorunlu kurallar:',
       '- En yeni 1-2 mesaj en guclu baglamdir; daha eski mesajlar sadece ayni kisa konusma zincirindeyse dikkate alinmali.',
       '- Konusma gecmisini sadece mevcut mesaj eksik, bagimsiz okunamayan veya acikca onceki konuya referans veren bir devam mesajiysa kullan.',
+      '- Eger onceki bir spesifik hizmete dayaniyorsan contextDependency.dependsOnPriorTopic=true olmalidir.',
+      '- contextDependency.dependsOnPriorTopic=true ise categories MUTLAKA services icermeli, topicLabel bos olamaz, sourceMessage o baglami kuran onceki musteri mesaji olmalidir.',
+      '- Onceki konuyu sadece responseDirective icinde gizli sekilde anlatma; bagimliligi contextDependency alaninda acikca yaz.',
       '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
       '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',
       '- Mumsen cevaplanabilen kismi cevaplat; sadece gerekli ise sonunda tek bir kisa netlestirme sorusu oner.',
@@ -364,16 +380,21 @@ export class InstagramContextService {
       '',
       'JSON semasi ornegi:',
       '{',
-      '  "categories": ["pricing", "hours"],',
-      '  "semanticSignals": ["multi_intent_info_request", "pricing_scope_ambiguous"],',
-      '  "followUpHint": null,',
+      '  "categories": ["services", "pricing", "hours"],',
+      '  "semanticSignals": ["recent_follow_up", "topic_specific_info_request"],',
+      '  "contextDependency": {',
+      '    "dependsOnPriorTopic": true,',
+      '    "topicLabel": "taekwondo dersleri",',
+      '    "sourceMessage": "taekwondo dersleri ?",',
+      '    "rationale": "Mevcut mesaj kisa ve onceki hizmet sorusunun devamidir."',
+      '  },',
       '  "responseDirective": {',
       '    "mode": "answer_then_clarify",',
-      '    "instruction": "Saat gibi net bilgileri ver. Fiyat kapsami belirsizse sonunda tek bir kisa netlestirme sorusu sor.",',
-      '    "rationale": "Mesaj genis ve yeni bir sorgu; eski konuya zorlanmamali."',
+      '    "instruction": "Aktif konu olarak taekwondo derslerini ele al. Bildigin fiyat ve saat bilgisini ver; eksikse sadece gerekli kisim icin netlestir.",',
+      '    "rationale": "Baglam onceki mesajdan net olarak geliyor."',
       '  },',
       '  "tier": "standard",',
-      '  "tierReason": "Normal coklu boyutlu bilgi talebi"',
+      '  "tierReason": "Baglama dayali standart bilgi talebi"',
       '}',
       '',
       'INPUT:',
@@ -423,6 +444,34 @@ export class InstagramContextService {
     return [...new Set(signals)].slice(0, 8);
   }
 
+  private normalizeContextDependency(value: unknown): ContextDependency {
+    if (!value || typeof value !== 'object') {
+      return DEFAULT_CONTEXT_DEPENDENCY;
+    }
+
+    const raw = value as Record<string, unknown>;
+    const dependsOnPriorTopic = Boolean(raw.dependsOnPriorTopic);
+    const topicLabel = String(raw.topicLabel ?? '').trim() || null;
+    const sourceMessage = String(raw.sourceMessage ?? '').trim() || null;
+    const rationale = String(raw.rationale ?? '').trim() || DEFAULT_CONTEXT_DEPENDENCY.rationale;
+
+    if (!dependsOnPriorTopic || !topicLabel || !sourceMessage) {
+      return {
+        dependsOnPriorTopic: false,
+        topicLabel: null,
+        sourceMessage: null,
+        rationale,
+      };
+    }
+
+    return {
+      dependsOnPriorTopic: true,
+      topicLabel,
+      sourceMessage,
+      rationale,
+    };
+  }
+
   private normalizeFollowUpHint(value: unknown): FollowUpContextHint | null {
     if (!value || typeof value !== 'object') {
       return null;
@@ -441,6 +490,56 @@ export class InstagramContextService {
       topicLabel,
       rewrittenQuestion,
       sourceMessage,
+    };
+  }
+
+  private buildDerivedFollowUpHint(messageText: string, contextDependency: ContextDependency): FollowUpContextHint | null {
+    if (!contextDependency.dependsOnPriorTopic || !contextDependency.topicLabel || !contextDependency.sourceMessage) {
+      return null;
+    }
+
+    const cleanedMessage = messageText.trim().replace(/\s+/g, ' ');
+    if (!cleanedMessage) {
+      return null;
+    }
+
+    return {
+      topicLabel: contextDependency.topicLabel,
+      rewrittenQuestion: `${contextDependency.topicLabel} icin ${cleanedMessage}`,
+      sourceMessage: contextDependency.sourceMessage,
+    };
+  }
+
+  private applyContextDependencyToCategories(categories: string[], contextDependency: ContextDependency): string[] {
+    const deduped = [...new Set(categories)];
+
+    if (contextDependency.dependsOnPriorTopic && !deduped.includes('services')) {
+      deduped.unshift('services');
+    }
+
+    return deduped.length > 0 ? deduped : ['general', 'faq'];
+  }
+
+  private applyContextDependencyToDirective(
+    responseDirective: ResponseDirective,
+    contextDependency: ContextDependency,
+  ): ResponseDirective {
+    if (!contextDependency.dependsOnPriorTopic || !contextDependency.topicLabel) {
+      return responseDirective;
+    }
+
+    const anchoredInstruction = responseDirective.instruction.includes(contextDependency.topicLabel)
+      ? responseDirective.instruction
+      : `Aktif konu: ${contextDependency.topicLabel}. ${responseDirective.instruction}`;
+
+    const anchoredRationale = responseDirective.rationale.includes(contextDependency.topicLabel)
+      ? responseDirective.rationale
+      : `${responseDirective.rationale} Aktif konu onceki mesajdan: ${contextDependency.topicLabel}.`;
+
+    return {
+      ...responseDirective,
+      instruction: anchoredInstruction,
+      rationale: anchoredRationale,
     };
   }
 
@@ -591,15 +690,28 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     };
   }
 
-  private parseAIContextPlan(rawContent: string): AIContextPlan {
+  private parseAIContextPlan(rawContent: string, messageText: string): AIContextPlan {
     const parsed = JSON.parse(this.extractJsonText(rawContent)) as Record<string, unknown>;
-    const categories = this.normalizeCategories(parsed.categories);
+    const contextDependency = this.normalizeContextDependency(parsed.contextDependency);
+    const categories = this.applyContextDependencyToCategories(
+      this.normalizeCategories(parsed.categories),
+      contextDependency,
+    );
+    const explicitFollowUpHint = this.normalizeFollowUpHint(parsed.followUpHint);
+    const responseDirective = this.applyContextDependencyToDirective(
+      this.normalizeResponseDirective(parsed.responseDirective),
+      contextDependency,
+    );
+    const derivedFollowUpHint = explicitFollowUpHint || this.buildDerivedFollowUpHint(messageText, contextDependency);
+    const normalizedCategories = derivedFollowUpHint && !categories.includes('services')
+      ? ['services', ...categories]
+      : categories;
 
     return {
-      categories,
+      categories: normalizedCategories,
       keywords: this.normalizeSemanticSignals(parsed.semanticSignals),
-      followUpHint: this.normalizeFollowUpHint(parsed.followUpHint),
-      responseDirective: this.normalizeResponseDirective(parsed.responseDirective),
+      followUpHint: derivedFollowUpHint,
+      responseDirective,
       tier: this.normalizeModelTier(parsed.tier),
       tierReason: String(parsed.tierReason ?? '').trim() || 'AI varsayilan plan -> standard',
     };
@@ -644,7 +756,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
         throw new Error('Empty response from API');
       }
 
-      const plan = this.parseAIContextPlan(content);
+      const plan = this.parseAIContextPlan(content, messageText);
       if (plan.followUpHint) {
         console.log('[InstagramContextService] AI follow-up plan resolved: "%s" -> "%s"',
           plan.followUpHint.sourceMessage,

@@ -145,6 +145,45 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.mode).toBe('answer_directly');
   });
 
+  it('derives follow-up context from structured contextDependency when followUpHint is omitted', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['pricing', 'hours'],
+      semanticSignals: ['recent_follow_up', 'topic_specific_info_request'],
+      contextDependency: {
+        dependsOnPriorTopic: true,
+        topicLabel: 'taekwondo dersleri',
+        sourceMessage: 'taekwondo dersleri ?',
+        rationale: 'Mevcut mesaj son hizmet sorusunun devamidir.',
+      },
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Bildigin fiyat ve saat bilgisini ver; eksikse sadece gerekli kisim icin netlestir.',
+        rationale: 'Mesaj baglama dayali.',
+      },
+      tier: 'standard',
+      tierReason: 'Baglama dayali standart bilgi talebi',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'fiyat nedir saat kacta ne zaman',
+      createHistory([
+        { text: 'taekwondo dersleri ?', minutesAgo: 1 },
+        { direction: 'outbound', text: 'Evet, mevcut.', minutesAgo: 0.5 },
+      ]),
+    );
+
+    expect(result.categories).toEqual(['services', 'pricing', 'hours']);
+    expect(result.followUpHint).toEqual({
+      topicLabel: 'taekwondo dersleri',
+      rewrittenQuestion: 'taekwondo dersleri icin fiyat nedir saat kacta ne zaman',
+      sourceMessage: 'taekwondo dersleri ?',
+    });
+    expect(result.responseDirective.instruction).toContain('Aktif konu: taekwondo dersleri.');
+  });
+
   it('analyzeMessage sends only recent deduplicated turns to the planner', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
 
@@ -169,7 +208,7 @@ describe('InstagramContextService AI context planner', () => {
         },
         responseDirective: {
           mode: 'answer_directly',
-          instruction: 'Ayni konunun devamı olarak ele al ve mevcut bilgiyi o hizmete göre ver.',
+          instruction: 'Ayni konunun devami olarak ele al ve mevcut bilgiyi o hizmete gore ver.',
           rationale: 'Hemen onceki mesaj net bir konu belirtiyor.',
         },
         tier: 'standard',

@@ -21,6 +21,7 @@ export interface DmFeedItem {
   modelTier?: string;
   responseTimeMs?: number;
   tokensEstimated?: number;
+  executionId?: string;
   pipelineTrace?: Record<string, unknown>;
   pipelineError?: Record<string, unknown>;
   createdAt: string;

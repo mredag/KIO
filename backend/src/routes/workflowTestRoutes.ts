@@ -8,6 +8,7 @@ import { DirectResponseService } from '../services/DirectResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
+import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
 
 // Escalation service injection (set from index.ts)
@@ -90,6 +91,95 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           },
         });
       } catch { /* non-fatal */ }
+
+      // ═══ STAGE 0: Sexual Intent Filter (same as webhook) ═══
+      const sexualIntentStartTime = Date.now();
+      let sexualIntentResult;
+      try {
+        sexualIntentResult = await evaluateSexualIntent(text);
+        const sexualIntentLatency = Date.now() - sexualIntentStartTime;
+        
+        // If blocked or retry, stop here and return early
+        if (sexualIntentResult.action !== 'allow') {
+          const responseText = sexualIntentResult.action === 'block_message'
+            ? 'Bu konuda yardımcı olamam. Lütfen uygun bir dille yazın.'
+            : 'Tekrar eder misiniz? Anlayamadım...';
+          
+          // Log outbound with sexual intent trace
+          const outboundId = randomUUID();
+          const trace = {
+            sexualIntent: {
+              action: sexualIntentResult.action,
+              confidence: sexualIntentResult.confidence,
+              reason: sexualIntentResult.reason,
+              modelUsed: sexualIntentResult.modelUsed,
+              latencyMs: sexualIntentLatency,
+            },
+          };
+          
+          rawDb.prepare(`
+            INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, created_at, pipeline_trace)
+            VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?)
+          `).run(
+            outboundId,
+            senderId,
+            responseText,
+            sexualIntentResult.action === 'block_message' ? 'security_block' : 'retry_question',
+            responseText,
+            sexualIntentResult.modelUsed,
+            new Date().toISOString(),
+            JSON.stringify(trace),
+          );
+
+          // Push SSE event
+          try {
+            DmSSEManager.getInstance().pushEvent({
+              type: 'dm:response',
+              data: {
+                id: outboundId,
+                instagramId: senderId,
+                direction: 'outbound',
+                messageText: responseText,
+                responseTimeMs: sexualIntentLatency,
+                modelTier: null,
+                modelUsed: sexualIntentResult.modelUsed,
+                pipelineTrace: trace,
+                pipelineError: null,
+                createdAt: new Date().toISOString(),
+              },
+            });
+          } catch { /* non-fatal */ }
+
+          res.json({
+            ok: true,
+            sexualIntent: {
+              action: sexualIntentResult.action,
+              confidence: sexualIntentResult.confidence,
+              reason: sexualIntentResult.reason,
+              modelUsed: sexualIntentResult.modelUsed,
+              latencyMs: sexualIntentLatency,
+            },
+            response: responseText,
+            responseTime: Date.now() - startTime,
+          });
+          return;
+        }
+
+        // Store sexual intent result for allowed messages
+        sexualIntentResult = {
+          ...sexualIntentResult,
+          latencyMs: sexualIntentLatency,
+        };
+      } catch (intentErr) {
+        console.error('[Simulator] Sexual intent check failed:', intentErr);
+        sexualIntentResult = {
+          action: 'allow' as const,
+          confidence: 0,
+          reason: `Error: ${intentErr?.message || String(intentErr)}`,
+          modelUsed: 'error',
+          latencyMs: Date.now() - sexualIntentStartTime,
+        };
+      }
 
       // ═══ STAGE 1: Context Analysis (same as webhook) ═══
       const analysis = contextService.analyzeMessage(senderId, text);
@@ -202,6 +292,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
       // Build pipeline trace (same structure as real webhook)
       const pipelineTrace = {
+        sexualIntent: sexualIntentResult,
         intentCategories: analysis.intentCategories,
         matchedKeywords: analysis.matchedKeywords,
         modelTier: analysis.modelTier,
@@ -285,6 +376,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         status: 'success',
         response: finalResponse,
         senderId,
+        sexualIntent: sexualIntentResult,
         analysis: {
           intentCategories: analysis.intentCategories,
           matchedKeywords: analysis.matchedKeywords,

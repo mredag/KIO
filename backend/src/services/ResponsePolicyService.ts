@@ -58,7 +58,13 @@ Aşağıdaki kurallara göre yanıtı kontrol et:
 5. DİL: Yanıt Türkçe mi? (İngilizce veya başka dil kabul edilmez)
 6. KİŞİSEL BİLGİ: Yanıt çalışan kişisel bilgisi (telefon, adres, TC no vb.) içeriyor mu?
 7. RAKİP YÖNLENDİRME: Yanıt müşteriyi rakip bir işletmeye yönlendiriyor mu?
-8. FIYAT TUTARSIZLIĞI: Yanıtta BILGI_BANKASI'nda OLMAYAN bir fiyat uydurulmuş mu? Fiyatların birebir aynı formatta olması gerekmez — önemli olan sayısal değerlerin doğru olması. Asistan fiyatları farklı formatta (örn. "800₺" yerine "800 TL") yazabilir, bu SORUN DEĞİL. Sadece bilgi bankasında hiç olmayan bir fiyat yazılmışsa FAIL ver. NOT: Müşteri fiyat sorduğunda, yanıtta fiyat bilgisi varsa bu DOĞRU'dur — fiyat sorulduğu için fiyat verilmesi normaldir.
+8. FIYAT TUTARSIZLIĞI: Yanıtta BILGI_BANKASI'nda OLMAYAN bir fiyat uydurulmuş mu? ÖNEMLİ KURALLAR:
+   - Fiyat formatı farklı olabilir ("800₺" vs "800 TL" vs "800 lira" vs "800₺/saat") — sayısal değer aynıysa DOĞRU
+   - Fiyat gösterimi farklı olabilir ("24 saat: 14.000₺" vs "24 saat → 14.000₺" vs "24 saat 14.000₺") — sayısal değer aynıysa DOĞRU
+   - Asistan tüm fiyatları listelemek zorunda DEĞİL — BILGI_BANKASI'nda olan fiyatlardan bir kısmını vermesi DOĞRU
+   - Emoji ve format farkları SORUN DEĞİL — içerik aynıysa DOĞRU
+   - Sadece BILGI_BANKASI'nda hiç olmayan bir sayısal fiyat değeri yazılmışsa FAIL ver
+   - Müşteri fiyat sorduğunda yanıtta fiyat bilgisi varsa bu DOĞRU — fiyat sorulduğu için fiyat verilmesi normaldir
 9. YANIT UYGUNLUĞU: Yanıt müşterinin sorusuyla alakalı mı? Müşteri ne sorduysa o cevaplanmalı. ANCAK ek yardımcı bilgi (telefon, adres, iletişim) vermek SORUN DEĞİL. Örnekler:
    - Müşteri "merhaba" dediyse → yanıt sadece selamlama + "nasıl yardımcı olabilirim?" olmalı. Fiyat listesi, adres, saat bilgisi gibi SORULMAYAN detaylı bilgi verilmişse FAIL.
    - Müşteri GENEL fiyat sorduysa ("fiyat nedir", "ne kadar") → yanıt ya fiyat listesi vermeli ya da "hangi hizmet için?" diye sormalı ya da telefon numarasına yönlendirmeli. Bunların hepsi DOĞRU.

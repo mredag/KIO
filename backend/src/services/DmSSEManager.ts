@@ -1,7 +1,7 @@
 import { Response } from 'express';
 
 export interface DmSSEEvent {
-  type: 'dm:new' | 'dm:alert' | 'dm:health_update';
+  type: 'dm:new' | 'dm:response' | 'dm:alert' | 'dm:health_update';
   data: any;
 }
 

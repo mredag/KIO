@@ -88,7 +88,7 @@ export function seedKnowledge(dbPath?: string) {
     'Pilates fiyatları');
 
   upsert('pricing', 'pt_pricing',
-    'Personal Trainer: Aylık (12 seans) 6.000 TL | Tek seans 600 TL. Kişisel program ve beslenme danışmanlığı dahil.',
+    '💪 Personal Trainer (PT) Paketleri:\n- 12 saat: 8.000₺\n- 24 saat: 14.000₺\n- 36 saat: 20.000₺',
     'PT fiyatları');
 
   upsert('pricing', 'courses_kids',

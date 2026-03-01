@@ -45,6 +45,16 @@ export interface IntentResult {
   keywords: string[];
 }
 
+export interface FollowUpContextHint {
+  topicLabel: string;
+  rewrittenQuestion: string;
+  sourceMessage: string;
+}
+
+export interface ContextualIntentResult extends IntentResult {
+  followUpHint: FollowUpContextHint | null;
+}
+
 export const MODEL_CONFIG = {
   light: {
     modelId: 'google/gemini-2.5-flash-lite',
@@ -77,6 +87,7 @@ export interface MessageAnalysis {
   formattedHistory: string;
   intentCategories: string[];
   matchedKeywords: string[];  // from detectIntent
+  followUpHint: FollowUpContextHint | null;
   tierReason: string;         // from classifyModelTier
   modelTier: ModelTier;
   modelId: string;
@@ -144,6 +155,7 @@ export class InstagramContextService {
           formattedHistory,
           intentCategories: intentResult.categories,
           matchedKeywords: intentResult.keywords,
+          followUpHint: intentResult.followUpHint,
           tierReason,
           modelTier,
           modelId,
@@ -157,6 +169,7 @@ export class InstagramContextService {
           formattedHistory: '',
           intentCategories: ['general', 'faq'],
           matchedKeywords: [],
+          followUpHint: null,
           tierReason: 'Varsayılan model (hata durumu) → standard',
           modelTier: 'standard',
           modelId: MODEL_CONFIG.standard.modelId,
@@ -384,54 +397,132 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
    * 
    * Uses AI-powered intent detection for better accuracy.
    */
-  async detectIntentWithContextAI(messageText: string, history: ConversationEntry[]): Promise<IntentResult> {
-    const currentIntent = await this.detectIntentAI(messageText);
+  private getRecentInboundForContext(history: ConversationEntry[]): ConversationEntry[] {
+    return history
+      .filter(entry => entry.direction === 'inbound')
+      .slice(-3)
+      .filter(entry => {
+        const msgTime = new Date(entry.createdAt).getTime();
+        return (Date.now() - msgTime) < 10 * 60 * 1000;
+      });
+  }
 
-    // Follow-up detection: if current message has a "modifier" category
-    // (pricing, hours, contact) but no "topic" category (services),
-    // check recent inbound messages for topic context.
-    const MODIFIER_CATEGORIES = new Set(['pricing', 'hours', 'contact', 'policies']);
-    const TOPIC_CATEGORIES = new Set(['services']);
+  private buildPricingFollowUpHint(
+    currentIntent: IntentResult,
+    recentInbound: ConversationEntry[],
+  ): FollowUpContextHint | null {
+    const asksPricing = currentIntent.categories.includes('pricing');
+    const alreadySpecific = currentIntent.categories.includes('services');
 
-    const hasModifier = currentIntent.categories.some(c => MODIFIER_CATEGORIES.has(c));
-    const hasTopic = currentIntent.categories.some(c => TOPIC_CATEGORIES.has(c));
-
-    // Only enrich if we have a modifier without a topic (follow-up pattern)
-    if (!hasModifier || hasTopic) {
-      return currentIntent;
+    if (!asksPricing || alreadySpecific) {
+      return null;
     }
 
-    // Look at last 3 inbound messages within 10 minutes for topic context
-    const recentInbound = history
-      .filter(e => e.direction === 'inbound')
-      .slice(-3)
-      .filter(e => {
-        const msgTime = new Date(e.createdAt).getTime();
-        return (Date.now() - msgTime) < 10 * 60 * 1000; // 10 minutes
-      });
+    for (let i = recentInbound.length - 1; i >= 0; i--) {
+      const topicLabel = this.resolvePricingTopicFromHistory(recentInbound[i].messageText);
+      if (!topicLabel) {
+        continue;
+      }
+
+      return {
+        topicLabel,
+        rewrittenQuestion: `${topicLabel} fiyatlari nedir?`,
+        sourceMessage: recentInbound[i].messageText,
+      };
+    }
+
+    return null;
+  }
+
+  private resolvePricingTopicFromHistory(messageText: string): string | null {
+    const normalized = normalizeTurkish(messageText.toLowerCase());
+    const topicRules: Array<{ label: string; matches?: string[]; regexes?: RegExp[] }> = [
+      { label: 'MIX masaj', matches: ['mix'] },
+      { label: 'sicak tas masaji', matches: ['sicak tas'] },
+      { label: 'medikal masaj', matches: ['medikal'] },
+      { label: 'bali masaji', matches: ['bali'] },
+      { label: 'endonezya masaji', matches: ['endonezya'] },
+      { label: 'uzakdogu masaji', matches: ['uzakdogu'] },
+      { label: 'masaj', matches: ['masaj', 'massage', 'spa', 'hamam', 'sauna', 'buhar', 'kese', 'kopuk'] },
+      { label: 'aile uyeligi', matches: ['aile uyeligi', 'aile uyelik', 'aile'] },
+      { label: 'ferdi uyelik', matches: ['ferdi uyelik', 'ferdi', 'uyelik', 'membership'] },
+      { label: 'reformer pilates', matches: ['reformer', 'pilates'] },
+      { label: 'personal trainer', matches: ['personal trainer', 'trainer'] },
+      { label: 'PT', regexes: [/\bpt\b/] },
+      { label: 'taekwondo kursu', matches: ['taekwondo'] },
+      { label: 'jimnastik kursu', matches: ['jimnastik'] },
+      { label: 'kickboks kursu', matches: ['kickboks'] },
+      { label: 'boks kursu', matches: ['boks'] },
+      { label: 'cocuk kurslari', matches: ['cocuk', 'kurs'] },
+      { label: 'kadin yuzme', matches: ['kadin yuzme'] },
+      { label: 'fitness', matches: ['fitness'] },
+      { label: 'havuz', matches: ['havuz', 'yuzme'] },
+    ];
+
+    for (const rule of topicRules) {
+      const keywordMatch = rule.matches?.some(keyword => normalized.includes(keyword));
+      const regexMatch = rule.regexes?.some(regex => regex.test(normalized));
+      if (keywordMatch || regexMatch) {
+        return rule.label;
+      }
+    }
+
+    return null;
+  }
+
+  private enrichIntentWithConversationContext(
+    currentIntent: IntentResult,
+    recentInbound: ConversationEntry[],
+    historyIntents: IntentResult[],
+  ): ContextualIntentResult {
+    const MODIFIER_CATEGORIES = new Set(['pricing', 'hours', 'contact', 'policies']);
+    const TOPIC_CATEGORIES = new Set(['services']);
+    const hasModifier = currentIntent.categories.some(category => MODIFIER_CATEGORIES.has(category));
+    const hasTopic = currentIntent.categories.some(category => TOPIC_CATEGORIES.has(category));
+    const followUpHint = this.buildPricingFollowUpHint(currentIntent, recentInbound);
+
+    if (!hasModifier || hasTopic) {
+      return {
+        ...currentIntent,
+        followUpHint,
+      };
+    }
 
     const contextCategories = new Set(currentIntent.categories);
     const contextKeywords = [...currentIntent.keywords];
 
-    for (const entry of recentInbound) {
-      const historyIntent = await this.detectIntentAI(entry.messageText);
-      for (const cat of historyIntent.categories) {
-        if (TOPIC_CATEGORIES.has(cat) && !contextCategories.has(cat)) {
-          contextCategories.add(cat);
-          contextKeywords.push(...historyIntent.keywords.filter(k => !contextKeywords.includes(k)));
+    for (const historyIntent of historyIntents) {
+      for (const category of historyIntent.categories) {
+        if (TOPIC_CATEGORIES.has(category) && !contextCategories.has(category)) {
+          contextCategories.add(category);
+          contextKeywords.push(...historyIntent.keywords.filter(keyword => !contextKeywords.includes(keyword)));
         }
       }
     }
 
     if (contextCategories.size > currentIntent.categories.length) {
-      console.log('[InstagramContextService] Follow-up detected: enriched categories %j → %j',
+      console.log('[InstagramContextService] Follow-up detected: enriched categories %j -> %j',
         currentIntent.categories, [...contextCategories]);
+    }
+
+    if (followUpHint) {
+      console.log('[InstagramContextService] Pricing follow-up resolved: "%s" -> "%s"',
+        followUpHint.sourceMessage,
+        followUpHint.rewrittenQuestion);
     }
 
     return {
       categories: [...contextCategories],
       keywords: contextKeywords,
+      followUpHint,
     };
+  }
+
+  async detectIntentWithContextAI(messageText: string, history: ConversationEntry[]): Promise<ContextualIntentResult> {
+    const currentIntent = await this.detectIntentAI(messageText);
+    const recentInbound = this.getRecentInboundForContext(history);
+    const historyIntents = await Promise.all(recentInbound.map(entry => this.detectIntentAI(entry.messageText)));
+    return this.enrichIntentWithConversationContext(currentIntent, recentInbound, historyIntents);
   }
 
   /**
@@ -442,54 +533,11 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
    * 
    * @deprecated Use detectIntentWithContextAI() for better accuracy.
    */
-  detectIntentWithContext(messageText: string, history: ConversationEntry[]): IntentResult {
+  detectIntentWithContext(messageText: string, history: ConversationEntry[]): ContextualIntentResult {
     const currentIntent = this.detectIntent(messageText);
-
-    // Follow-up detection: if current message has a "modifier" category
-    // (pricing, hours, contact) but no "topic" category (services),
-    // check recent inbound messages for topic context.
-    const MODIFIER_CATEGORIES = new Set(['pricing', 'hours', 'contact', 'policies']);
-    const TOPIC_CATEGORIES = new Set(['services']);
-
-    const hasModifier = currentIntent.categories.some(c => MODIFIER_CATEGORIES.has(c));
-    const hasTopic = currentIntent.categories.some(c => TOPIC_CATEGORIES.has(c));
-
-    // Only enrich if we have a modifier without a topic (follow-up pattern)
-    if (!hasModifier || hasTopic) {
-      return currentIntent;
-    }
-
-    // Look at last 3 inbound messages within 10 minutes for topic context
-    const recentInbound = history
-      .filter(e => e.direction === 'inbound')
-      .slice(-3)
-      .filter(e => {
-        const msgTime = new Date(e.createdAt).getTime();
-        return (Date.now() - msgTime) < 10 * 60 * 1000; // 10 minutes
-      });
-
-    const contextCategories = new Set(currentIntent.categories);
-    const contextKeywords = [...currentIntent.keywords];
-
-    for (const entry of recentInbound) {
-      const historyIntent = this.detectIntent(entry.messageText);
-      for (const cat of historyIntent.categories) {
-        if (TOPIC_CATEGORIES.has(cat) && !contextCategories.has(cat)) {
-          contextCategories.add(cat);
-          contextKeywords.push(...historyIntent.keywords.filter(k => !contextKeywords.includes(k)));
-        }
-      }
-    }
-
-    if (contextCategories.size > currentIntent.categories.length) {
-      console.log('[InstagramContextService] Follow-up detected: enriched categories %j → %j',
-        currentIntent.categories, [...contextCategories]);
-    }
-
-    return {
-      categories: [...contextCategories],
-      keywords: contextKeywords,
-    };
+    const recentInbound = this.getRecentInboundForContext(history);
+    const historyIntents = recentInbound.map(entry => this.detectIntent(entry.messageText));
+    return this.enrichIntentWithConversationContext(currentIntent, recentInbound, historyIntents);
   }
 
   serializeIntentResult(result: IntentResult): string {

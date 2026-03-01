@@ -43,6 +43,11 @@ export interface PipelineTrace {
       relativeTime: string;
     }>;
     formattedForAI: string;
+    followUpHint?: {
+      topicLabel: string;
+      rewrittenQuestion: string;
+      sourceMessage: string;
+    } | null;
   };
   knowledgeCategoriesFetched: string[];
   knowledgeFetchStatus: 'success' | 'fail' | 'skipped';
@@ -543,6 +548,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 relativeTime: entry.relativeTime,
               })),
               formattedForAI: analysis.formattedHistory.substring(0, 500), // Preview
+              followUpHint: analysis.followUpHint,
             };
           } catch (contextErr: any) {
             // Context service error — use defaults and record error
@@ -551,6 +557,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               formattedHistory: '',
               intentCategories: ['general', 'faq'],
               matchedKeywords: [],
+              followUpHint: null,
               tierReason: 'Varsayılan model (hata durumu) → standard',
               modelTier: 'standard' as const,
               modelId: 'moonshotai/kimi-k2',
@@ -685,6 +692,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 customerMessage: messageText,
                 knowledgeContext: formattedKnowledge,
                 conversationHistory: analysis.formattedHistory,
+                followUpHint: analysis.followUpHint,
                 customerSummary,
                 isNewCustomer: analysis.isNewCustomer,
                 tierConfig,
@@ -720,6 +728,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 `KRITIK: Yanitindaki HER bilgi asagidaki BILGI_BANKASI'ndan gelmeli. BILGI_BANKASI'nda OLMAYAN bilgi YAZMA.`,
                 `Sadece musterinin sorusuna cevap ver. Sorulmayan bilgiyi PAYLASMA.`,
                 `Musteri "merhaba" dediyse: sadece selamla + "Size nasil yardimci olabilirim?" de. Baska bilgi VERME.`,
+                analysis.followUpHint ? `DEVAM EDEN KONU: ${analysis.followUpHint.topicLabel}` : '',
+                analysis.followUpHint ? `BU MESAJI SU NET SORU GIBI ELE AL: ${analysis.followUpHint.rewrittenQuestion}` : '',
+                analysis.followUpHint ? `MUSTERIYE TEKRAR "HANGI HIZMET" DIYE SORMA.` : '',
                 '',
                 `MUSTERI MESAJI: ${messageText}`,
                 '',

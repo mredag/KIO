@@ -11,7 +11,8 @@
  * Typical latency: ~1.5-3s (vs ~10-12s through OpenClaw)
  */
 
-import type { PipelineConfig, DirectResponseTierConfig } from './PipelineConfigService.js';
+import type { DirectResponseTierConfig } from './PipelineConfigService.js';
+import type { FollowUpContextHint } from './InstagramContextService.js';
 
 export interface DirectResponseResult {
   response: string | null;
@@ -36,12 +37,13 @@ export class DirectResponseService {
     customerMessage: string;
     knowledgeContext: string;
     conversationHistory: string;
+    followUpHint?: FollowUpContextHint | null;
     customerSummary: string;
     isNewCustomer: boolean;
     tierConfig: DirectResponseTierConfig;
     systemPrompt: string;
   }): Promise<DirectResponseResult> {
-    const { customerMessage, conversationHistory, customerSummary, tierConfig, systemPrompt } = params;
+    const { customerMessage, conversationHistory, followUpHint, customerSummary, tierConfig, systemPrompt } = params;
 
     if (!this.apiKey) {
       return {
@@ -70,6 +72,15 @@ export class DirectResponseService {
     } else {
       console.log('[DirectResponse] NO conversation history provided');
     }
+    if (followUpHint) {
+      console.log('[DirectResponse] Applying follow-up hint:', followUpHint.rewrittenQuestion);
+      systemParts.push('DEVAM EDEN KONU KURALI:');
+      systemParts.push(`- Konu zaten belli: ${followUpHint.topicLabel}.`);
+      systemParts.push(`- Bu yeni mesaji "${followUpHint.rewrittenQuestion}" olarak yorumla.`);
+      systemParts.push('- Musteriye tekrar "hangi hizmet" diye sorma.');
+      systemParts.push('- Sadece bu aktif konuya ait bilgiyi ver.');
+      systemParts.push('');
+    }
     systemParts.push(systemPrompt);
     const enhancedSystemPrompt = systemParts.join('\n');
 
@@ -77,6 +88,10 @@ export class DirectResponseService {
     const userParts = [
       `Müşteri mesajı: ${customerMessage}`,
     ];
+    if (followUpHint) {
+      userParts.push(`\nKod notu: Bu mesaj onceki "${followUpHint.topicLabel}" konusunun devamidir.`);
+      userParts.push(`\nBu mesaji su net soru gibi ele al: ${followUpHint.rewrittenQuestion}`);
+    }
     if (customerSummary) {
       userParts.push(`\nMüşteri: ${customerSummary}`);
     }

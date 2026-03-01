@@ -123,7 +123,7 @@ export class HardwareWatchdogService {
     const existing = this.db.prepare(`SELECT id FROM mc_policies WHERE id = ?`).get(CONFIG_ID);
     if (!existing) {
       this.db.prepare(`
-        INSERT INTO mc_policies (id, name, type, conditions, actions, enabled, created_at, updated_at)
+        INSERT INTO mc_policies (id, name, type, conditions, actions, is_active, created_at, updated_at)
         VALUES (?, 'Donanım İzleyici Ayarları', 'guardrail', ?, '{}', 1, datetime('now'), datetime('now'))
       `).run(CONFIG_ID, JSON.stringify(DEFAULT_CONFIG));
     }

@@ -58,12 +58,12 @@ Aşağıdaki kurallara göre yanıtı kontrol et:
 5. DİL: Yanıt Türkçe mi? (İngilizce veya başka dil kabul edilmez)
 6. KİŞİSEL BİLGİ: Yanıt çalışan kişisel bilgisi (telefon, adres, TC no vb.) içeriyor mu?
 7. RAKİP YÖNLENDİRME: Yanıt müşteriyi rakip bir işletmeye yönlendiriyor mu?
-8. FIYAT TUTARSIZLIĞI: Yanıtta BILGI_BANKASI'nda OLMAYAN bir fiyat uydurulmuş mu? Fiyatların birebir aynı formatta olması gerekmez — önemli olan sayısal değerlerin doğru olması. Asistan fiyatları farklı formatta (örn. "800₺" yerine "800 TL") yazabilir, bu SORUN DEĞİL. Sadece bilgi bankasında hiç olmayan bir fiyat yazılmışsa FAIL ver.
-9. YANIT UYGUNLUĞU (ÇOK ÖNEMLİ): Yanıt müşterinin sorusuyla DOĞRUDAN İLGİLİ mi? Müşteri ne sorduysa sadece o cevaplanmalı. Örnekler:
-   - Müşteri "merhaba" dediyse → yanıt sadece selamlama + "nasıl yardımcı olabilirim?" olmalı. Adres, fiyat, saat bilgisi verilmişse FAIL.
-   - Müşteri fiyat sorduysa → yanıtta adres bilgisi varsa FAIL (sorulmadı).
-   - Müşteri adres sorduysa → yanıtta fiyat bilgisi varsa FAIL (sorulmadı).
-   - Yanıt BILGI_BANKASI'ndan rastgele bilgi döküyorsa FAIL — bu "papağan yanıt" hatasıdır.
+8. FIYAT TUTARSIZLIĞI: Yanıtta BILGI_BANKASI'nda OLMAYAN bir fiyat uydurulmuş mu? Fiyatların birebir aynı formatta olması gerekmez — önemli olan sayısal değerlerin doğru olması. Asistan fiyatları farklı formatta (örn. "800₺" yerine "800 TL") yazabilir, bu SORUN DEĞİL. Sadece bilgi bankasında hiç olmayan bir fiyat yazılmışsa FAIL ver. NOT: Müşteri fiyat sorduğunda, yanıtta fiyat bilgisi varsa bu DOĞRU'dur — fiyat sorulduğu için fiyat verilmesi normaldir.
+9. YANIT UYGUNLUĞU: Yanıt müşterinin sorusuyla alakalı mı? Müşteri ne sorduysa o cevaplanmalı. ANCAK ek yardımcı bilgi (telefon, adres, iletişim) vermek SORUN DEĞİL. Örnekler:
+   - Müşteri "merhaba" dediyse → yanıt sadece selamlama + "nasıl yardımcı olabilirim?" olmalı. Fiyat listesi, adres, saat bilgisi gibi SORULMAYAN detaylı bilgi verilmişse FAIL.
+   - Müşteri fiyat sorduysa → fiyat bilgisi + telefon/iletişim bilgisi vermek DOĞRU. Sadece fiyat sorulduğunda adres veya saat bilgisi verilmemeli (ama telefon numarası vermek sorun değil).
+   - Müşteri adres sorduysa → adres + telefon/iletişim bilgisi vermek DOĞRU. Sadece adres sorulduğunda fiyat listesi verilmemeli.
+   - Yanıt BILGI_BANKASI'ndan SORULMAYAN bilgileri rastgele döküyorsa FAIL — bu "papağan yanıt" hatasıdır.
    - Kısa bir selamlama mesajına uzun bilgi dolu yanıt verilmişse FAIL.
 10. PAPAĞAN/TEKRAR KONTROLÜ: Yanıt, BILGI_BANKASI'ndaki verileri olduğu gibi kopyalayıp yapıştırmış mı? Asistan bilgiyi kendi cümleleriyle, müşterinin sorusuna uygun şekilde özetlemeli. Bilgi bankasının tamamını veya büyük bölümünü aynen tekrarlamak YASAK.
 

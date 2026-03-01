@@ -602,6 +602,27 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
           }
 
+          // Log inbound message to DB FIRST — so conversation history is available
+          // for the AI response. Without this, getConversationHistory() returns stale data.
+          try {
+            // Ensure customer exists (FK constraint) before logging interaction
+            const now = new Date().toISOString();
+            db.prepare(`
+              INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
+              VALUES (?, 0, ?, ?)
+              ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
+            `).run(senderId, now, now);
+
+            const inboundId = randomUUID();
+            db.prepare(`
+              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
+              VALUES (?, ?, 'inbound', ?, ?, ?, ?)
+            `).run(inboundId, senderId, messageText, analysis.intentCategories.join(','), executionId, now);
+            console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
+          } catch (inboundLogErr) {
+            console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
+          }
+
           // Push inbound DM event
           try {
             DmSSEManager.getInstance().pushEvent({

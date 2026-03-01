@@ -37,11 +37,14 @@ export interface AuditConfig {
   lookbackHours: number;          // default 24
   createJobsForIssues: boolean;   // auto-create mc_jobs
   jobPriority: string;            // 'low' | 'medium' | 'high'
+  channels: { instagram: boolean; whatsapp: boolean };
 }
+
 
 export interface AuditResponseResult {
   interactionId: string;
   customerId: string;
+  channel: 'instagram' | 'whatsapp';
   customerMessage: string;
   aiResponse: string;
   modelUsed: string | null;
@@ -92,6 +95,7 @@ const DEFAULT_CONFIG: AuditConfig = {
   lookbackHours: 24,
   createJobsForIssues: true,
   jobPriority: 'medium',
+  channels: { instagram: true, whatsapp: true },
 };
 
 export class NightlyAuditService {
@@ -278,6 +282,18 @@ export class NightlyAuditService {
         const hallucinated = results.filter(r => r.score === 'hallucinated');
         const partial = results.filter(r => r.score === 'partially_grounded');
 
+        // Channel breakdown for metadata
+        const channelBreakdown = {
+          instagram: {
+            hallucinated: hallucinated.filter(r => r.channel === 'instagram').length,
+            partial: partial.filter(r => r.channel === 'instagram').length,
+          },
+          whatsapp: {
+            hallucinated: hallucinated.filter(r => r.channel === 'whatsapp').length,
+            partial: partial.filter(r => r.channel === 'whatsapp').length,
+          },
+        };
+
         if (hallucinated.length > 0) {
           this.escalation.escalate({
             source: 'nightly_audit',
@@ -285,7 +301,7 @@ export class NightlyAuditService {
             severity: 'high',
             title: `Gece Denetimi: ${hallucinated.length} uydurma yanıt`,
             details: `${hallucinated.length} yanıt tamamen uydurma bilgi içeriyor. ${partial.length} yanıt kısmi sorunlu. Toplam ${results.length} yanıt incelendi.`,
-            metadata: { runId, hallucinated: hallucinated.length, partial: partial.length, total: results.length },
+            metadata: { runId, hallucinated: hallucinated.length, partial: partial.length, total: results.length, channels: channelBreakdown },
           }).catch(() => {});
         } else if (partial.length > 0) {
           this.escalation.escalate({
@@ -294,7 +310,7 @@ export class NightlyAuditService {
             severity: 'medium',
             title: `Gece Denetimi: ${partial.length} kısmi sorunlu yanıt`,
             details: `${partial.length} yanıt kısmi doğruluk sorunu içeriyor. Toplam ${results.length} yanıt incelendi.`,
-            metadata: { runId, partial: partial.length, total: results.length },
+            metadata: { runId, partial: partial.length, total: results.length, channels: channelBreakdown },
           }).catch(() => {});
         }
       }
@@ -315,7 +331,7 @@ export class NightlyAuditService {
   // ── Single Response Audit (LLM grounding check) ──
 
   private async auditSingleResponse(
-    response: { id: string; instagram_id: string; message_text: string; ai_response: string; model_used: string | null; model_tier: string | null },
+    response: { id: string; customerId: string; channel: string; message_text: string; ai_response: string; model_used: string | null; model_tier: string | null },
     kbText: string
   ): Promise<AuditResponseResult> {
     const startTime = Date.now();
@@ -324,7 +340,8 @@ export class NightlyAuditService {
     if (!response.ai_response || response.ai_response.length < 20) {
       return {
         interactionId: response.id,
-        customerId: response.instagram_id,
+        customerId: response.customerId,
+        channel: response.channel as 'instagram' | 'whatsapp',
         customerMessage: response.message_text || '',
         aiResponse: response.ai_response || '',
         modelUsed: response.model_used,
@@ -430,7 +447,8 @@ YANITINI SADECE JSON OLARAK VER:
 
       return {
         interactionId: response.id,
-        customerId: response.instagram_id,
+        customerId: response.customerId,
+        channel: response.channel as 'instagram' | 'whatsapp',
         customerMessage: response.message_text || '',
         aiResponse: response.ai_response,
         modelUsed: response.model_used,
@@ -449,14 +467,15 @@ YANITINI SADECE JSON OLARAK VER:
   }
 
   private buildSkippedResult(
-    response: { id: string; instagram_id: string; message_text: string; ai_response: string; model_used: string | null; model_tier: string | null },
+    response: { id: string; customerId: string; channel: string; message_text: string; ai_response: string; model_used: string | null; model_tier: string | null },
     latencyMs: number,
     _error: string
   ): AuditResponseResult {
     this.currentRun!.skipped++;
     return {
       interactionId: response.id,
-      customerId: response.instagram_id,
+      customerId: response.customerId,
+      channel: response.channel as 'instagram' | 'whatsapp',
       customerMessage: response.message_text || '',
       aiResponse: response.ai_response || '',
       modelUsed: response.model_used,
@@ -472,15 +491,35 @@ YANITINI SADECE JSON OLARAK VER:
   // ── Data Fetching ──
 
   private fetchOutboundResponses(cutoff: string) {
-    return this.db.prepare(`
-      SELECT id, instagram_id, message_text, ai_response, model_used, model_tier
-      FROM instagram_interactions
-      WHERE direction = 'outbound'
-        AND ai_response IS NOT NULL
-        AND ai_response != ''
-        AND created_at >= ?
-      ORDER BY created_at DESC
-    `).all(cutoff) as any[];
+    const parts: string[] = [];
+    const params: string[] = [];
+
+    if (this.config.channels?.instagram !== false) {
+      parts.push(`
+        SELECT id, instagram_id AS customerId, 'instagram' AS channel, message_text, ai_response, model_used, model_tier, created_at
+        FROM instagram_interactions
+        WHERE direction = 'outbound'
+          AND ai_response IS NOT NULL
+          AND ai_response != ''
+          AND created_at >= ?`);
+      params.push(cutoff);
+    }
+
+    if (this.config.channels?.whatsapp !== false) {
+      parts.push(`
+        SELECT id, phone AS customerId, 'whatsapp' AS channel, message_text, ai_response, model_used, model_tier, created_at
+        FROM whatsapp_interactions
+        WHERE direction = 'outbound'
+          AND ai_response IS NOT NULL
+          AND ai_response != ''
+          AND created_at >= ?`);
+      params.push(cutoff);
+    }
+
+    if (parts.length === 0) return [];
+
+    const sql = parts.join('\n      UNION ALL') + '\n      ORDER BY created_at DESC';
+    return this.db.prepare(sql).all(...params) as any[];
   }
 
   private fetchKnowledgeBase() {
@@ -504,6 +543,9 @@ YANITINI SADECE JSON OLARAK VER:
 
   private storeAuditResults(runId: string, results: AuditResponseResult[]): void {
     // Store as a single mc_event with full results in metadata
+    const instagramResults = results.filter(r => r.channel === 'instagram');
+    const whatsappResults = results.filter(r => r.channel === 'whatsapp');
+
     const summary = {
       runId,
       totalResponses: this.currentRun!.totalResponses,
@@ -512,11 +554,26 @@ YANITINI SADECE JSON OLARAK VER:
       partiallyGrounded: results.filter(r => r.score === 'partially_grounded').length,
       hallucinated: results.filter(r => r.score === 'hallucinated').length,
       skipped: this.currentRun!.skipped,
+      channels: {
+        instagram: {
+          audited: instagramResults.length,
+          grounded: instagramResults.filter(r => r.score === 'grounded').length,
+          partiallyGrounded: instagramResults.filter(r => r.score === 'partially_grounded').length,
+          hallucinated: instagramResults.filter(r => r.score === 'hallucinated').length,
+        },
+        whatsapp: {
+          audited: whatsappResults.length,
+          grounded: whatsappResults.filter(r => r.score === 'grounded').length,
+          partiallyGrounded: whatsappResults.filter(r => r.score === 'partially_grounded').length,
+          hallucinated: whatsappResults.filter(r => r.score === 'hallucinated').length,
+        },
+      },
       issues: results
         .filter(r => r.score !== 'grounded')
         .map(r => ({
           interactionId: r.interactionId,
           customerId: r.customerId,
+          channel: r.channel,
           score: r.score,
           claims: r.ungroundedClaims,
         })),
@@ -531,19 +588,20 @@ YANITINI SADECE JSON OLARAK VER:
   // ── Issue Grouping & Job Creation ──
 
   private createIssueJobs(runId: string, problematic: AuditResponseResult[]): number {
-    // Group all ungrounded claims by issueType
-    const issueGroups: Record<string, { claims: ClaimResult[]; responses: { id: string; customerId: string; aiResponse: string }[] }> = {};
+    // Group all ungrounded claims by issueType + channel
+    const issueGroups: Record<string, { claims: ClaimResult[]; channel: string; responses: { id: string; customerId: string; aiResponse: string }[] }> = {};
 
     for (const r of problematic) {
       for (const claim of r.ungroundedClaims) {
         const type = claim.issueType || 'other';
-        if (!issueGroups[type]) {
-          issueGroups[type] = { claims: [], responses: [] };
+        const groupKey = `${r.channel}:${type}`;
+        if (!issueGroups[groupKey]) {
+          issueGroups[groupKey] = { claims: [], channel: r.channel, responses: [] };
         }
-        issueGroups[type].claims.push(claim);
+        issueGroups[groupKey].claims.push(claim);
         // Avoid duplicate response refs
-        if (!issueGroups[type].responses.find(x => x.id === r.interactionId)) {
-          issueGroups[type].responses.push({
+        if (!issueGroups[groupKey].responses.find(x => x.id === r.interactionId)) {
+          issueGroups[groupKey].responses.push({
             id: r.interactionId,
             customerId: r.customerId,
             aiResponse: r.aiResponse.substring(0, 200),
@@ -566,9 +624,11 @@ YANITINI SADECE JSON OLARAK VER:
     let jobsCreated = 0;
     const agent = this.findAgentByRole('default') || this.findAgentByRole('instagram');
 
-    for (const [issueType, group] of Object.entries(issueGroups)) {
+    for (const [groupKey, group] of Object.entries(issueGroups)) {
       if (group.claims.length < this.config.minClaimsForFlag) continue;
 
+      const issueType = groupKey.includes(':') ? groupKey.split(':').slice(1).join(':') : groupKey;
+      const channelLabel = group.channel === 'whatsapp' ? 'WA' : 'IG';
       const label = issueTypeLabels[issueType] || issueType;
       const jobId = randomUUID();
       const claimSummary = group.claims
@@ -577,7 +637,7 @@ YANITINI SADECE JSON OLARAK VER:
         .join('\n');
 
       const description = [
-        `Gece denetiminde ${group.claims.length} adet "${label}" sorunu tespit edildi.`,
+        `Gece denetiminde ${group.claims.length} adet "${label}" sorunu tespit edildi (${group.channel}).`,
         `Etkilenen ${group.responses.length} yanıt var.`,
         '',
         'Tespit edilen sorunlar:',
@@ -591,13 +651,14 @@ YANITINI SADECE JSON OLARAK VER:
         VALUES (?, ?, 'queued', ?, 'cron', ?, ?)
       `).run(
         jobId,
-        `[Denetim] ${label} (${group.claims.length} sorun)`,
+        `[Denetim][${channelLabel}] ${label} (${group.claims.length} sorun)`,
         this.config.jobPriority,
         agent?.id || null,
         JSON.stringify({
           trigger: 'nightly_audit',
           auditRunId: runId,
           issueType,
+          channel: group.channel,
           description: description,
           claimCount: group.claims.length,
           affectedResponses: group.responses.length,
@@ -606,7 +667,7 @@ YANITINI SADECE JSON OLARAK VER:
       );
 
       this.emitEvent('job', jobId, 'autopilot_created',
-        `Gece denetimi: ${label} — ${group.claims.length} sorun, ${group.responses.length} yanıt etkilendi`);
+        `Gece denetimi [${channelLabel}]: ${label} — ${group.claims.length} sorun, ${group.responses.length} yanıt etkilendi`);
 
       jobsCreated++;
     }

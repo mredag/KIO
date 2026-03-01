@@ -634,6 +634,151 @@ function buildSystemContext(userMessage: string): string {
     }
   }
 
+  // WhatsApp data injection
+  const waKeywords = /whatsapp|wa\b|mesaj/i;
+  if (waKeywords.test(msg)) {
+    try {
+      // Last 30 days WhatsApp stats
+      const waStats = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN direction = 'outbound' THEN 1 END) as responses,
+          AVG(CASE WHEN direction = 'outbound' AND response_time_ms > 0 THEN response_time_ms END) as avg_rt
+        FROM whatsapp_interactions
+        WHERE created_at >= datetime('now', '-30 days')
+      `).get() as any;
+
+      parts.push('## 📱 WhatsApp Verileri (Son 30 Gün)');
+      parts.push(`- Toplam mesaj: ${waStats?.total || 0}`);
+      parts.push(`- Yanıt üretilen: ${waStats?.responses || 0}`);
+      parts.push(`- Ort. yanıt süresi: ${Math.round(waStats?.avg_rt || 0)}ms`);
+
+      // Model distribution
+      const waModels = db.prepare(`
+        SELECT model_used, COUNT(*) as count
+        FROM whatsapp_interactions
+        WHERE model_used IS NOT NULL AND created_at >= datetime('now', '-30 days')
+        GROUP BY model_used ORDER BY count DESC
+      `).all() as any[];
+      if (waModels.length > 0) {
+        parts.push('### Model Dağılımı');
+        waModels.forEach((m: any) => parts.push(`  - ${m.model_used}: ${m.count}`));
+      }
+
+      // Last 20 WhatsApp messages
+      const waRecent = db.prepare(`
+        SELECT direction, phone, message_text, ai_response, intent,
+               model_used, model_tier, response_time_ms, tokens_estimated,
+               pipeline_error, created_at
+        FROM whatsapp_interactions
+        ORDER BY created_at DESC LIMIT 20
+      `).all() as any[];
+      if (waRecent.length > 0) {
+        parts.push('### Son 20 WhatsApp Mesajı');
+        waRecent.forEach((m: any) => {
+          const dir = m.direction === 'inbound' ? '📥' : '📤';
+          const model = m.model_used ? ` [${m.model_used}]` : '';
+          const rt = m.response_time_ms ? ` ${m.response_time_ms}ms` : '';
+          const tier = m.model_tier ? ` (${m.model_tier})` : '';
+          const error = m.pipeline_error ? ` ⚠️ ${m.pipeline_error}` : '';
+          const text = m.direction === 'inbound' ? (m.message_text || '').substring(0, 100) : (m.ai_response || '').substring(0, 100);
+          parts.push(`  - ${dir}${model}${tier}${rt} ${m.phone}: ${text}${error} (${m.created_at})`);
+        });
+      }
+
+      // Pending appointment requests
+      const pendingAppts = db.prepare(`
+        SELECT id, phone, service_requested, preferred_date, preferred_time, created_at
+        FROM whatsapp_appointment_requests
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+      `).all() as any[];
+      if (pendingAppts.length > 0) {
+        parts.push('### Bekleyen Randevu Talepleri');
+        pendingAppts.forEach((a: any) => {
+          parts.push(`  - ${a.phone}: ${a.service_requested || '-'} — ${a.preferred_date || '?'} ${a.preferred_time || '?'} (${a.created_at}) [id: ${a.id}]`);
+        });
+      } else {
+        parts.push('### Bekleyen Randevu Talepleri: Yok');
+      }
+
+      // Ignore list summary
+      const ignoreCount = (db.prepare('SELECT COUNT(*) as c FROM whatsapp_ignore_list').get() as any)?.c || 0;
+      const recentIgnored = db.prepare(`
+        SELECT phone, label, added_by, created_at
+        FROM whatsapp_ignore_list
+        ORDER BY created_at DESC LIMIT 5
+      `).all() as any[];
+      parts.push(`### Engel Listesi: ${ignoreCount} numara`);
+      if (recentIgnored.length > 0) {
+        recentIgnored.forEach((i: any) => {
+          parts.push(`  - ${i.phone} (${i.label || '-'}) — ekleyen: ${i.added_by || '-'} (${i.created_at})`);
+        });
+      }
+      parts.push('');
+    } catch (err: any) {
+      console.warn('[Jarvis] Failed to fetch WhatsApp context:', err.message);
+    }
+  }
+
+  // Phone number auto-detection — fetch WhatsApp conversation without explicit "WhatsApp" mention
+  const phoneMatch = msg.match(/(?:\+?90|0)?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}/);
+  if (phoneMatch) {
+    try {
+      const normalizedPhone = phoneMatch[0].replace(/[\s.-]/g, '').replace(/^0/, '90').replace(/^\+/, '');
+
+      // Full WhatsApp conversation history for this phone
+      const phoneConvo = db.prepare(`
+        SELECT direction, message_text, ai_response, intent, model_used,
+               model_tier, response_time_ms, pipeline_error, created_at
+        FROM whatsapp_interactions
+        WHERE phone LIKE ?
+        ORDER BY created_at ASC
+      `).all(`%${normalizedPhone}%`) as any[];
+
+      if (phoneConvo.length > 0) {
+        parts.push(`## 📞 WhatsApp Konuşma Geçmişi: ${normalizedPhone} (${phoneConvo.length} mesaj)`);
+        phoneConvo.forEach((m: any) => {
+          const dir = m.direction === 'inbound' ? '📥' : '📤';
+          const model = m.model_used ? ` [${m.model_used}]` : '';
+          const rt = m.response_time_ms ? ` ${m.response_time_ms}ms` : '';
+          const error = m.pipeline_error ? ` ⚠️ ${m.pipeline_error}` : '';
+          const text = m.direction === 'inbound' ? (m.message_text || '').substring(0, 150) : (m.ai_response || '').substring(0, 150);
+          parts.push(`  - ${dir}${model}${rt} ${text}${error} (${m.created_at})`);
+        });
+      }
+
+      // Pending appointment requests for this phone
+      const phoneAppts = db.prepare(`
+        SELECT id, service_requested, preferred_date, preferred_time, status, staff_notes, created_at
+        FROM whatsapp_appointment_requests
+        WHERE phone LIKE ?
+        ORDER BY created_at DESC
+      `).all(`%${normalizedPhone}%`) as any[];
+      if (phoneAppts.length > 0) {
+        parts.push(`### Randevu Talepleri (${normalizedPhone})`);
+        phoneAppts.forEach((a: any) => {
+          parts.push(`  - ${a.service_requested || '-'} — ${a.preferred_date || '?'} ${a.preferred_time || '?'} — durum: ${a.status} — not: ${a.staff_notes || '-'} (${a.created_at}) [id: ${a.id}]`);
+        });
+      }
+
+      // Ignore list status for this phone
+      const ignoreStatus = db.prepare(`
+        SELECT phone, label, added_by, created_at
+        FROM whatsapp_ignore_list
+        WHERE phone LIKE ?
+      `).get(`%${normalizedPhone}%`) as any;
+      if (ignoreStatus) {
+        parts.push(`### ⛔ Engel Listesinde: ${ignoreStatus.phone} (${ignoreStatus.label || '-'}) — ekleyen: ${ignoreStatus.added_by || '-'} (${ignoreStatus.created_at})`);
+      } else {
+        parts.push(`### Engel Listesi: ${normalizedPhone} listede DEĞİL`);
+      }
+      parts.push('');
+    } catch (err: any) {
+      console.warn('[Jarvis] Failed to fetch phone context:', err.message);
+    }
+  }
+
   // MC system overview
   if (msg.match(/sistem|system|genel|overview|dashboard|mc|mission|kontrol|rapor|report/)) {
     try {

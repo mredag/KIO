@@ -2,16 +2,49 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 
 // ============================================================
+// DM KONTROL MERKEZİ — Types
+// ============================================================
+
+export type DmChannel = 'instagram' | 'whatsapp';
+
+export interface DmFeedItem {
+  id: string;
+  channel: DmChannel;
+  instagramId?: string;
+  phone?: string;
+  direction: 'inbound' | 'outbound';
+  messageText?: string;
+  aiResponse?: string;
+  intent?: string;
+  sentiment?: string;
+  modelUsed?: string;
+  modelTier?: string;
+  responseTimeMs?: number;
+  tokensEstimated?: number;
+  pipelineTrace?: Record<string, unknown>;
+  pipelineError?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface DmFeedResponse {
+  items: DmFeedItem[];
+  total?: number;
+}
+
+// ============================================================
 // DM KONTROL MERKEZİ — Live Feed
 // ============================================================
 
-// GET /api/mc/dm-kontrol/feed?limit=50&offset=0
-export function useDmFeed(limit: number = 50) {
+// GET /api/mc/dm-kontrol/feed?limit=50&offset=0&channel=instagram|whatsapp
+export function useDmFeed(limit: number = 50, channel?: DmChannel) {
   return useQuery({
-    queryKey: ['dm-feed', limit],
+    queryKey: ['dm-feed', limit, channel],
     queryFn: async () => {
-      const { data } = await api.get(`/mc/dm-kontrol/feed?limit=${limit}`);
-      return data;
+      const params = new URLSearchParams();
+      params.set('limit', String(limit));
+      if (channel) params.set('channel', channel);
+      const { data } = await api.get(`/mc/dm-kontrol/feed?${params.toString()}`);
+      return data as DmFeedResponse;
     },
     refetchInterval: 10000,
   });

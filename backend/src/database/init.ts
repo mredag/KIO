@@ -186,6 +186,131 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.error('Instagram Intelligence migration failed:', error.message);
   }
 
+  // WhatsApp OpenClaw Integration — new tables, ALTER columns, unified view, MC seeds
+  try {
+    // 1. Create whatsapp_appointment_requests table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS whatsapp_appointment_requests (
+        id TEXT PRIMARY KEY,
+        phone TEXT NOT NULL,
+        service_requested TEXT,
+        preferred_date TEXT,
+        preferred_time TEXT,
+        status TEXT CHECK(status IN ('pending', 'confirmed', 'cancelled')) DEFAULT 'pending',
+        staff_notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_wa_appointments_phone ON whatsapp_appointment_requests(phone)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_wa_appointments_status ON whatsapp_appointment_requests(status)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_wa_appointments_created ON whatsapp_appointment_requests(created_at)');
+
+    // 2. Create whatsapp_ignore_list table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS whatsapp_ignore_list (
+        id TEXT PRIMARY KEY,
+        phone TEXT NOT NULL UNIQUE,
+        label TEXT,
+        added_by TEXT DEFAULT 'admin',
+        created_at TEXT NOT NULL
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_wa_ignore_phone ON whatsapp_ignore_list(phone)');
+
+    // 3. ALTER TABLE whatsapp_interactions — add new columns (try/catch each)
+    const waCols = db.prepare('PRAGMA table_info(whatsapp_interactions)').all() as Array<{ name: string }>;
+    const waColNames = waCols.map(c => c.name);
+
+    if (!waColNames.includes('model_used')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN model_used TEXT').run();
+      console.log('Added model_used column to whatsapp_interactions');
+    }
+    if (!waColNames.includes('tokens_estimated')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN tokens_estimated INTEGER').run();
+      console.log('Added tokens_estimated column to whatsapp_interactions');
+    }
+    if (!waColNames.includes('model_tier')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN model_tier TEXT').run();
+      console.log('Added model_tier column to whatsapp_interactions');
+    }
+    if (!waColNames.includes('pipeline_trace')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN pipeline_trace TEXT').run();
+      console.log('Added pipeline_trace column to whatsapp_interactions');
+    }
+    if (!waColNames.includes('pipeline_error')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN pipeline_error TEXT').run();
+      console.log('Added pipeline_error column to whatsapp_interactions');
+    }
+    if (!waColNames.includes('media_type')) {
+      db.prepare('ALTER TABLE whatsapp_interactions ADD COLUMN media_type TEXT').run();
+      console.log('Added media_type column to whatsapp_interactions');
+    }
+
+    // 4. Recreate unified_interactions view with new columns
+    db.exec('DROP VIEW IF EXISTS unified_interactions');
+    db.exec(`
+      CREATE VIEW unified_interactions AS
+      SELECT 
+        id, 'whatsapp' as platform, phone as customer_id,
+        direction, message_text, intent, sentiment, ai_response,
+        response_time_ms, model_used, tokens_estimated, model_tier,
+        pipeline_trace, pipeline_error, created_at
+      FROM whatsapp_interactions
+      UNION ALL
+      SELECT 
+        id, 'instagram' as platform, instagram_id as customer_id,
+        direction, message_text, intent, sentiment, ai_response,
+        response_time_ms, model_used, tokens_estimated, model_tier,
+        pipeline_trace, pipeline_error, created_at
+      FROM instagram_interactions
+    `);
+
+    // 5. Seed mc_agents with whatsapp-dm agent
+    // mc_agents uses channel_scope (JSON array), not a channel column
+    // status CHECK allows: active, idle, error, disabled
+    db.prepare(`
+      INSERT OR IGNORE INTO mc_agents (id, name, role, model, status, channel_scope, created_at, updated_at)
+      VALUES ('whatsapp-dm', 'WhatsApp DM Asistan', 'responder', 'moonshotai/kimi-k2', 'idle', '["whatsapp"]', datetime('now'), datetime('now'))
+    `).run();
+
+    // 6. Seed mc_policies with wa_pipeline_config
+    const waPipelineConfig = JSON.stringify({
+      directResponse: {
+        enabled: true,
+        tiers: {
+          light: { enabled: true, modelId: 'google/gemini-2.5-flash-lite' },
+          standard: { enabled: true, modelId: 'moonshotai/kimi-k2' },
+          advanced: { enabled: false, modelId: 'openai/gpt-4o-mini' }
+        }
+      },
+      policy: {
+        enabled: true,
+        maxRetries: 2,
+        validationModel: 'google/gemini-2.5-flash-lite',
+        correctionModel: 'moonshotai/kimi-k2',
+        timeoutMs: 15000,
+        appointmentClaimRule: true
+      },
+      directPrompt: {
+        systemTemplate: "Sen Eform Spor Merkezi'nin WhatsApp asistanısın. SADECE BİLGİ BANKASINI KULLAN.\n\n{{knowledge}}\n\nKurallar:\n- Sadece yukarıdaki bilgileri kullan\n- Bilmediğin konularda 'Detaylı bilgi için bizi arayabilirsiniz: 0326 502 58 58' de\n- Randevu oluşturma, ödeme işleme, üyelik değiştirme, terapist atama, müsaitlik garantisi YAPAMAZ\n- Düz metin kullan, markdown kullanma\n- Kısa ve öz cevap ver (4-5 cümle max)\n- 1-2 emoji kullanabilirsin",
+        maxResponseLength: 500
+      },
+      fallbackMessage: 'Detaylı bilgi için bizi arayabilirsiniz: 0326 502 58 58 📞',
+      ignoreList: { enabled: true },
+      appointmentFlow: { enabled: true, telegramNotification: true }
+    });
+
+    db.prepare(`
+      INSERT OR IGNORE INTO mc_policies (id, name, type, conditions, actions, is_active, priority, created_at, updated_at)
+      VALUES ('wa_pipeline_config', 'WhatsApp Pipeline Config', 'guardrail', '{}', ?, 1, 0, datetime('now'), datetime('now'))
+    `).run(waPipelineConfig);
+
+    console.log('WhatsApp OpenClaw Integration migration complete');
+  } catch (error: any) {
+    console.error('WhatsApp OpenClaw Integration migration failed:', error.message);
+  }
+
   // Seed default data
   seedDatabase(db);
   

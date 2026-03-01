@@ -27,6 +27,8 @@ import { createIntegrationCouponRoutes } from './routes/integrationCouponRoutes.
 import { createWhatsappWebhookRoutes } from './routes/whatsappWebhookRoutes.js';
 import { createInstagramWebhookRoutes } from './routes/instagramWebhookRoutes.js';
 import { createInstagramIntegrationRoutes } from './routes/instagramIntegrationRoutes.js';
+import { createWhatsappIntegrationRoutes } from './routes/whatsappIntegrationRoutes.js';
+import { createWhatsappLifecycleRoutes } from './routes/whatsappLifecycleRoutes.js';
 import { createAdminKnowledgeBaseRoutes } from './routes/adminKnowledgeBaseRoutes.js';
 import { createAdminServiceControlRoutes } from './routes/adminServiceControlRoutes.js';
 import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.js';
@@ -277,7 +279,9 @@ app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
 app.use('/webhook/instagram', createInstagramWebhookRoutes(db));
 app.use('/webhook/telegram', createTelegramWebhookRoutes());
+app.use('/webhook/openclaw/whatsapp', createWhatsappLifecycleRoutes(db));
 app.use('/api/integrations/instagram', createInstagramIntegrationRoutes(db));
+app.use('/api/integrations/whatsapp', createWhatsappIntegrationRoutes(db));
 app.use('/api/workflow-test', createWorkflowTestRoutes(dbService));
 app.use('/api/mc', createMissionControlRoutes(db));
 app.use('/api/mc/jarvis', createJarvisRoutes(db));

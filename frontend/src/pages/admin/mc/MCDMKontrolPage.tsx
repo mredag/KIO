@@ -10,6 +10,7 @@ import {
   useDmModelStats,
   useDmTestMode,
   useToggleDmTestMode,
+  type DmChannel,
 } from '../../../hooks/useDmKontrolApi';
 import { useDmKontrolSSE, type DmSSEEvent } from '../../../hooks/useDmKontrolSSE';
 import {
@@ -58,6 +59,28 @@ const ERROR_STAGES = [
   { value: 'policy_validation_fail', label: 'Policy İhlali' },
   { value: 'meta_send_fail', label: 'Meta Gönderim Hatası' },
 ];
+
+const CHANNEL_FILTERS: { key: DmChannel | 'all'; label: string }[] = [
+  { key: 'all', label: 'Tümü' },
+  { key: 'instagram', label: '📸 Instagram' },
+  { key: 'whatsapp', label: '💬 WhatsApp' },
+];
+
+function ChannelBadge({ channel }: { channel?: string }) {
+  if (channel === 'whatsapp') {
+    return (
+      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-green-500/15 text-green-400 border border-green-500/25">
+        💬 WA
+      </span>
+    );
+  }
+  // Default to Instagram for backward compatibility
+  return (
+    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-pink-500/15 text-pink-400 border border-pink-500/25">
+      📸 IG
+    </span>
+  );
+}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -419,7 +442,8 @@ function StepIcon({ status }: { status: 'success' | 'fail' | 'pending' }) {
 // Tab 1: Canlı Akış (Live Feed)
 // ============================================================
 function LiveFeedTab() {
-  const { data, isLoading } = useDmFeed(50);
+  const [channelFilter, setChannelFilter] = useState<DmChannel | 'all'>('all');
+  const { data, isLoading } = useDmFeed(50, channelFilter === 'all' ? undefined : channelFilter);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedSender, setSelectedSender] = useState<string | null>(null);
   const { data: conversation } = useDmConversation(selectedSender);
@@ -443,18 +467,37 @@ function LiveFeedTab() {
       <div className="mc-empty mc-fade-up">
         <div className="mc-empty-icon">💬</div>
         <p className="mc-empty-title">Henüz DM yok</p>
-        <p className="mc-empty-desc">Instagram DM pipeline aktif olduğunda mesajlar burada görünecek.</p>
+        <p className="mc-empty-desc">DM pipeline aktif olduğunda mesajlar burada görünecek.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-4">
+    <div className="space-y-3">
+      {/* Channel Filter */}
+      <div className="flex items-center gap-1.5">
+        {CHANNEL_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setChannelFilter(f.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+              channelFilter === f.key
+                ? 'bg-sky-500/15 border-sky-500/30 text-sky-300'
+                : 'bg-gray-800/40 border-gray-700/30 text-gray-500 hover:bg-gray-700/40 hover:text-gray-300'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-4">
       {/* Feed List */}
       <div className={`space-y-2 ${selectedSender ? 'w-1/2' : 'w-full'} transition-all`}>
         {items.map((dm: any) => {
           const isExpanded = expandedId === dm.id;
           const trace = dm.pipelineTrace;
+          const senderId = dm.channel === 'whatsapp' ? dm.phone : dm.instagramId;
           return (
             <div key={dm.id} className="mc-card">
               <div
@@ -462,6 +505,9 @@ function LiveFeedTab() {
                 onClick={() => setExpandedId(isExpanded ? null : dm.id)}
               >
                 <div className="flex items-center gap-2">
+                  {/* Channel Badge */}
+                  <ChannelBadge channel={dm.channel} />
+
                   {/* Direction */}
                   <span className={`text-xs font-mono ${dm.direction === 'inbound' ? 'text-sky-400' : 'text-emerald-400'}`}>
                     {dm.direction === 'inbound' ? '←' : '→'}
@@ -472,11 +518,11 @@ function LiveFeedTab() {
                     className="text-xs text-sky-400 hover:text-sky-300 hover:underline font-mono truncate max-w-[120px]"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedSender(selectedSender === dm.instagramId ? null : dm.instagramId);
+                      setSelectedSender(selectedSender === senderId ? null : senderId);
                     }}
-                    title={dm.instagramId}
+                    title={senderId}
                   >
-                    {dm.instagramId}
+                    {senderId}
                   </button>
 
                   {/* Message preview */}
@@ -653,6 +699,7 @@ function LiveFeedTab() {
           </GlassCard>
         </div>
       )}
+    </div>
     </div>
   );
 }
@@ -1023,7 +1070,7 @@ export default function MCDMKontrolPage() {
             </div>
             <div>
               <h1 className="text-xl font-semibold text-gray-100">DM Kontrol Merkezi</h1>
-              <p className="text-sm text-gray-400 mt-0.5">Instagram DM pipeline izleme ve yönetim</p>
+              <p className="text-sm text-gray-400 mt-0.5">Instagram & WhatsApp DM pipeline izleme ve yönetim</p>
             </div>
           </div>
           <div className="flex items-center gap-4">

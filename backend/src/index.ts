@@ -36,7 +36,7 @@ import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsR
 import { createWorkflowTestRoutes, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
 import { createMissionControlRoutes, setSchedulerService } from './routes/missionControlRoutes.js';
 import { MCSchedulerService } from './services/MCSchedulerService.js';
-import { createJarvisRoutes } from './routes/jarvisRoutes.js';
+import { createJarvisRoutes, setJarvisHardwareWatchdog } from './routes/jarvisRoutes.js';
 import { createAgentCommsRoutes } from './routes/agentCommsRoutes.js';
 import { createDmKontrolRoutes } from './routes/dmKontrolRoutes.js';
 import { createAutoPilotRoutes, setAutoPilotService } from './routes/autopilotRoutes.js';
@@ -46,6 +46,10 @@ import { createTagsRoutes } from './routes/tagsRoutes.js';
 import { createAuditRoutes, setAuditService } from './routes/auditRoutes.js';
 import { createCronRoutes, registerCronToggle, registerCronTrigger } from './routes/cronRoutes.js';
 import { createEscalationRoutes, setEscalationActionService } from './routes/escalationRoutes.js';
+import { createBriefingRoutes, setBriefingService } from './routes/briefingRoutes.js';
+import { createHardwareRoutes, setHardwareWatchdogService } from './routes/hardwareRoutes.js';
+import { MorningBriefingService } from './services/MorningBriefingService.js';
+import { HardwareWatchdogService } from './services/HardwareWatchdogService.js';
 import { createTelegramWebhookRoutes, setTelegramWebhookDeps } from './routes/telegramWebhookRoutes.js';
 import { TelegramCallbackPoller } from './services/TelegramCallbackPoller.js';
 import { AutoPilotService } from './services/AutoPilotService.js';
@@ -286,6 +290,8 @@ app.use('/api/mc', createTagsRoutes(db));
 app.use('/api/mc/audit', createAuditRoutes(db));
 app.use('/api/mc/cron', createCronRoutes(db));
 app.use('/api/mc/escalation', createEscalationRoutes(db));
+app.use('/api/mc/briefing', createBriefingRoutes(db));
+app.use('/api/mc/hardware', createHardwareRoutes(db));
 
 // Initialize MC Scheduler
 const mcScheduler = new MCSchedulerService(db);
@@ -319,6 +325,17 @@ setTelegramWebhookDeps(escalationService, telegramNotifier);
 const telegramPoller = new TelegramCallbackPoller(escalationService, telegramNotifier);
 telegramPoller.start();
 
+// Initialize Morning Briefing Service
+const morningBriefing = new MorningBriefingService(db, telegramNotifier);
+setBriefingService(morningBriefing);
+morningBriefing.start();
+
+// Initialize Hardware Watchdog Service
+const hardwareWatchdog = new HardwareWatchdogService(db, telegramNotifier);
+setHardwareWatchdogService(hardwareWatchdog);
+setJarvisHardwareWatchdog(hardwareWatchdog);
+hardwareWatchdog.start();
+
 // Register cron toggle/trigger handlers
 registerCronToggle('autopilot', (_jobId, enabled) => {
   if (enabled) { autoPilot.start(); } else { autoPilot.stop(); }
@@ -335,6 +352,22 @@ registerCronToggle('nightly-audit', (_jobId, enabled) => {
 registerCronTrigger('nightly-audit', async () => {
   const result = await nightlyAudit.runAudit();
   return { ok: true, message: `Denetim tamamlandı: ${result.audited} incelendi`, detail: result };
+});
+registerCronToggle('morning-briefing', (_jobId, enabled) => {
+  morningBriefing.saveConfig({ enabled });
+  return { ok: true, status: enabled ? 'active' : 'stopped' };
+});
+registerCronTrigger('morning-briefing', async () => {
+  const result = await morningBriefing.sendBriefing();
+  return { ok: true, message: result.message };
+});
+registerCronToggle('hardware-watchdog', (_jobId, enabled) => {
+  hardwareWatchdog.saveConfig({ enabled });
+  return { ok: true, status: enabled ? 'active' : 'stopped' };
+});
+registerCronTrigger('hardware-watchdog', async () => {
+  const result = await hardwareWatchdog.runCheck();
+  return { ok: true, message: `Donanım kontrolü tamamlandı: ${result.alerts.length} uyarı`, detail: result };
 });
 
 // Initialize Agent Lifecycle Service
@@ -371,6 +404,7 @@ process.on('SIGTERM', () => {
   mcScheduler.stop();
   autoPilot.stop();
   nightlyAudit.stop();
+  hardwareWatchdog.stop();
   telegramPoller.stop();
   process.exit(0);
 });
@@ -380,6 +414,7 @@ process.on('SIGINT', () => {
   mcScheduler.stop();
   autoPilot.stop();
   nightlyAudit.stop();
+  hardwareWatchdog.stop();
   telegramPoller.stop();
   process.exit(0);
 });

@@ -418,11 +418,18 @@ export class InstagramContextService {
    * WHY: Raw JSON like {"contact":{"address":"..."}} is hard for LLMs to parse
    * correctly. They sometimes ignore the JSON values and hallucinate from training
    * data instead. Plain text with clear labels eliminates this failure mode.
+   * 
+   * PRICING: Uses PriceFormatterService for mobile-optimized price lists with
+   * emojis, grouping, and proper spacing. All other categories use plain text.
    */
   static formatKnowledgeForPrompt(knowledgeJson: string): string {
     try {
       const data = JSON.parse(knowledgeJson);
       if (typeof data !== 'object' || data === null) return knowledgeJson;
+
+      // Lazy import to avoid circular dependency issues
+      const { PriceFormatterService } = require('./PriceFormatterService.js');
+      const priceFormatter = new PriceFormatterService();
 
       const CATEGORY_LABELS: Record<string, string> = {
         services: 'HİZMETLER',
@@ -439,22 +446,43 @@ export class InstagramContextService {
       for (const [category, entries] of Object.entries(data)) {
         if (typeof entries !== 'object' || entries === null) continue;
         const label = CATEGORY_LABELS[category] || category.toUpperCase();
-        const lines: string[] = [`[${label}]`];
 
-        for (const [_key, value] of Object.entries(entries as Record<string, string>)) {
-          if (typeof value === 'string' && value.trim()) {
-            lines.push(`• ${value}`);
+        // Special handling for pricing category — use PriceFormatterService
+        if (category === 'pricing') {
+          const lines: string[] = [`[${label}]`];
+          
+          for (const [key, value] of Object.entries(entries as Record<string, string>)) {
+            if (typeof value === 'string' && value.trim()) {
+              // Format each pricing entry using the service
+              const formatted = priceFormatter.formatPricing(key, value);
+              lines.push(formatted.text);
+              lines.push(''); // blank line between price categories
+            }
           }
-        }
 
-        if (lines.length > 1) {
-          sections.push(lines.join('\n'));
+          if (lines.length > 1) {
+            sections.push(lines.join('\n').trim());
+          }
+        } else {
+          // Standard formatting for non-pricing categories
+          const lines: string[] = [`[${label}]`];
+
+          for (const [_key, value] of Object.entries(entries as Record<string, string>)) {
+            if (typeof value === 'string' && value.trim()) {
+              lines.push(`• ${value}`);
+            }
+          }
+
+          if (lines.length > 1) {
+            sections.push(lines.join('\n'));
+          }
         }
       }
 
       return sections.join('\n\n');
-    } catch {
-      // If JSON parsing fails, return as-is
+    } catch (err) {
+      // If JSON parsing or formatting fails, return as-is
+      console.error('[InstagramContextService] formatKnowledgeForPrompt error:', err);
       return knowledgeJson;
     }
   }

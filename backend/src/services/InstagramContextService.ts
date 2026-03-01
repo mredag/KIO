@@ -422,13 +422,13 @@ export class InstagramContextService {
    * PRICING: Uses PriceFormatterService for mobile-optimized price lists with
    * emojis, grouping, and proper spacing. All other categories use plain text.
    */
-  static formatKnowledgeForPrompt(knowledgeJson: string): string {
+  static async formatKnowledgeForPrompt(knowledgeJson: string): Promise<string> {
     try {
       const data = JSON.parse(knowledgeJson);
       if (typeof data !== 'object' || data === null) return knowledgeJson;
 
-      // Lazy import to avoid circular dependency issues
-      const { PriceFormatterService } = require('./PriceFormatterService.js');
+      // Dynamic import for ESM compatibility
+      const { PriceFormatterService } = await import('./PriceFormatterService.js');
       const priceFormatter = new PriceFormatterService();
 
       const CATEGORY_LABELS: Record<string, string> = {

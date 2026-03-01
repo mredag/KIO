@@ -619,7 +619,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // Raw JSON like {"contact":{"address":"..."}} is hard for LLMs to parse —
             // they sometimes ignore JSON values and hallucinate from training data.
             // Plain text with clear labels eliminates this failure mode.
-            const formattedKnowledge = InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
+            const formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
 
             // Build enriched message — agent just needs to generate Turkish text
             // Keep prompt minimal to save tokens — instructions are in AGENTS.md core files

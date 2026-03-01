@@ -47,6 +47,10 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         return;
       }
 
+      // Generate unique execution ID for this simulation
+      const executionId = `EXE-${randomUUID().substring(0, 8)}`;
+      console.log('[Simulator] Starting execution: %s', executionId);
+
       const openRouterKey = process.env.OPENROUTER_API_KEY;
       if (!openRouterKey) {
         res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
@@ -69,9 +73,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       // Log inbound message
       const inboundId = randomUUID();
       rawDb.prepare(`
-        INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, created_at)
-        VALUES (?, ?, 'inbound', ?, ?, ?)
-      `).run(inboundId, senderId, text, 'user_message', now);
+        INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
+        VALUES (?, ?, 'inbound', ?, ?, ?, ?)
+      `).run(inboundId, senderId, text, 'user_message', executionId, now);
 
       // Push inbound SSE event to DM Kontrol
       try {
@@ -118,8 +122,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           };
           
           rawDb.prepare(`
-            INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, created_at, pipeline_trace)
-            VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?)
+            INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, execution_id, created_at, pipeline_trace)
+            VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?)
           `).run(
             outboundId,
             senderId,
@@ -127,6 +131,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             sexualIntentResult.action === 'block_message' ? 'security_block' : 'retry_question',
             responseText,
             sexualIntentResult.modelUsed,
+            executionId,
             new Date().toISOString(),
             JSON.stringify(trace),
           );
@@ -329,9 +334,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const outboundId = randomUUID();
       const outboundNow = new Date().toISOString();
       rawDb.prepare(`
-        INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, pipeline_trace, model_tier, created_at)
-        VALUES (?, ?, 'outbound', ?, 'ai_response', ?, ?, ?, ?, ?, ?, ?)
-      `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, directResult.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, outboundNow);
+        INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, pipeline_trace, model_tier, execution_id, created_at)
+        VALUES (?, ?, 'outbound', ?, 'ai_response', ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, directResult.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
 
       // Push outbound SSE event to DM Kontrol (same as real webhook)
       try {

@@ -186,6 +186,34 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
   return (
     <div className="px-3 pb-3 border-t border-white/[0.06]">
       <div className="mt-3 space-y-1">
+        {/* Sexual Intent Filter (pre-processing safety check) */}
+        {trace.sexualIntent && (
+          <>
+            <div className="flex items-center gap-2">
+              <StepIcon status={trace.sexualIntent.action === 'allow' ? 'success' : trace.sexualIntent.action === 'retry_question' ? 'warning' : 'error'} />
+              <span className="text-xs text-gray-400">İçerik Güvenlik Filtresi</span>
+              <span className="text-[10px] ml-auto flex items-center gap-1.5">
+                {trace.sexualIntent.action === 'allow' && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">✓ Güvenli</span>
+                )}
+                {trace.sexualIntent.action === 'retry_question' && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">⚠ Şüpheli</span>
+                )}
+                {trace.sexualIntent.action === 'block_message' && (
+                  <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20">✕ Engellendi</span>
+                )}
+                <span className="text-gray-600 font-mono">{Math.round(trace.sexualIntent.confidence * 100)}%</span>
+                <span className="text-gray-600 font-mono">{formatResponseTime(trace.sexualIntent.latencyMs)}</span>
+              </span>
+            </div>
+            {trace.sexualIntent.reason && (
+              <div className="pl-7 text-[10px] text-gray-500 italic max-w-md">
+                {trace.sexualIntent.reason}
+              </div>
+            )}
+          </>
+        )}
+
         {/* Intent Tespiti */}
         <div className="flex items-center gap-2">
           <StepIcon status={getStepStatus(trace, 'intent')} />
@@ -430,10 +458,24 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
   );
 }
 
-function StepIcon({ status }: { status: 'success' | 'fail' | 'pending' }) {
+function StepIcon({ status }: { status: 'success' | 'fail' | 'pending' | 'warning' | 'error' }) {
+  const iconMap: Record<string, string> = {
+    success: '✓',
+    fail: '✗',
+    pending: '⏳',
+    warning: '⚠',
+    error: '✗',
+  };
+  const colorMap: Record<string, string> = {
+    success: 'text-green-400 border-green-500/30',
+    fail: 'text-red-400 border-red-500/30',
+    pending: 'text-gray-500 border-gray-600/30',
+    warning: 'text-amber-400 border-amber-500/30',
+    error: 'text-red-400 border-red-500/30',
+  };
   return (
-    <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 ${STEP_COLORS[status]}`}>
-      {STEP_ICONS[status]}
+    <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] shrink-0 ${colorMap[status] || STEP_COLORS[status]}`}>
+      {iconMap[status] || STEP_ICONS[status]}
     </span>
   );
 }

@@ -1,0 +1,85 @@
+--- a/backend/src/routes/instagramWebhookRoutes.ts
++++ b/backend/src/routes/instagramWebhookRoutes.ts
+@@ -17,6 +17,14 @@ interface PipelineTrace {
+   intentCategories: string[];
+   matchedKeywords: string[];
+   modelTier: 'light' | 'standard' | 'advanced';
++  // Sexual intent filter (pre-processing safety check)
++  sexualIntent?: {
++    action: 'allow' | 'retry_question' | 'block_message';
++    confidence: number;
++    reason: string;
++    modelUsed: string;
++    latencyMs: number;
++  };
+   tierReason: string;
+   modelId: string;
+   knowledgeCategories: string[];
+@@ -396,8 +404,11 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
+           // - >85% sexual => block reply + stop pipeline
+           // - 70-85% => retry prompt + stop pipeline
+           // - <70% => continue normal DM flow
++          const trace: Partial<PipelineTrace> = {};
++          let pipelineError: PipelineError | null = null;
++          const sexualIntentStartTime = Date.now();
+           try {
+             const sexualDecision = await evaluateSexualIntent(messageText);
++            const sexualIntentLatency = Date.now() - sexualIntentStartTime;
+             if (sexualDecision.action !== 'allow') {
+               const now = new Date().toISOString();
+ 
+@@ -440,6 +451,15 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
+                 reason: sexualDecision.reason,
+                 sent,
+               });
++
++              // Store sexual intent in trace even for blocked messages
++              trace.sexualIntent = {
++                action: sexualDecision.action,
++                confidence: sexualDecision.confidence,
++                reason: sexualDecision.reason,
++                modelUsed: sexualDecision.modelUsed,
++                latencyMs: sexualIntentLatency,
++              };
++
++              // Update the outbound interaction with pipeline_trace
++              try {
++                db.prepare(`
++                  UPDATE instagram_interactions
++                  SET pipeline_trace = ?
++                  WHERE id = ?
++                `).run(JSON.stringify(trace), outboundId);
++              } catch (traceErr) {
++                console.error('[Instagram Webhook] Failed to store sexual intent trace:', traceErr);
++              }
++
+               return;
+             }
++
++            // Store sexual intent result even when allowing (for transparency)
++            trace.sexualIntent = {
++              action: 'allow',
++              confidence: sexualDecision.confidence,
++              reason: sexualDecision.reason,
++              modelUsed: sexualDecision.modelUsed,
++              latencyMs: sexualIntentLatency,
++            };
+           } catch (intentErr) {
+             console.error('[Instagram Webhook] Sexual intent classification failed, continuing normal flow:', intentErr);
++            trace.sexualIntent = {
++              action: 'allow',
++              confidence: 0,
++              reason: `Classification error: ${intentErr?.message || String(intentErr)}`,
++              modelUsed: 'error',
++              latencyMs: Date.now() - sexualIntentStartTime,
++            };
+           }
+ 
+           // Context Service — analyze message for intent, model routing, and conversation history
+           const contextService = new InstagramContextService(db);
+           let analysis;
+-          const trace: Partial<PipelineTrace> = {};
+-          let pipelineError: PipelineError | null = null;
+ 
+           try {
+             analysis = contextService.analyzeMessage(senderId, messageText);

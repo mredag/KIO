@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import AdminLayout from '../../../layouts/AdminLayout';
 import { GlassCard } from '../../../components/mc/GlassCard';
-import { useTags, useCreateTag, useUpdateTag, useDeleteTag, useCustomFields, useCreateCustomField, useDeleteCustomField } from '../../../hooks/useTagsApi';
+import { useTags, useCreateTag, useDeleteTag, useCustomFields, useCreateCustomField, useDeleteCustomField } from '../../../hooks/useTagsApi';
 
 const PRESET_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'];
 

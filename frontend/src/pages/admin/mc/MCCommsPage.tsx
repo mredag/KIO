@@ -366,7 +366,7 @@ function BoardDetailView({
   const { data: boardData, isLoading } = useBoard(boardId);
   const { data: memoryData } = useSharedMemory({ board_id: boardId });
   const { data: msgData } = useCommsMessages({ board_id: boardId, limit: 20 });
-  const { data: activityData } = useBoardActivity(boardId);
+  const { data: _activityData } = useBoardActivity(boardId);
   const deleteMemory = useDeleteMemory();
 
   // SSE for real-time updates

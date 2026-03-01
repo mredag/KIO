@@ -23,7 +23,7 @@ describe('Feature: mission-control-premium-ui', () => {
           }),
           (config) => {
             const serialized = serializeAgentConfig(config);
-            const parsed = parseAgentConfig(serialized);
+            const parsed = parseAgentConfig(serialized as unknown as Record<string, unknown>);
             expect(parsed.model).toBe(config.model);
             expect(parsed.provider).toBe(config.provider);
             expect(parsed.capabilities).toBe(config.capabilities);

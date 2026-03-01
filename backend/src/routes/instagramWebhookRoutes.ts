@@ -11,6 +11,7 @@ import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
+import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
@@ -81,6 +82,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   // Track recently processed message IDs to avoid duplicate AI responses.
   const recentMessageIds = new Map<string, number>(); // mid → timestamp
   const DEDUP_WINDOW_MS = 60_000; // ignore duplicate within 60s
+  const SEXUAL_BLOCK_MESSAGE = 'Bu konuda yardımcı olamam. Lütfen uygun bir dille yazın.';
+  const SEXUAL_RETRY_MESSAGE = 'Tekrar eder misiniz? Anlayamadım...';
 
   /**
    * Fetch Instagram user profile (name) via Graph API and upsert into instagram_customers.
@@ -222,6 +225,22 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
       await new Promise(r => setTimeout(r, pollInterval));
     }
     return null;
+  }
+
+  async function sendInstagramText(apiKey: string, recipientId: string, message: string): Promise<boolean> {
+    try {
+      const sendRes = await fetch('http://localhost:3001/api/integrations/instagram/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ recipientId, message }),
+      });
+      return sendRes.ok;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -370,6 +389,65 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
           const API_KEY = process.env.N8N_API_KEY || ''; // legacy env var name
           const startTime = Date.now();
+
+          // Safety filter (AI intent classification) — replaces hard regex rules
+          // Flow:
+          // - >85% sexual => block reply + stop pipeline
+          // - 70-85% => retry prompt + stop pipeline
+          // - <70% => continue normal DM flow
+          try {
+            const sexualDecision = await evaluateSexualIntent(messageText);
+            if (sexualDecision.action !== 'allow') {
+              const now = new Date().toISOString();
+
+              // Ensure customer exists before logging interaction rows
+              db.prepare(`
+                INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
+                VALUES (?, 0, ?, ?)
+                ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
+              `).run(senderId, now, now);
+
+              const inboundId = randomUUID();
+              db.prepare(`
+                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, created_at)
+                VALUES (?, ?, 'inbound', ?, ?, ?)
+              `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, now);
+
+              const replyText = sexualDecision.action === 'block_message'
+                ? SEXUAL_BLOCK_MESSAGE
+                : SEXUAL_RETRY_MESSAGE;
+              const outboundIntent = sexualDecision.action === 'block_message'
+                ? 'security_block'
+                : 'retry_question';
+
+              const sent = await sendInstagramText(API_KEY, senderId, replyText);
+
+              const outboundId = randomUUID();
+              db.prepare(`
+                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, created_at)
+                VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?)
+              `).run(
+                outboundId,
+                senderId,
+                replyText,
+                outboundIntent,
+                replyText,
+                sexualDecision.modelUsed,
+                new Date().toISOString(),
+              );
+
+              console.log('[Instagram Webhook] Sexual intent filter triggered:', {
+                senderId,
+                action: sexualDecision.action,
+                confidence: Number((sexualDecision.confidence * 100).toFixed(1)),
+                reason: sexualDecision.reason,
+                sent,
+              });
+              return;
+            }
+          } catch (intentErr) {
+            console.error('[Instagram Webhook] Sexual intent classification failed, continuing normal flow:', intentErr);
+          }
 
           // Context Service — analyze message for intent, model routing, and conversation history
           const contextService = new InstagramContextService(db);

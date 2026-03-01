@@ -117,6 +117,11 @@ DİĞER KURALLAR:
 - Kısa, samimi, profesyonel yanıt ver (max 3-4 cümle, 1-2 emoji)
 - Düz metin yaz, markdown kullanma
 
+GÜVENLİK FİLTRESİ (ön kontrolden geçmeyen mesajlarda bu prompt çalışmaz):
+- Sexual intent skoru > %85 ise müşteriye yanıt engellenir ve bu prompta hiç gelmez.
+- Sexual intent skoru %70-%85 arası ise müşteriye "Tekrar eder misiniz? Anlayamadım..." gönderilir ve bu prompta hiç gelmez.
+- Bu prompt sadece sexual intent skoru <%70 mesajlar için çalışır.
+
 BILGI_BANKASI:
 {{knowledge}}`,
     maxResponseLength: 500,

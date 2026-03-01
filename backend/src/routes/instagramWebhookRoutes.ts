@@ -33,6 +33,17 @@ export interface PipelineTrace {
   modelTier: 'light' | 'standard' | 'advanced';
   modelId: string;
   tierReason: string;
+  // Conversation history (for debugging context issues)
+  conversationHistory?: {
+    messageCount: number;
+    messages: Array<{
+      direction: 'inbound' | 'outbound';
+      text: string;
+      timestamp: string;
+      relativeTime: string;
+    }>;
+    formattedForAI: string;
+  };
   knowledgeCategoriesFetched: string[];
   knowledgeFetchStatus: 'success' | 'fail' | 'skipped';
   knowledgeEntriesCount: number;
@@ -513,7 +524,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           let analysis;
 
           try {
-            analysis = contextService.analyzeMessage(senderId, messageText);
+            analysis = await contextService.analyzeMessage(senderId, messageText);
             // Initialize trace from analysis
             trace.intentCategories = analysis.intentCategories;
             trace.matchedKeywords = analysis.matchedKeywords;
@@ -521,6 +532,18 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             trace.modelId = analysis.modelId;
             trace.tierReason = analysis.tierReason;
             trace.isNewCustomer = analysis.isNewCustomer;
+            
+            // Add conversation history to trace for debugging
+            trace.conversationHistory = {
+              messageCount: analysis.conversationHistory.length,
+              messages: analysis.conversationHistory.map(entry => ({
+                direction: entry.direction,
+                text: entry.messageText.substring(0, 100), // Truncate for trace
+                timestamp: entry.createdAt,
+                relativeTime: entry.relativeTime,
+              })),
+              formattedForAI: analysis.formattedHistory.substring(0, 500), // Preview
+            };
           } catch (contextErr: any) {
             // Context service error — use defaults and record error
             analysis = {
@@ -547,6 +570,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               partialTrace: { ...trace },
             };
             console.error('[Instagram Webhook] Context service error (using defaults):', contextErr);
+            // Continue with defaults - don't bail out
           }
 
           // Log inbound message to DB FIRST — so conversation history is available
@@ -561,10 +585,11 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             `).run(senderId, now, now);
 
             const inboundId = randomUUID();
+            const intentStr = analysis?.intentCategories?.join(',') || 'unknown';
             db.prepare(`
               INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
               VALUES (?, ?, 'inbound', ?, ?, ?, ?)
-            `).run(inboundId, senderId, messageText, analysis.intentCategories.join(','), executionId, now);
+            `).run(inboundId, senderId, messageText, intentStr, executionId, now);
             console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
           } catch (inboundLogErr) {
             console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);

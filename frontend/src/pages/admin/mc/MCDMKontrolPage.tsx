@@ -262,6 +262,48 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
           </span>
         </div>
 
+        {/* Konuşma Geçmişi */}
+        {trace.conversationHistory && (
+          <div className="flex items-center gap-2">
+            <StepIcon status={trace.conversationHistory.messageCount > 0 ? 'success' : 'pending'} />
+            <span className="text-xs text-gray-400">Konuşma Geçmişi</span>
+            <span className="text-[10px] text-gray-500 ml-auto">
+              {trace.conversationHistory.messageCount > 0 ? (
+                <span className="font-mono">{trace.conversationHistory.messageCount} mesaj</span>
+              ) : (
+                <span className="italic text-gray-600">yok</span>
+              )}
+            </span>
+          </div>
+        )}
+        {trace.conversationHistory && trace.conversationHistory.messageCount > 0 && (
+          <div className="pl-7 space-y-1 mt-1">
+            {trace.conversationHistory.messages.map((msg: any, i: number) => (
+              <div key={i} className="text-[10px] flex items-start gap-2">
+                <span className={`px-1.5 py-0.5 rounded font-mono ${
+                  msg.direction === 'inbound' 
+                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
+                    : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                }`}>
+                  {msg.direction === 'inbound' ? '→' : '←'}
+                </span>
+                <span className="text-gray-500 flex-1">{msg.text}</span>
+                <span className="text-gray-600 text-[9px]">{msg.relativeTime}</span>
+              </div>
+            ))}
+            {trace.conversationHistory.formattedForAI && (
+              <details className="mt-2">
+                <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-400">
+                  AI'ya gönderilen format
+                </summary>
+                <pre className="mt-1 text-[9px] text-gray-600 bg-black/20 p-2 rounded overflow-x-auto">
+                  {trace.conversationHistory.formattedForAI}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+
         {/* OpenClaw Gönderim / Direkt Yanıt */}
         <div className="flex items-center gap-2">
           <StepIcon status={trace.directResponse?.used ? 'success' : getStepStatus(trace, 'openclaw')} />

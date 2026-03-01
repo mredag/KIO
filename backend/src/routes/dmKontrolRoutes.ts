@@ -502,7 +502,7 @@ router.post('/preview-routing', async (req: Request, res: Response) => {
     // Use InstagramContextService for analysis (dynamic import for ESM compat)
     const { InstagramContextService } = await import('../services/InstagramContextService.js');
     const contextService = new InstagramContextService(db);
-    const analysis = contextService.analyzeMessage(senderId, message);
+    const analysis = await contextService.analyzeMessage(senderId, message);
 
     const config = _pipelineConfig.getConfig();
     const wouldUseDirect = _pipelineConfig.shouldUseDirectResponse(analysis.modelTier);

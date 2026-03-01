@@ -130,12 +130,12 @@ export class InstagramContextService {
     this.db = db;
   }
 
-  analyzeMessage(senderId: string, messageText: string): MessageAnalysis {
+  async analyzeMessage(senderId: string, messageText: string): Promise<MessageAnalysis> {
       try {
         const conversationHistory = this.getConversationHistory(senderId);
         const totalInteractions = this.getTotalInteractionCount(senderId);
         const formattedHistory = this.formatConversationHistory(conversationHistory);
-        const intentResult = this.detectIntentWithContext(messageText, conversationHistory);
+        const intentResult = await this.detectIntentWithContextAI(messageText, conversationHistory);
         const { tier: modelTier, modelId, reason: tierReason } = this.classifyModelTier(messageText, intentResult.categories);
         const isNewCustomer = totalInteractions === 0;
 
@@ -167,9 +167,9 @@ export class InstagramContextService {
     }
 
 
-  getConversationHistory(senderId: string, limit: number = 10): ConversationEntry[] {
+  getConversationHistory(senderId: string, limit: number = 20): ConversationEntry[] {
     try {
-      // Only fetch messages from the last 24 hours — older context wastes tokens
+      // Fetch messages from the last 24 hours — enough context for follow-ups
       const rows = this.db.prepare(`
         SELECT direction, message_text, created_at
         FROM instagram_interactions
@@ -253,7 +253,80 @@ export class InstagramContextService {
   }
 
 
-  detectIntent(messageText: string): IntentResult {
+  /**
+   * AI-powered intent detection using GPT-4o-mini.
+   * Falls back to keyword matching if API call fails.
+   */
+  async detectIntentAI(messageText: string): Promise<IntentResult> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      console.warn('[InstagramContextService] No API key — falling back to keyword matching');
+      return this.detectIntentKeywords(messageText);
+    }
+
+    try {
+      const prompt = `Müşteri mesajını analiz et ve hangi kategorilere ait olduğunu belirle.
+
+Kategoriler:
+- services: Hizmetler (masaj, spa, fitness, havuz, kurslar, PT, üyelik)
+- pricing: Fiyat bilgisi (ne kadar, ücret, fiyat, kampanya)
+- hours: Çalışma saatleri, müsaitlik, açık/kapalı, ne zaman (ÖNEMLİ: "müsait mi", "açık mı", "gelebilir miyim", "saat kaçta" gibi sorular HOURS kategorisidir)
+- policies: Kurallar, iptal, ödeme, yaş sınırı, getirmesi gerekenler
+- contact: İletişim, adres, telefon, konum, nerede
+- faq: Genel sorular, randevu nasıl alınır, terapist bilgisi
+
+Müşteri mesajı: "${messageText}"
+
+SADECE JSON yanıt ver, başka hiçbir şey yazma:
+{"categories": ["kategori1", "kategori2"], "confidence": 0.95}
+
+Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confidence": 0.5}`;
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://spa-kiosk.local',
+          'X-Title': 'SPA Intent Detection'
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 100,
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenRouter API error: ${response.status}`);
+      }
+
+      const data = await response.json() as any;
+      const content = data.choices?.[0]?.message?.content?.trim();
+      
+      if (!content) {
+        throw new Error('Empty response from API');
+      }
+
+      const parsed = JSON.parse(content);
+      const categories = Array.isArray(parsed.categories) ? parsed.categories : ['general', 'faq'];
+
+      // Extract keywords from the original message for backward compatibility
+      const keywords = this.extractKeywords(messageText);
+
+      return { categories, keywords };
+    } catch (error) {
+      console.error('[InstagramContextService] AI intent detection failed:', error);
+      console.log('[InstagramContextService] Falling back to keyword matching for message:', messageText.substring(0, 50));
+      return this.detectIntentKeywords(messageText);
+    }
+  }
+
+  /**
+   * Original keyword-based intent detection (fallback).
+   */
+  detectIntentKeywords(messageText: string): IntentResult {
     const normalized = normalizeTurkish(messageText.toLowerCase().trim());
     const matchedCategories: Set<string> = new Set();
     const matchedKeywords: string[] = [];
@@ -278,10 +351,96 @@ export class InstagramContextService {
   }
 
   /**
+   * Extract matched keywords from message (for backward compatibility).
+   */
+  private extractKeywords(messageText: string): string[] {
+    const normalized = normalizeTurkish(messageText.toLowerCase().trim());
+    const matched: string[] = [];
+
+    for (const keywords of Object.values(KEYWORD_CATEGORY_MAP)) {
+      for (const keyword of keywords) {
+        if (normalized.includes(keyword)) {
+          matched.push(keyword);
+        }
+      }
+    }
+
+    return matched;
+  }
+
+  /**
+   * Synchronous wrapper for backward compatibility.
+   * @deprecated Use detectIntentAI() instead for better accuracy.
+   */
+  detectIntent(messageText: string): IntentResult {
+    return this.detectIntentKeywords(messageText);
+  }
+
+  /**
+   * Context-aware intent detection with AI: merges current message intent with
+   * recent conversation context. Handles follow-up messages like
+   * "ücret nedir?" after "taekwondo kursu varmı?" by carrying forward
+   * topic categories from the last 3 inbound messages (within 10 minutes).
+   * 
+   * Uses AI-powered intent detection for better accuracy.
+   */
+  async detectIntentWithContextAI(messageText: string, history: ConversationEntry[]): Promise<IntentResult> {
+    const currentIntent = await this.detectIntentAI(messageText);
+
+    // Follow-up detection: if current message has a "modifier" category
+    // (pricing, hours, contact) but no "topic" category (services),
+    // check recent inbound messages for topic context.
+    const MODIFIER_CATEGORIES = new Set(['pricing', 'hours', 'contact', 'policies']);
+    const TOPIC_CATEGORIES = new Set(['services']);
+
+    const hasModifier = currentIntent.categories.some(c => MODIFIER_CATEGORIES.has(c));
+    const hasTopic = currentIntent.categories.some(c => TOPIC_CATEGORIES.has(c));
+
+    // Only enrich if we have a modifier without a topic (follow-up pattern)
+    if (!hasModifier || hasTopic) {
+      return currentIntent;
+    }
+
+    // Look at last 3 inbound messages within 10 minutes for topic context
+    const recentInbound = history
+      .filter(e => e.direction === 'inbound')
+      .slice(-3)
+      .filter(e => {
+        const msgTime = new Date(e.createdAt).getTime();
+        return (Date.now() - msgTime) < 10 * 60 * 1000; // 10 minutes
+      });
+
+    const contextCategories = new Set(currentIntent.categories);
+    const contextKeywords = [...currentIntent.keywords];
+
+    for (const entry of recentInbound) {
+      const historyIntent = await this.detectIntentAI(entry.messageText);
+      for (const cat of historyIntent.categories) {
+        if (TOPIC_CATEGORIES.has(cat) && !contextCategories.has(cat)) {
+          contextCategories.add(cat);
+          contextKeywords.push(...historyIntent.keywords.filter(k => !contextKeywords.includes(k)));
+        }
+      }
+    }
+
+    if (contextCategories.size > currentIntent.categories.length) {
+      console.log('[InstagramContextService] Follow-up detected: enriched categories %j → %j',
+        currentIntent.categories, [...contextCategories]);
+    }
+
+    return {
+      categories: [...contextCategories],
+      keywords: contextKeywords,
+    };
+  }
+
+  /**
    * Context-aware intent detection: merges current message intent with
    * recent conversation context. Handles follow-up messages like
    * "ücret nedir?" after "taekwondo kursu varmı?" by carrying forward
    * topic categories from the last 3 inbound messages (within 10 minutes).
+   * 
+   * @deprecated Use detectIntentWithContextAI() for better accuracy.
    */
   detectIntentWithContext(messageText: string, history: ConversationEntry[]): IntentResult {
     const currentIntent = this.detectIntent(messageText);

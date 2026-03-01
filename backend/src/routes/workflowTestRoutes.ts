@@ -187,7 +187,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       }
 
       // ═══ STAGE 1: Context Analysis (same as webhook) ═══
-      const analysis = contextService.analyzeMessage(senderId, text);
+      const analysis = await contextService.analyzeMessage(senderId, text);
 
       // ═══ STAGE 2: Knowledge Fetch + Format (same as webhook) ═══
       // Always include 'contact' — phone/address are in system prompt and fallback

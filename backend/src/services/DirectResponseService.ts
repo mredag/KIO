@@ -53,15 +53,32 @@ export class DirectResponseService {
 
     const startTime = Date.now();
 
-    // Build user prompt — minimal, just the customer message + context
+    // Build ENHANCED system prompt with conversation history at the TOP
+    // This makes the AI more aware of context before reading the customer message
+    const systemParts = [];
+    if (conversationHistory) {
+      console.log('[DirectResponse] Conversation history length:', conversationHistory.length, 'chars');
+      console.log('[DirectResponse] History preview:', conversationHistory.substring(0, 200));
+      systemParts.push(`═══════════════════════════════════════════════════════════════`);
+      systemParts.push(`KONUŞMA GEÇMİŞİ (SON MESAJLAR):`);
+      systemParts.push(`═══════════════════════════════════════════════════════════════`);
+      systemParts.push(conversationHistory);
+      systemParts.push('');
+      systemParts.push(`ŞİMDİ müşteri yeni bir mesaj gönderdi. Yukarıdaki konuşma geçmişini KULLAN.`);
+      systemParts.push(`═══════════════════════════════════════════════════════════════`);
+      systemParts.push('');
+    } else {
+      console.log('[DirectResponse] NO conversation history provided');
+    }
+    systemParts.push(systemPrompt);
+    const enhancedSystemPrompt = systemParts.join('\n');
+
+    // Build user prompt — just the customer message + summary
     const userParts = [
       `Müşteri mesajı: ${customerMessage}`,
     ];
     if (customerSummary) {
       userParts.push(`\nMüşteri: ${customerSummary}`);
-    }
-    if (conversationHistory) {
-      userParts.push(`\nSon konuşma:\n${conversationHistory}`);
     }
     const userPrompt = userParts.join('');
 
@@ -77,7 +94,7 @@ export class DirectResponseService {
         body: JSON.stringify({
           model: tierConfig.modelId,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: enhancedSystemPrompt },
             { role: 'user', content: userPrompt },
           ],
           temperature: tierConfig.temperature,
@@ -102,7 +119,7 @@ export class DirectResponseService {
       const content = data?.choices?.[0]?.message?.content?.trim() || '';
 
       const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokensEstimated = estimateTokens(systemPrompt + userPrompt) + estimateTokens(content);
+      const tokensEstimated = estimateTokens(enhancedSystemPrompt + userPrompt) + estimateTokens(content);
 
       console.log('[DirectResponse] Generated in %dms via %s (%d chars)',
         latencyMs, tierConfig.modelId, content.length);

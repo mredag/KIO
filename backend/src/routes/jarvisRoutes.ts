@@ -9,10 +9,16 @@ import { JarvisSSEManager } from '../services/JarvisSSEManager.js';
 import { DataBridgeService } from '../services/DataBridgeService.js';
 import { checkApprovalGate, extractConfidence } from './missionControlRoutes.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
+import { HardwareWatchdogService } from '../services/HardwareWatchdogService.js';
 
 const OPENCLAW_SESSIONS_DIR = join(homedir(), '.openclaw', 'agents', 'main', 'sessions');
 
 let _db: Database.Database | null = null;
+let _hardwareWatchdog: HardwareWatchdogService | null = null;
+
+export function setJarvisHardwareWatchdog(service: HardwareWatchdogService): void {
+  _hardwareWatchdog = service;
+}
 
 export function createJarvisRoutes(db: Database.Database) {
   _db = db;
@@ -670,6 +676,68 @@ function buildSystemContext(userMessage: string): string {
       }
     } catch (err: any) {
       console.warn('[Jarvis] Failed to fetch approval context:', err.message);
+    }
+  }
+
+  // Hardware / system health context
+  if (msg.match(/hardware|donanım|sıcaklık|temp|ram|memory|bellek|disk|fan|cpu|load|yük|uptime|ssd|health|sağlık/)) {
+    try {
+      if (_hardwareWatchdog) {
+        const snap = _hardwareWatchdog.collectSnapshot();
+        parts.push('## 🖥️ Donanım Durumu (Canlı)');
+        parts.push(`- Platform: ${snap.platform}`);
+        parts.push(`- Node: ${snap.nodeVersion}`);
+        parts.push(`- Hostname: ${snap.network.hostname} (${snap.network.interfaces.map(i => `${i.name}: ${i.ip}`).join(', ')})`);
+        parts.push(`- Uptime: ${snap.uptime.formatted}`);
+        parts.push('');
+        parts.push('### CPU');
+        parts.push(`  - Sıcaklık: ${snap.cpu.tempCelsius !== null ? snap.cpu.tempCelsius + '°C' : 'okunamadı'}`);
+        parts.push(`  - Yük (1m/5m/15m): ${snap.cpu.load1m} / ${snap.cpu.load5m} / ${snap.cpu.load15m}`);
+        parts.push(`  - Çekirdek: ${snap.cpu.cores}, Yük %: ${snap.cpu.loadPercent}`);
+        parts.push('');
+        parts.push('### Bellek (RAM)');
+        parts.push(`  - Toplam: ${snap.memory.totalMB}MB`);
+        parts.push(`  - Kullanılan: ${snap.memory.usedMB}MB (%${snap.memory.usedPercent})`);
+        parts.push(`  - Boş: ${snap.memory.freeMB}MB`);
+        parts.push('');
+        parts.push('### Disk');
+        parts.push(`  - Yol: ${snap.disk.path}`);
+        parts.push(`  - Toplam: ${snap.disk.totalGB}GB`);
+        parts.push(`  - Kullanılan: ${snap.disk.usedGB}GB (%${snap.disk.usedPercent})`);
+        parts.push(`  - Boş: ${snap.disk.freeGB}GB`);
+        if (snap.fan.driverLoaded) {
+          parts.push('');
+          parts.push('### Fan');
+          parts.push(`  - RPM: ${snap.fan.rpm ?? 'okunamadı'}`);
+          parts.push(`  - Durum: ${snap.fan.state ?? 'bilinmiyor'} (0=kapalı, 1-4=kademe)`);
+          parts.push(`  - Sürücü: yüklü ✅`);
+        } else {
+          parts.push('');
+          parts.push('### Fan: Sürücü yüklü değil (Windows veya fan overlay eksik)');
+        }
+
+        // Recent alerts
+        const recentAlerts = _hardwareWatchdog.getAlertHistory(5);
+        if (recentAlerts.length > 0) {
+          parts.push('');
+          parts.push('### Son Donanım Uyarıları');
+          recentAlerts.forEach((a: any) => parts.push(`  - ${a.message} (${a.created_at})`));
+        }
+
+        // Thresholds
+        const cfg = _hardwareWatchdog.getConfig();
+        parts.push('');
+        parts.push('### Eşik Değerleri');
+        parts.push(`  - CPU kritik: ${cfg.thresholds.cpuTempCritical}°C, uyarı: ${cfg.thresholds.cpuTempWarning}°C`);
+        parts.push(`  - RAM: %${cfg.thresholds.ramUsedPercent}`);
+        parts.push(`  - Disk: %${cfg.thresholds.diskUsedPercent}`);
+        parts.push(`  - Yük/çekirdek: ${cfg.thresholds.loadPerCore}`);
+        parts.push(`  - Fan min RPM: ${cfg.thresholds.fanRpmMin}`);
+      } else {
+        parts.push('## 🖥️ Donanım İzleyici: Başlatılmamış');
+      }
+    } catch (err: any) {
+      console.warn('[Jarvis] Failed to fetch hardware context:', err.message);
     }
   }
 

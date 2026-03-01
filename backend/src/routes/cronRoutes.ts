@@ -207,6 +207,68 @@ export function createCronRoutes(db: Database.Database): Router {
     }];
   });
 
+  // MorningBriefing provider
+  registerCronProvider(() => {
+    const briefCfg = (() => {
+      try {
+        const row = db.prepare(`SELECT conditions FROM mc_policies WHERE id = 'morning_briefing_config'`).get() as any;
+        return row?.conditions ? JSON.parse(row.conditions) : {};
+      } catch { return {}; }
+    })();
+
+    const lastBriefing = db.prepare(`
+      SELECT message, created_at FROM mc_events
+      WHERE event_type = 'briefing_sent' AND entity_type = 'system'
+      ORDER BY created_at DESC LIMIT 1
+    `).get() as any;
+
+    return [{
+      id: 'morning-briefing', name: 'Sabah Brifing',
+      schedule: briefCfg.cronSchedule || '0 9 * * *',
+      timezone: briefCfg.timezone || 'Europe/Istanbul', category: 'ai',
+      status: briefCfg.enabled !== false ? 'active' : 'stopped',
+      description: 'Günlük DM özeti Telegram ile gönderir (09:00)',
+      lastRunAt: lastBriefing?.created_at || null,
+      lastRunStatus: lastBriefing ? 'success' : 'unknown',
+      lastRunDetail: lastBriefing?.message || null,
+      nextRunAt: getNextRun(briefCfg.cronSchedule || '0 9 * * *', briefCfg.timezone || 'Europe/Istanbul'),
+      manualTrigger: '/api/mc/briefing/send',
+      configEndpoint: '/api/mc/briefing/config',
+      canToggle: true, canTrigger: true,
+    }];
+  });
+
+  // HardwareWatchdog provider
+  registerCronProvider(() => {
+    const hwCfg = (() => {
+      try {
+        const row = db.prepare(`SELECT conditions FROM mc_policies WHERE id = 'hardware_watchdog_config'`).get() as any;
+        return row?.conditions ? JSON.parse(row.conditions) : {};
+      } catch { return {}; }
+    })();
+
+    const lastCheck = db.prepare(`
+      SELECT message, created_at FROM mc_events
+      WHERE entity_type = 'hardware' AND event_type = 'hardware_check'
+      ORDER BY created_at DESC LIMIT 1
+    `).get() as any;
+
+    return [{
+      id: 'hardware-watchdog', name: 'Donanım İzleyici',
+      schedule: hwCfg.cronSchedule || '*/5 * * * *',
+      timezone: hwCfg.timezone || 'Europe/Istanbul', category: 'system',
+      status: hwCfg.enabled !== false ? 'active' : 'stopped',
+      description: 'CPU sıcaklık, RAM, disk, fan, yük izleme (5dk)',
+      lastRunAt: lastCheck?.created_at || null,
+      lastRunStatus: lastCheck ? 'success' : 'unknown',
+      lastRunDetail: lastCheck?.message || null,
+      nextRunAt: getNextRun(hwCfg.cronSchedule || '*/5 * * * *', hwCfg.timezone || 'Europe/Istanbul'),
+      manualTrigger: '/api/mc/hardware/check',
+      configEndpoint: '/api/mc/hardware/config',
+      canToggle: true, canTrigger: true,
+    }];
+  });
+
   // MCScheduler provider
   registerCronProvider(() => [{
     id: 'mc-scheduler-dispatch', name: 'İş Dağıtıcı',

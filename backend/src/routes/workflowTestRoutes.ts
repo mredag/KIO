@@ -8,7 +8,7 @@ import { DirectResponseService } from '../services/DirectResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
-import { DMKnowledgeRerankerService } from '../services/DMKnowledgeRerankerService.js';
+import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -202,6 +202,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const API_KEY = process.env.N8N_API_KEY || '';
       let knowledgeContext = '';
       let knowledgeEntriesCount = 0;
+      let selectedEvidence = '';
       let semanticRetrievalTrace = {
         enabled: true,
         strategy: 'sparse_tfidf_chargram' as const,
@@ -258,6 +259,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           maxSelections: 3,
         });
         semanticRerankTrace = rerankResult.trace;
+        selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
 
         if (rerankResult.selectedCandidates.length > 0) {
           const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
@@ -334,6 +336,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const directResult = await directService.generate({
         customerMessage: text,
         knowledgeContext: formattedKnowledge,
+        selectedEvidence,
         conversationHistory: analysis.formattedHistory,
         followUpHint: analysis.followUpHint,
         responseDirective: analysis.responseDirective,

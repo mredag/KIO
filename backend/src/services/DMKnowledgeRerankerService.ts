@@ -23,6 +23,25 @@ export interface SemanticRerankResult {
   trace: SemanticRerankTrace;
 }
 
+export function formatSelectedEvidenceBlock(candidates: SemanticRetrievalCandidate[]): string {
+  if (candidates.length === 0) {
+    return '';
+  }
+
+  return candidates.map(candidate => {
+    const parts = [
+      `[${candidate.category}] ${candidate.keyName}`,
+      candidate.value,
+    ];
+
+    if (candidate.description) {
+      parts.push(`Aciklama: ${candidate.description}`);
+    }
+
+    return parts.join('\n');
+  }).join('\n\n');
+}
+
 export class DMKnowledgeRerankerService {
   private apiKey: string;
 

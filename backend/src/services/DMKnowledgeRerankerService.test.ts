@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DMKnowledgeRerankerService } from './DMKnowledgeRerankerService.js';
+import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from './DMKnowledgeRerankerService.js';
 import type { SemanticRetrievalCandidate } from './DMKnowledgeRetrievalService.js';
 
 function createCandidate(
@@ -117,5 +117,14 @@ describe('DMKnowledgeRerankerService', () => {
     expect(result.selectedCandidates).toEqual([]);
     expect(result.trace.selectedCount).toBe(0);
     expect(result.trace.rationale).toContain('dogrudan yardim etmiyor');
+  });
+
+  it('formats selected evidence into a compact prompt block', () => {
+    const formatted = formatSelectedEvidenceBlock([
+      createCandidate('c1', 'faq', 'havuz_sicaklik', 0.27, 'Havuz 28-30 derece arasindadir.'),
+    ]);
+
+    expect(formatted).toContain('[faq] havuz_sicaklik');
+    expect(formatted).toContain('Havuz 28-30 derece arasindadir.');
   });
 });

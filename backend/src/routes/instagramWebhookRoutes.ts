@@ -11,7 +11,7 @@ import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
-import { DMKnowledgeRerankerService } from '../services/DMKnowledgeRerankerService.js';
+import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -691,6 +691,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
             let knowledgeContext = '';
             let knowledgeEntriesCount = 0;
+            let selectedEvidence = '';
             trace.semanticRetrieval = {
               enabled: true,
               strategy: 'sparse_tfidf_chargram',
@@ -743,6 +744,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 maxSelections: 3,
               });
               trace.semanticRerank = rerankResult.trace;
+              selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
 
               if (rerankResult.selectedCandidates.length > 0) {
                 const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
@@ -855,6 +857,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               const directResult = await directService.generate({
                 customerMessage: messageText,
                 knowledgeContext: formattedKnowledge,
+                selectedEvidence,
                 conversationHistory: analysis.formattedHistory,
                 followUpHint: analysis.followUpHint,
                 responseDirective: analysis.responseDirective,
@@ -899,6 +902,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 analysis.followUpHint ? `DEVAM EDEN KONU: ${analysis.followUpHint.topicLabel}` : '',
                 analysis.followUpHint ? `BU MESAJI SU NET SORU GIBI ELE AL: ${analysis.followUpHint.rewrittenQuestion}` : '',
                 analysis.followUpHint ? `MUSTERIYE TEKRAR "HANGI HIZMET" DIYE SORMA.` : '',
+                selectedEvidence ? `ONCELIKLI KANIT:` : '',
+                selectedEvidence || '',
+                selectedEvidence ? `ONCE BU SECILMIS KANITTAN YANIT KUR. GEREKIRSE SONRA BILGI BANKASIYLA TAMAMLA.` : '',
                 '',
                 `MUSTERI MESAJI: ${messageText}`,
                 '',

@@ -37,6 +37,7 @@ export class DirectResponseService {
   async generate(params: {
     customerMessage: string;
     knowledgeContext: string;
+    selectedEvidence?: string;
     conversationHistory: string;
     followUpHint?: FollowUpContextHint | null;
     responseDirective?: ResponseDirective;
@@ -45,7 +46,16 @@ export class DirectResponseService {
     tierConfig: DirectResponseTierConfig;
     systemPrompt: string;
   }): Promise<DirectResponseResult> {
-    const { customerMessage, conversationHistory, followUpHint, responseDirective, customerSummary, tierConfig, systemPrompt } = params;
+    const {
+      customerMessage,
+      selectedEvidence,
+      conversationHistory,
+      followUpHint,
+      responseDirective,
+      customerSummary,
+      tierConfig,
+      systemPrompt,
+    } = params;
 
     if (!this.apiKey) {
       return {
@@ -93,6 +103,14 @@ export class DirectResponseService {
       systemParts.push('- Eger verilen bilgiler aktif konu icin net cevap iceriyorsa, konusma gecmisinde daha once "net bilgi veremiyorum" denmis olsa bile bu guncel bilgiyi kullan.');
       systemParts.push('');
     }
+    if (selectedEvidence?.trim()) {
+      console.log('[DirectResponse] Applying selected evidence:', selectedEvidence.substring(0, 160));
+      systemParts.push('ONCELIKLI KANIT:');
+      systemParts.push('- Once bu secilmis kanittaki bilgileri kullan.');
+      systemParts.push('- Genis bilgi baglamini sadece eksik kalan noktayi tamamlamak icin kullan.');
+      systemParts.push(selectedEvidence.trim());
+      systemParts.push('');
+    }
     systemParts.push(systemPrompt);
     const enhancedSystemPrompt = systemParts.join('\n');
 
@@ -107,6 +125,9 @@ export class DirectResponseService {
     if (responseDirective) {
       userParts.push(`\nYanit modu: ${responseDirective.mode}`);
       userParts.push(`\nYanit talimati: ${responseDirective.instruction}`);
+    }
+    if (selectedEvidence?.trim()) {
+      userParts.push('\nOncelikli kanit aktif soruya dogrudan yardim eden secilmis bilgilerdir.');
     }
     if (customerSummary) {
       userParts.push(`\nMüşteri: ${customerSummary}`);

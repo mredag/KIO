@@ -543,6 +543,126 @@ export class InstagramContextService {
     };
   }
 
+  private isModifierOnlyRequest(categories: string[]): boolean {
+    if (categories.length === 0) {
+      return false;
+    }
+
+    const modifierCategories = new Set(['pricing', 'hours', 'contact', 'policies']);
+    return categories.every(category => modifierCategories.has(category));
+  }
+
+  private getLatestCustomerEntry(history: ConversationEntry[]): ConversationEntry | null {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].direction === 'inbound') {
+        return history[i];
+      }
+    }
+
+    return null;
+  }
+
+  private getLatestAssistantEntry(history: ConversationEntry[]): ConversationEntry | null {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].direction === 'outbound') {
+        return history[i];
+      }
+    }
+
+    return null;
+  }
+
+  private shouldAttemptContextRepair(plan: AIContextPlan, history: ConversationEntry[]): boolean {
+    if (plan.followUpHint) {
+      return false;
+    }
+
+    if (!this.isModifierOnlyRequest(plan.categories)) {
+      return false;
+    }
+
+    const latestCustomerEntry = this.getLatestCustomerEntry(history);
+    if (!latestCustomerEntry) {
+      return false;
+    }
+
+    const latestTimestamp = new Date(latestCustomerEntry.createdAt).getTime();
+    if (Number.isNaN(latestTimestamp)) {
+      return false;
+    }
+
+    return (Date.now() - latestTimestamp) <= (2 * 60 * 1000);
+  }
+
+  private async repairImplicitFollowUpAI(messageText: string, history: ConversationEntry[]): Promise<ContextDependency> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const latestCustomerEntry = this.getLatestCustomerEntry(history);
+    if (!apiKey || !latestCustomerEntry) {
+      return DEFAULT_CONTEXT_DEPENDENCY;
+    }
+
+    const latestAssistantEntry = this.getLatestAssistantEntry(history);
+    const prompt = [
+      'Sen kisa takip mesaji cozumleyicisisin.',
+      'Mevcut mesajin bir onceki musteri konusunun devami olup olmadigini belirle.',
+      'Sadece JSON don.',
+      '',
+      'JSON semasi:',
+      '{"dependsOnPriorTopic": true, "topicLabel": "kisa konu etiketi", "sourceMessage": "onceki musteri mesaji", "rationale": "kisa neden"}',
+      'veya',
+      '{"dependsOnPriorTopic": false, "topicLabel": null, "sourceMessage": null, "rationale": "bagimsiz soru"}',
+      '',
+      'Kurallar:',
+      '- Mevcut mesaj yalnizca fiyat/saat/iletisim gibi eksik bir takip sorusuysa ve son musteri mesaji spesifik bir hizmet konu baslattiysa true don.',
+      '- Mevcut mesaj yeni bir hizmet adi getiriyorsa false don.',
+      '- topicLabel, onceki konuyu tanimlayan kisa ve dogal bir hizmet etiketi olsun.',
+      '- sourceMessage, son musteri mesajinin aynisi olsun.',
+      '',
+      'INPUT:',
+      JSON.stringify({
+        currentMessage: messageText,
+        latestCustomerMessage: latestCustomerEntry.messageText,
+        latestAssistantMessage: latestAssistantEntry?.messageText || null,
+      }, null, 2),
+    ].join('\n');
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://spa-kiosk.local',
+          'X-Title': 'SPA Context Repair',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [
+            { role: 'system', content: 'Only return valid JSON.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 180,
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!response.ok) {
+        return DEFAULT_CONTEXT_DEPENDENCY;
+      }
+
+      const data = await response.json() as any;
+      const content = data?.choices?.[0]?.message?.content?.trim();
+      if (!content) {
+        return DEFAULT_CONTEXT_DEPENDENCY;
+      }
+
+      return this.normalizeContextDependency(JSON.parse(this.extractJsonText(content)));
+    } catch {
+      return DEFAULT_CONTEXT_DEPENDENCY;
+    }
+  }
+
   private normalizeResponseDirective(value: unknown): ResponseDirective {
     if (!value || typeof value !== 'object') {
       return DEFAULT_RESPONSE_DIRECTIVE;
@@ -757,6 +877,18 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       }
 
       const plan = this.parseAIContextPlan(content, messageText);
+      if (this.shouldAttemptContextRepair(plan, history)) {
+        const repairedDependency = await this.repairImplicitFollowUpAI(messageText, history);
+        const repairedFollowUpHint = this.buildDerivedFollowUpHint(messageText, repairedDependency);
+        if (repairedFollowUpHint) {
+          plan.followUpHint = repairedFollowUpHint;
+          plan.categories = this.applyContextDependencyToCategories(plan.categories, repairedDependency);
+          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairedDependency);
+          console.log('[InstagramContextService] AI context repair resolved: "%s" -> "%s"',
+            repairedFollowUpHint.sourceMessage,
+            repairedFollowUpHint.rewrittenQuestion);
+        }
+      }
       if (plan.followUpHint) {
         console.log('[InstagramContextService] AI follow-up plan resolved: "%s" -> "%s"',
           plan.followUpHint.sourceMessage,

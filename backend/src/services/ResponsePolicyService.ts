@@ -94,6 +94,13 @@ export interface PolicyValidationContext {
   knowledgeContext: string;
 }
 
+interface DeterministicGroundingResult {
+  valid: boolean;
+  violations: string[];
+  reason: string;
+  latencyMs: number;
+}
+
 export class ResponsePolicyService {
   private apiKey: string;
 
@@ -105,13 +112,10 @@ export class ResponsePolicyService {
    * Validate an agent response against the policy rubric.
    * Two-stage validation:
    * 1. Rule-based check (10 rules — fast, catches obvious violations)
-   * 2. Faithfulness scoring (claim-level grounding — catches hallucination) — TEMPORARILY DISABLED
+   * 2. Deterministic grounding for prices/times/phones (exact-match anti-hallucination)
+   * 3. Selective faithfulness scoring (claim-level grounding) for non-price factual replies
    * 
    * If rule check passes, faithfulness check runs. Both must pass.
-   * 
-   * TEMP FIX: Faithfulness check disabled due to false positives with formatted price lists.
-   * The LLM doing faithfulness verification is too strict and rejects correct KB data.
-   * Rule 8 (FIYAT TUTARSIZLIĞI) already catches price hallucinations.
    */
   async validate(context: PolicyValidationContext, attempt: number = 1): Promise<PolicyValidationResult> {
     if (!this.apiKey) {
@@ -125,27 +129,36 @@ export class ResponsePolicyService {
       return ruleResult;
     }
 
-    // Stage 2: Faithfulness scoring — TEMPORARILY DISABLED
-    // TODO: Re-enable after fixing false positives with formatted price lists
-    // The faithfulness LLM is rejecting correct KB prices due to format variations
-    
-    /* DISABLED CODE:
-    const responseLength = context.agentResponse.trim().length;
-    const hasFactualContent = responseLength > 60;
-    
-    if (!hasFactualContent) {
-      return ruleResult;
+    // Stage 2: Deterministic grounding — exact numeric/phone checks
+    const deterministicResult = this.validateDeterministicGrounding(context);
+    if (!deterministicResult.valid) {
+      return {
+        valid: false,
+        violations: deterministicResult.violations,
+        reason: deterministicResult.reason,
+        modelUsed: 'deterministic-grounding',
+        latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs,
+        tokensEstimated: ruleResult.tokensEstimated,
+        attempt,
+      };
+    }
+
+    // Stage 3: Selective faithfulness — skip price-heavy replies to avoid false positives
+    if (!this.shouldRunFaithfulness(context)) {
+      return {
+        ...ruleResult,
+        latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs,
+      };
     }
 
     const faithResult = await this.validateFaithfulness(context, attempt);
-    
     if (!faithResult.valid) {
       return {
         valid: false,
         violations: [...ruleResult.violations, ...faithResult.violations],
         reason: faithResult.reason,
         modelUsed: faithResult.modelUsed,
-        latencyMs: ruleResult.latencyMs + faithResult.latencyMs,
+        latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs + faithResult.latencyMs,
         tokensEstimated: ruleResult.tokensEstimated + faithResult.tokensEstimated,
         attempt,
       };
@@ -153,13 +166,9 @@ export class ResponsePolicyService {
 
     return {
       ...ruleResult,
-      latencyMs: ruleResult.latencyMs + faithResult.latencyMs,
+      latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs + faithResult.latencyMs,
       tokensEstimated: ruleResult.tokensEstimated + faithResult.tokensEstimated,
     };
-    */
-
-    // Return rule validation result only
-    return ruleResult;
   }
 
   /**
@@ -238,6 +247,117 @@ export class ResponsePolicyService {
       console.error('[PolicyAgent] Network error:', err?.message);
       return { valid: true, violations: [], reason: `network error (fail-open): ${err?.message}`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated: 0, attempt };
     }
+  }
+
+  private normalizeNumericToken(rawValue: string): string {
+    return rawValue.replace(/[^\d]/g, '');
+  }
+
+  private uniqueNormalized(values: string[]): string[] {
+    return [...new Set(values.filter(Boolean))];
+  }
+
+  private extractPriceValues(text: string): string[] {
+    const matches = text.match(/\d[\d.,]*\s*(?:₺|TL|tl|Tl|tL|lira)/g) || [];
+    return this.uniqueNormalized(matches.map(match => this.normalizeNumericToken(match)));
+  }
+
+  private extractTimeValues(text: string): string[] {
+    const matches = text.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || [];
+    return this.uniqueNormalized(matches);
+  }
+
+  private extractPhoneValues(text: string): string[] {
+    const matches = text.match(/(?:\+?90|0)?\d[\d\s.-]{8,}\d/g) || [];
+    return this.uniqueNormalized(matches.map(match => match.replace(/[^\d]/g, '')));
+  }
+
+  private buildInvalidValueViolation(
+    rulePrefix: string,
+    invalidValues: string[],
+    allowedValues: string[],
+  ): string {
+    const invalidSummary = invalidValues.slice(0, 3).join(', ');
+    if (allowedValues.length === 0) {
+      return `${rulePrefix}: Yanitta KB'de hic olmayan deger var (${invalidSummary}).`;
+    }
+
+    const allowedSummary = allowedValues.slice(0, 6).join(', ');
+    return `${rulePrefix}: Yanitta KB'de olmayan deger var (${invalidSummary}). Izinli degerler: ${allowedSummary}`;
+  }
+
+  private validateDeterministicGrounding(context: PolicyValidationContext): DeterministicGroundingResult {
+    const startTime = Date.now();
+    const allowedPrices = this.extractPriceValues(context.knowledgeContext);
+    const allowedTimes = this.extractTimeValues(context.knowledgeContext);
+    const allowedPhones = this.extractPhoneValues(context.knowledgeContext);
+
+    const responsePrices = this.extractPriceValues(context.agentResponse);
+    const responseTimes = this.extractTimeValues(context.agentResponse);
+    const responsePhones = this.extractPhoneValues(context.agentResponse);
+
+    const violations: string[] = [];
+
+    const invalidPrices = responsePrices.filter(value => !allowedPrices.includes(value));
+    if (invalidPrices.length > 0) {
+      violations.push(this.buildInvalidValueViolation('8. FIYAT TUTARSIZLIGI', invalidPrices, allowedPrices));
+    }
+
+    const invalidTimes = responseTimes.filter(value => !allowedTimes.includes(value));
+    if (invalidTimes.length > 0) {
+      violations.push(this.buildInvalidValueViolation('2. UYDURMA BILGI (SAAT)', invalidTimes, allowedTimes));
+    }
+
+    const invalidPhones = responsePhones.filter(value => !allowedPhones.includes(value));
+    if (invalidPhones.length > 0) {
+      violations.push(this.buildInvalidValueViolation('2. UYDURMA BILGI (TELEFON)', invalidPhones, allowedPhones));
+    }
+
+    return {
+      valid: violations.length === 0,
+      violations,
+      reason: violations.length === 0
+        ? 'deterministic grounding passed'
+        : 'Yanitta KB ile eslesmeyen sayisal bilgi var',
+      latencyMs: Date.now() - startTime,
+    };
+  }
+
+  private shouldRunFaithfulness(context: PolicyValidationContext): boolean {
+    const responseLength = context.agentResponse.trim().length;
+    if (responseLength <= 60) {
+      return false;
+    }
+
+    const hasPriceValues = this.extractPriceValues(context.agentResponse).length > 0;
+    if (hasPriceValues) {
+      return false;
+    }
+
+    const hasFactualSignals = this.extractTimeValues(context.agentResponse).length > 0
+      || this.extractPhoneValues(context.agentResponse).length > 0
+      || /\b(?:adres|konum|mahalle|sokak|kat|blok)\b/i.test(context.agentResponse);
+
+    return hasFactualSignals;
+  }
+
+  private buildAllowedFactsHint(knowledgeContext: string): string {
+    const parts: string[] = [];
+    const allowedPrices = this.extractPriceValues(knowledgeContext);
+    const allowedTimes = this.extractTimeValues(knowledgeContext);
+    const allowedPhones = this.extractPhoneValues(knowledgeContext);
+
+    if (allowedPrices.length > 0) {
+      parts.push(`IZINLI FIYAT SAYILARI: ${allowedPrices.join(', ')}`);
+    }
+    if (allowedTimes.length > 0) {
+      parts.push(`IZINLI SAATLER: ${allowedTimes.join(', ')}`);
+    }
+    if (allowedPhones.length > 0) {
+      parts.push(`IZINLI TELEFONLAR: ${allowedPhones.join(', ')}`);
+    }
+
+    return parts.length > 0 ? parts.join('\n') : 'IZINLI SAYISAL BILGI: (ek veri yok)';
   }
 
   /**
@@ -367,6 +487,7 @@ veya
     }
 
     const startTime = Date.now();
+    const allowedFactsHint = this.buildAllowedFactsHint(knowledgeContext);
 
     const systemPrompt = `Sen Eform Spor Merkezi'nin Instagram DM asistanısın. Müşteriye Türkçe yanıt ver.
 
@@ -374,6 +495,7 @@ KRİTİK KURAL — SADECE VERİLEN BİLGİYİ KULLAN:
 - Yanıtındaki HER bilgi (adres, fiyat, saat, hizmet adı, telefon) verilen bilgilerden gelmeli.
 - Verilmeyen hiçbir bilgiyi YAZMA. Bilmiyorsan "Bu konuda bilgi için bizi arayabilirsiniz: 0326 502 58 58" de.
 - Adres, mahalle, sokak, bina adı gibi bilgileri KESİNLİKLE UYDURMA — verilen metni aynen kullan.
+- Aşağıdaki izinli sayısal değerler DIŞINDA fiyat, saat veya telefon YAZMA.
 
 SADECE SORULAN SORUYA CEVAP VER:
 - Müşteri ne sorduysa SADECE onu yanıtla. Sorulmayan bilgiyi PAYLAŞMA.
@@ -393,7 +515,10 @@ DİĞER KURALLAR:
 - "Bilgi bankası", "veri tabanı", "sistem" gibi teknik terimler KULLANMA
 
 VERİLEN BİLGİLER:
-${knowledgeContext || '(veri yok)'}`;
+${knowledgeContext || '(veri yok)'}
+
+SAYISAL GUVENCE:
+${allowedFactsHint}`;
 
     const userPrompt = `Müşteri mesajı: ${customerMessage}
 

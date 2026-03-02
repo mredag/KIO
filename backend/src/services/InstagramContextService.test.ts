@@ -184,6 +184,53 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Aktif konu: taekwondo dersleri.');
   });
 
+  it('uses AI context repair when the planner leaves a modifier-only follow-up underspecified', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(createAiResponse({
+        categories: ['pricing', 'hours'],
+        semanticSignals: ['pricing_inquiry', 'hours_inquiry'],
+        contextDependency: {
+          dependsOnPriorTopic: false,
+          topicLabel: null,
+          sourceMessage: null,
+          rationale: 'Mesaj tek basina belirsiz.',
+        },
+        responseDirective: {
+          mode: 'answer_then_clarify',
+          instruction: 'Bilinen fiyat ve saat bilgisini ver; eksikse netlestir.',
+          rationale: 'Belirsiz mesaj.',
+        },
+        tier: 'standard',
+        tierReason: 'Belirsiz coklu istek',
+      }))
+      .mockResolvedValueOnce(createAiResponse({
+        dependsOnPriorTopic: true,
+        topicLabel: 'taekwondo dersleri',
+        sourceMessage: 'taekwondo dersi varmi',
+        rationale: 'Son musteri mesaji ayni hizmeti tanimliyor.',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'fiyat nedir saat kacta ne zaman',
+      createHistory([
+        { text: 'taekwondo dersi varmi', minutesAgo: 1 },
+        { direction: 'outbound', text: 'Evet, taekwondo derslerimiz mevcut.', minutesAgo: 0.5 },
+      ]),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.categories).toEqual(['services', 'pricing', 'hours']);
+    expect(result.followUpHint).toEqual({
+      topicLabel: 'taekwondo dersleri',
+      rewrittenQuestion: 'taekwondo dersleri icin fiyat nedir saat kacta ne zaman',
+      sourceMessage: 'taekwondo dersi varmi',
+    });
+    expect(result.responseDirective.instruction).toContain('Aktif konu: taekwondo dersleri.');
+  });
+
   it('analyzeMessage sends only recent deduplicated turns to the planner', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
 

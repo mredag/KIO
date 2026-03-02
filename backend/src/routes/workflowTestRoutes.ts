@@ -340,6 +340,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           })),
           formattedForAI: analysis.formattedHistory.substring(0, 500),
           followUpHint: analysis.followUpHint,
+          activeState: analysis.conversationState,
           responseDirective: analysis.responseDirective,
         },
         knowledgeCategoriesFetched: Array.from(kbCategories),
@@ -375,6 +376,12 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, pipeline_trace, model_tier, execution_id, created_at)
         VALUES (?, ?, 'outbound', ?, 'ai_response', ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, directResult.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
+
+      try {
+        contextService.saveConversationState(senderId, text, finalResponse, analysis);
+      } catch (stateErr) {
+        console.error('[Simulator] Failed to update conversation state:', stateErr);
+      }
 
       // Push outbound SSE event to DM Kontrol (same as real webhook)
       try {

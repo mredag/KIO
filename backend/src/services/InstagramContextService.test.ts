@@ -6,6 +6,10 @@ function minutesAgo(minutes: number): string {
   return new Date(Date.now() - (minutes * 60 * 1000)).toISOString();
 }
 
+function minutesFromNow(minutes: number): string {
+  return new Date(Date.now() + (minutes * 60 * 1000)).toISOString();
+}
+
 function createHistory(messages: Array<{ direction?: 'inbound' | 'outbound'; text: string; minutesAgo: number }>): ConversationEntry[] {
   return messages.map(message => ({
     direction: message.direction || 'inbound',
@@ -299,5 +303,87 @@ describe('InstagramContextService AI context planner', () => {
     expect(analysis.conversationHistory).toHaveLength(2);
     expect(analysis.formattedHistory).toContain('cocuklar icin yuzme dersi varmi');
     expect(analysis.formattedHistory).not.toContain('eski soru');
+  });
+
+  it('uses stored conversation state to repair short follow-up messages', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(createAiResponse({
+        categories: ['general'],
+        semanticSignals: ['short_follow_up'],
+        topicSummary: null,
+        contextDependency: {
+          dependsOnPriorTopic: false,
+          topicLabel: null,
+          sourceMessage: null,
+          rationale: 'Mesaj tek basina belirsiz.',
+        },
+        responseDirective: {
+          mode: 'clarify_only',
+          instruction: 'Mesaj kisa ve belirsiz; baglam net degilse netlestir.',
+          rationale: 'Bagimsiz okununca konu belirsiz.',
+        },
+        tier: 'light',
+        tierReason: 'Kisa ve belirsiz takip mesaji',
+      }))
+      .mockResolvedValueOnce(createAiResponse({
+        dependsOnPriorTopic: true,
+        topicLabel: 'reformer pilates',
+        sourceMessage: 'son olarak pilates varmi',
+        rationale: 'Aktif konudaki ders gunu tercihi soruluyor.',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const staleTimestamp = minutesAgo(25);
+    const fakeDb = {
+      prepare(sql: string) {
+        if (sql.includes('ORDER BY created_at DESC')) {
+          return {
+            all: () => [
+              { direction: 'outbound', message_text: 'Evet, reformer pilates derslerimiz mevcut.', created_at: staleTimestamp },
+              { direction: 'inbound', message_text: 'son olarak pilates varmi', created_at: staleTimestamp },
+            ],
+          };
+        }
+
+        if (sql.includes('COUNT(*) as c')) {
+          return { get: () => ({ c: 5 }) };
+        }
+
+        if (sql.includes('FROM dm_conversation_state')) {
+          return {
+            get: () => ({
+              channel: 'instagram',
+              customer_id: 'ig-user',
+              active_topic: 'reformer pilates',
+              active_topic_confidence: 0.9,
+              topic_source_message: 'son olarak pilates varmi',
+              last_question_type: 'service_topic',
+              pending_categories: '["services","pricing"]',
+              last_customer_message: 'son olarak pilates varmi',
+              last_assistant_message: 'Evet, reformer pilates derslerimiz mevcut.',
+              turn_count: 1,
+              expires_at: minutesFromNow(10),
+              created_at: minutesAgo(2),
+              updated_at: minutesAgo(1),
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    } as any;
+
+    const service = new InstagramContextService(fakeDb);
+    const analysis = await service.analyzeMessage('ig-user', 'haftasonu olabilir');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(analysis.followUpHint).toEqual({
+      topicLabel: 'reformer pilates',
+      rewrittenQuestion: 'reformer pilates icin haftasonu olabilir',
+      sourceMessage: 'son olarak pilates varmi',
+    });
+    expect(analysis.activeTopicLabel).toBe('reformer pilates');
+    expect(analysis.conversationState?.repairedFromState).toBe(true);
   });
 });

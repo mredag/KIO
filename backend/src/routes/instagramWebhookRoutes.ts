@@ -49,6 +49,14 @@ export interface PipelineTrace {
       rewrittenQuestion: string;
       sourceMessage: string;
     } | null;
+    activeState?: {
+      activeTopic: string;
+      activeTopicConfidence: number;
+      topicSourceMessage: string | null;
+      expiresAt: string;
+      usedForPlanning: boolean;
+      repairedFromState: boolean;
+    } | null;
     responseDirective?: {
       mode: 'answer_directly' | 'answer_then_clarify' | 'clarify_only';
       instruction: string;
@@ -555,6 +563,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               })),
               formattedForAI: analysis.formattedHistory.substring(0, 500), // Preview
               followUpHint: analysis.followUpHint,
+              activeState: analysis.conversationState,
               responseDirective: analysis.responseDirective,
             };
           } catch (contextErr: any) {
@@ -565,6 +574,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               intentCategories: ['general', 'faq'],
               matchedKeywords: [],
               followUpHint: null,
+              activeTopicLabel: null,
+              conversationState: null,
               responseDirective: {
                 mode: 'answer_directly' as const,
                 instruction: 'Bu mesaji bagimsiz bir soru olarak ele al. Bildigin net bilgiyi dogrudan ver. Gerekirse en fazla bir kisa netlestirme sorusu sor.',
@@ -1023,6 +1034,12 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               console.log('[Instagram Webhook] Interaction logged');
             } catch (logErr) {
               console.error('[Instagram Webhook] Failed to log interaction:', logErr);
+            }
+
+            try {
+              contextService.saveConversationState(senderId, messageText, finalResponse, analysis);
+            } catch (stateErr) {
+              console.error('[Instagram Webhook] Failed to update conversation state:', stateErr);
             }
 
             // Store pipeline trace in DB and push SSE events

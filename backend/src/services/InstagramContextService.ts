@@ -1,4 +1,6 @@
 import Database from 'better-sqlite3';
+import { ConversationStateService } from './ConversationStateService.js';
+import type { ConversationStateRecord } from './ConversationStateService.js';
 
 /**
  * Normalize Turkish diacritical characters to ASCII equivalents.
@@ -97,6 +99,15 @@ export interface MessageAnalysis {
   intentCategories: string[];
   matchedKeywords: string[];  // AI semantic signals (legacy field name kept for compatibility)
   followUpHint: FollowUpContextHint | null;
+  activeTopicLabel: string | null;
+  conversationState: {
+    activeTopic: string;
+    activeTopicConfidence: number;
+    topicSourceMessage: string | null;
+    expiresAt: string;
+    usedForPlanning: boolean;
+    repairedFromState: boolean;
+  } | null;
   responseDirective: ResponseDirective;
   tierReason: string;         // from classifyModelTier
   modelTier: ModelTier;
@@ -108,6 +119,8 @@ export interface MessageAnalysis {
 interface AIContextPlan extends ContextualIntentResult {
   tier: ModelTier;
   tierReason: string;
+  topicSummary: string | null;
+  stateRepairApplied: boolean;
 }
 
 interface ContextDependency {
@@ -172,20 +185,26 @@ export function computeRelativeTime(createdAt: string): string {
 
 export class InstagramContextService {
   private db: Database.Database;
+  private conversationStateService: ConversationStateService;
 
   constructor(db: Database.Database) {
     this.db = db;
+    this.conversationStateService = new ConversationStateService(db);
   }
 
   async analyzeMessage(senderId: string, messageText: string): Promise<MessageAnalysis> {
       try {
         const conversationHistory = this.getRecentContextWindow(this.getConversationHistory(senderId));
+        const conversationState = this.conversationStateService.getState('instagram', senderId);
         const totalInteractions = this.getTotalInteractionCount(senderId);
         const formattedHistory = this.formatConversationHistory(conversationHistory);
-        const contextPlan = await this.planMessageContextAI(messageText, conversationHistory);
+        const contextPlan = await this.planMessageContextAI(messageText, conversationHistory, conversationState);
         const { tier: modelTier, tierReason } = contextPlan;
         const modelId = MODEL_CONFIG[modelTier].modelId;
         const isNewCustomer = totalInteractions === 0;
+        const activeTopicLabel = contextPlan.followUpHint?.topicLabel
+          || contextPlan.topicSummary
+          || (contextPlan.stateRepairApplied ? conversationState?.activeTopic || null : null);
 
         return {
           conversationHistory,
@@ -193,6 +212,15 @@ export class InstagramContextService {
           intentCategories: contextPlan.categories,
           matchedKeywords: contextPlan.keywords,
           followUpHint: contextPlan.followUpHint,
+          activeTopicLabel,
+          conversationState: conversationState ? {
+            activeTopic: conversationState.activeTopic,
+            activeTopicConfidence: conversationState.activeTopicConfidence,
+            topicSourceMessage: conversationState.topicSourceMessage,
+            expiresAt: conversationState.expiresAt,
+            usedForPlanning: true,
+            repairedFromState: contextPlan.stateRepairApplied,
+          } : null,
           responseDirective: contextPlan.responseDirective,
           tierReason,
           modelTier,
@@ -208,6 +236,8 @@ export class InstagramContextService {
           intentCategories: ['general', 'faq'],
           matchedKeywords: [],
           followUpHint: null,
+          activeTopicLabel: null,
+          conversationState: null,
           responseDirective: DEFAULT_RESPONSE_DIRECTIVE,
           tierReason: 'Varsayılan model (hata durumu) → standard',
           modelTier: 'standard',
@@ -217,6 +247,65 @@ export class InstagramContextService {
         };
       }
     }
+
+  saveConversationState(
+    senderId: string,
+    customerMessage: string,
+    assistantResponse: string,
+    analysis: MessageAnalysis,
+  ): void {
+    const activeTopic = analysis.activeTopicLabel?.trim() || null;
+    if (!activeTopic) {
+      this.conversationStateService.clearState('instagram', senderId);
+      return;
+    }
+
+    const confidence = analysis.followUpHint
+      ? 0.95
+      : analysis.conversationState?.repairedFromState
+        ? 0.9
+        : analysis.intentCategories.includes('services')
+          ? 0.82
+          : Math.max(analysis.conversationState?.activeTopicConfidence || 0.7, 0.7);
+
+    const ttlMinutes = analysis.followUpHint ? 15 : 12;
+    const topicSourceMessage = analysis.followUpHint?.sourceMessage
+      || analysis.conversationState?.topicSourceMessage
+      || customerMessage;
+
+    this.conversationStateService.saveState({
+      channel: 'instagram',
+      customerId: senderId,
+      activeTopic,
+      activeTopicConfidence: confidence,
+      topicSourceMessage,
+      lastQuestionType: this.classifyConversationQuestionType(analysis),
+      pendingCategories: analysis.intentCategories,
+      lastCustomerMessage: customerMessage,
+      lastAssistantMessage: assistantResponse,
+      ttlMinutes,
+    });
+  }
+
+  private classifyConversationQuestionType(analysis: MessageAnalysis): string {
+    if (analysis.followUpHint) {
+      return 'follow_up';
+    }
+
+    if (this.isModifierOnlyRequest(analysis.intentCategories)) {
+      return 'modifier_only';
+    }
+
+    if (analysis.intentCategories.includes('services')) {
+      return 'service_topic';
+    }
+
+    if (analysis.intentCategories.length > 1) {
+      return 'multi_intent';
+    }
+
+    return analysis.intentCategories[0] || 'general';
+  }
 
 
   getConversationHistory(senderId: string, limit: number = 20): ConversationEntry[] {
@@ -343,7 +432,11 @@ export class InstagramContextService {
     return recentHistory.slice(-limit);
   }
 
-  private buildContextPlannerPrompt(messageText: string, history: ConversationEntry[]): string {
+  private buildContextPlannerPrompt(
+    messageText: string,
+    history: ConversationEntry[],
+    conversationState: ConversationStateRecord | null,
+  ): string {
     const payload = {
       currentMessage: messageText,
       recentHistory: this.getRecentContextWindow(history).map(entry => ({
@@ -351,6 +444,15 @@ export class InstagramContextService {
         messageText: entry.messageText,
         relativeTime: entry.relativeTime,
       })),
+      activeConversationState: conversationState ? {
+        activeTopic: conversationState.activeTopic,
+        confidence: conversationState.activeTopicConfidence,
+        sourceMessage: conversationState.topicSourceMessage,
+        lastQuestionType: conversationState.lastQuestionType,
+        pendingCategories: conversationState.pendingCategories,
+        lastCustomerMessage: conversationState.lastCustomerMessage,
+        lastAssistantMessage: conversationState.lastAssistantMessage,
+      } : null,
     };
 
     return [
@@ -360,6 +462,7 @@ export class InstagramContextService {
       'Her zaman asagidaki alanlari doldur:',
       '- categories: Yanit icin gereken bilgi kategorileri. Gecerli degerler: services, pricing, hours, policies, contact, faq, general',
       '- semanticSignals: Literal keyword degil, kisa semantik niyet etiketleri',
+      '- topicSummary: Mevcut mesajin asil is konusunu tanimlayan kisa konu etiketi (ornegin "reformer pilates", "masaj hizmeti"). Belirsizse null.',
       '- contextDependency: { dependsOnPriorTopic, topicLabel, sourceMessage, rationale }',
       '- responseDirective.mode: answer_directly, answer_then_clarify, clarify_only',
       '- responseDirective.instruction: Yanit modeline verilecek kisa operasyon talimati',
@@ -369,10 +472,12 @@ export class InstagramContextService {
       '',
       'Zorunlu kurallar:',
       '- En yeni 1-2 mesaj en guclu baglamdir; daha eski mesajlar sadece ayni kisa konusma zincirindeyse dikkate alinmali.',
+      '- activeConversationState varsa bunu siki, kompakt hafiza olarak kullan; ancak yeni mesaj acikca yeni konu aciyorsa eski durumu zorla tasima.',
       '- Konusma gecmisini sadece mevcut mesaj eksik, bagimsiz okunamayan veya acikca onceki konuya referans veren bir devam mesajiysa kullan.',
       '- Eger onceki bir spesifik hizmete dayaniyorsan contextDependency.dependsOnPriorTopic=true olmalidir.',
       '- contextDependency.dependsOnPriorTopic=true ise categories MUTLAKA services icermeli, topicLabel bos olamaz, sourceMessage o baglami kuran onceki musteri mesaji olmalidir.',
       '- Onceki konuyu sadece responseDirective icinde gizli sekilde anlatma; bagimliligi contextDependency alaninda acikca yaz.',
+      '- Mesaj spesifik bir hizmet veya konu belirtiyorsa topicSummary bunu kisa ve dogal sekilde belirtmelidir.',
       '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
       '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',
       '- Mumsen cevaplanabilen kismi cevaplat; sadece gerekli ise sonunda tek bir kisa netlestirme sorusu oner.',
@@ -382,6 +487,7 @@ export class InstagramContextService {
       '{',
       '  "categories": ["services", "pricing", "hours"],',
       '  "semanticSignals": ["recent_follow_up", "topic_specific_info_request"],',
+      '  "topicSummary": "taekwondo dersleri",',
       '  "contextDependency": {',
       '    "dependsOnPriorTopic": true,',
       '    "topicLabel": "taekwondo dersleri",',
@@ -442,6 +548,15 @@ export class InstagramContextService {
       .map(signal => signal.replace(/\s+/g, '_'));
 
     return [...new Set(signals)].slice(0, 8);
+  }
+
+  private normalizeTopicSummary(value: unknown, contextDependency: ContextDependency): string | null {
+    const topicSummary = String(value ?? '').trim();
+    if (topicSummary) {
+      return topicSummary.slice(0, 80);
+    }
+
+    return contextDependency.dependsOnPriorTopic ? contextDependency.topicLabel : null;
   }
 
   private normalizeContextDependency(value: unknown): ContextDependency {
@@ -594,6 +709,43 @@ export class InstagramContextService {
     return (Date.now() - latestTimestamp) <= (2 * 60 * 1000);
   }
 
+  private countMeaningfulWords(messageText: string): number {
+    return normalizeTurkish(messageText.toLowerCase())
+      .split(/\s+/)
+      .map(token => token.trim())
+      .filter(Boolean)
+      .length;
+  }
+
+  private shouldAttemptStateRepair(
+    plan: AIContextPlan,
+    messageText: string,
+    conversationState: ConversationStateRecord | null,
+  ): boolean {
+    if (!conversationState || plan.followUpHint) {
+      return false;
+    }
+
+    if (!conversationState.activeTopic || conversationState.activeTopicConfidence < 0.55) {
+      return false;
+    }
+
+    if (this.isModifierOnlyRequest(plan.categories)) {
+      return true;
+    }
+
+    const wordCount = this.countMeaningfulWords(messageText);
+    if (wordCount > 4) {
+      return false;
+    }
+
+    if (plan.topicSummary) {
+      return false;
+    }
+
+    return plan.responseDirective.mode === 'clarify_only' || !plan.categories.includes('services');
+  }
+
   private async repairImplicitFollowUpAI(messageText: string, history: ConversationEntry[]): Promise<ContextDependency> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     const latestCustomerEntry = this.getLatestCustomerEntry(history);
@@ -634,6 +786,83 @@ export class InstagramContextService {
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://spa-kiosk.local',
           'X-Title': 'SPA Context Repair',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [
+            { role: 'system', content: 'Only return valid JSON.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 180,
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!response.ok) {
+        return DEFAULT_CONTEXT_DEPENDENCY;
+      }
+
+      const data = await response.json() as any;
+      const content = data?.choices?.[0]?.message?.content?.trim();
+      if (!content) {
+        return DEFAULT_CONTEXT_DEPENDENCY;
+      }
+
+      return this.normalizeContextDependency(JSON.parse(this.extractJsonText(content)));
+    } catch {
+      return DEFAULT_CONTEXT_DEPENDENCY;
+    }
+  }
+
+  private async repairImplicitFollowUpFromStateAI(
+    messageText: string,
+    conversationState: ConversationStateRecord,
+  ): Promise<ContextDependency> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey || !conversationState.activeTopic) {
+      return DEFAULT_CONTEXT_DEPENDENCY;
+    }
+
+    const prompt = [
+      'Sen kisa takip mesaji cozumleyicisisin.',
+      'Mevcut mesajin aktif konusma durumundaki konunun devami olup olmadigini belirle.',
+      'Sadece JSON don.',
+      '',
+      'JSON semasi:',
+      '{"dependsOnPriorTopic": true, "topicLabel": "aktif konu", "sourceMessage": "baglami kuran onceki musteri mesaji", "rationale": "kisa neden"}',
+      'veya',
+      '{"dependsOnPriorTopic": false, "topicLabel": null, "sourceMessage": null, "rationale": "bagimsiz soru"}',
+      '',
+      'Kurallar:',
+      '- Mesaj aktif konuya dair fiyat, saat, uygunluk, tercih, onay veya kisa takip niteligindeyse true don.',
+      '- Mesaj acikca yeni bir hizmet konusu, selamlama, tesekkur veya uygunsuz/cinsel istekse false don.',
+      '- True donersen topicLabel mevcut aktif konu ile ayni olmali.',
+      '- True donersen sourceMessage onceki musteri baglam mesaji olmali.',
+      '',
+      'INPUT:',
+      JSON.stringify({
+        currentMessage: messageText,
+        activeConversationState: {
+          activeTopic: conversationState.activeTopic,
+          confidence: conversationState.activeTopicConfidence,
+          sourceMessage: conversationState.topicSourceMessage,
+          lastQuestionType: conversationState.lastQuestionType,
+          pendingCategories: conversationState.pendingCategories,
+          lastCustomerMessage: conversationState.lastCustomerMessage,
+          lastAssistantMessage: conversationState.lastAssistantMessage,
+        },
+      }, null, 2),
+    ].join('\n');
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://spa-kiosk.local',
+          'X-Title': 'SPA State Context Repair',
         },
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash-lite',
@@ -804,15 +1033,18 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       categories,
       keywords: currentIntent.keywords,
       followUpHint: null,
+      topicSummary: null,
       responseDirective: this.buildFallbackResponseDirective(categories),
       tier: tier.tier,
       tierReason: `${tier.reason} (legacy fallback)`,
+      stateRepairApplied: false,
     };
   }
 
   private parseAIContextPlan(rawContent: string, messageText: string): AIContextPlan {
     const parsed = JSON.parse(this.extractJsonText(rawContent)) as Record<string, unknown>;
     const contextDependency = this.normalizeContextDependency(parsed.contextDependency);
+    const topicSummary = this.normalizeTopicSummary(parsed.topicSummary, contextDependency);
     const categories = this.applyContextDependencyToCategories(
       this.normalizeCategories(parsed.categories),
       contextDependency,
@@ -831,13 +1063,19 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       categories: normalizedCategories,
       keywords: this.normalizeSemanticSignals(parsed.semanticSignals),
       followUpHint: derivedFollowUpHint,
+      topicSummary,
       responseDirective,
       tier: this.normalizeModelTier(parsed.tier),
       tierReason: String(parsed.tierReason ?? '').trim() || 'AI varsayilan plan -> standard',
+      stateRepairApplied: false,
     };
   }
 
-  private async planMessageContextAI(messageText: string, history: ConversationEntry[]): Promise<AIContextPlan> {
+  private async planMessageContextAI(
+    messageText: string,
+    history: ConversationEntry[],
+    conversationState: ConversationStateRecord | null = null,
+  ): Promise<AIContextPlan> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       console.warn('[InstagramContextService] No API key - using legacy fallback planner');
@@ -845,7 +1083,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     }
 
     try {
-      const prompt = this.buildContextPlannerPrompt(messageText, history);
+      const prompt = this.buildContextPlannerPrompt(messageText, history, conversationState);
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -885,6 +1123,20 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
           plan.categories = this.applyContextDependencyToCategories(plan.categories, repairedDependency);
           plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairedDependency);
           console.log('[InstagramContextService] AI context repair resolved: "%s" -> "%s"',
+            repairedFollowUpHint.sourceMessage,
+            repairedFollowUpHint.rewrittenQuestion);
+        }
+      }
+      if (this.shouldAttemptStateRepair(plan, messageText, conversationState)) {
+        const repairedDependency = await this.repairImplicitFollowUpFromStateAI(messageText, conversationState!);
+        const repairedFollowUpHint = this.buildDerivedFollowUpHint(messageText, repairedDependency);
+        if (repairedFollowUpHint) {
+          plan.followUpHint = repairedFollowUpHint;
+          plan.topicSummary = plan.topicSummary || repairedFollowUpHint.topicLabel;
+          plan.categories = this.applyContextDependencyToCategories(plan.categories, repairedDependency);
+          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairedDependency);
+          plan.stateRepairApplied = true;
+          console.log('[InstagramContextService] State context repair resolved: "%s" -> "%s"',
             repairedFollowUpHint.sourceMessage,
             repairedFollowUpHint.rewrittenQuestion);
         }

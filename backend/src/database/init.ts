@@ -320,6 +320,32 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.error('WhatsApp OpenClaw Integration migration failed:', error.message);
   }
 
+  // DM conversation state â€” compact per-customer context memory for follow-up handling
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dm_conversation_state (
+        channel TEXT NOT NULL,
+        customer_id TEXT NOT NULL,
+        active_topic TEXT NOT NULL,
+        active_topic_confidence REAL NOT NULL DEFAULT 0,
+        topic_source_message TEXT,
+        last_question_type TEXT NOT NULL DEFAULT 'general',
+        pending_categories TEXT NOT NULL DEFAULT '[]',
+        last_customer_message TEXT NOT NULL,
+        last_assistant_message TEXT,
+        turn_count INTEGER NOT NULL DEFAULT 0,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (channel, customer_id)
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_dm_conversation_state_expires ON dm_conversation_state(expires_at)');
+    console.log('DM conversation state migration complete');
+  } catch (error: any) {
+    console.error('DM conversation state migration failed:', error.message);
+  }
+
   // Seed default data
   seedDatabase(db);
   

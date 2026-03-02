@@ -120,7 +120,11 @@ export async function classifySexualIntent(messageText: string): Promise<SexualI
 
   const systemPrompt = [
     'You are a strict content safety classifier for Instagram DMs.',
+    'The business is a legitimate spa and fitness center.',
     'Detect only sexual intent or sexually explicit content.',
+    'Treat normal wellness or sports service questions as non-sexual by default.',
+    'Plain mentions of massage, spa, hamam, sauna, pool, fitness, pilates, courses, or memberships are NOT sexual unless the message adds explicit sexual service intent.',
+    'A message like "masaj" by itself is a standard service inquiry, not sexual content.',
     'Return JSON only with fields: label, isSexual, confidence, reason.',
     'label must be one of: sexual, non_sexual.',
     'confidence must be a number between 0 and 1 and represent sexual-intent confidence.',

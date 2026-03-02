@@ -9,6 +9,7 @@ import { DmSSEManager } from '../services/DmSSEManager.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
+import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -656,6 +657,38 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   else knowledgeEntriesCount += 1;
                 }
               }
+            }
+
+            try {
+              const supportEntries = db.prepare(`
+                SELECT category, key_name, value, description
+                FROM knowledge_base
+                WHERE is_active = 1 AND category IN ('faq', 'hours', 'policies')
+                ORDER BY category, key_name
+              `).all() as Array<{
+                category: string;
+                key_name: string;
+                value: string;
+                description: string | null;
+              }>;
+
+              const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
+              const augmentedKnowledge = knowledgeSelector.augmentContext({
+                baseContextJson: knowledgeContext,
+                messageText,
+                followUpHint: analysis.followUpHint,
+                primaryCategories: categories,
+              });
+
+              if (augmentedKnowledge.addedEntriesCount > 0) {
+                knowledgeContext = augmentedKnowledge.knowledgeContext;
+                knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
+                for (const addedCategory of augmentedKnowledge.addedCategories) {
+                  categories.add(addedCategory);
+                }
+              }
+            } catch (knowledgeSelectionErr) {
+              console.error('[Instagram Webhook] Knowledge selection supplement failed:', knowledgeSelectionErr);
             }
 
             // Update trace — knowledge fetch stage

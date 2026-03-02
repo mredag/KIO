@@ -477,7 +477,7 @@ veya
    */
   async generateCorrectedResponse(
     customerMessage: string,
-    _failedResponse: string,
+    failedResponse: string,
     validation: PolicyValidationResult,
     knowledgeContext: string,
     modelId: string = 'moonshotai/kimi-k2',
@@ -494,12 +494,15 @@ veya
 KRİTİK KURAL — SADECE VERİLEN BİLGİYİ KULLAN:
 - Yanıtındaki HER bilgi (adres, fiyat, saat, hizmet adı, telefon) verilen bilgilerden gelmeli.
 - Verilmeyen hiçbir bilgiyi YAZMA. Bilmiyorsan "Bu konuda bilgi için bizi arayabilirsiniz: 0326 502 58 58" de.
+- Verilen bilgilerde açıkça yazmayan bir detay sorulursa, bunu uydurma. Bunun yerine o detayın net olmadığını söyle ve telefonla teyit etmeye yönlendir.
 - Adres, mahalle, sokak, bina adı gibi bilgileri KESİNLİKLE UYDURMA — verilen metni aynen kullan.
 - Aşağıdaki izinli sayısal değerler DIŞINDA fiyat, saat veya telefon YAZMA.
 
 SADECE SORULAN SORUYA CEVAP VER:
 - Müşteri ne sorduysa SADECE onu yanıtla. Sorulmayan bilgiyi PAYLAŞMA.
 - Müşteri "merhaba" dediyse: sadece selamla + "Size nasıl yardımcı olabilirim?" de. Başka bilgi VERME.
+- Reddedilen önceki yanıtın ANA KONUSUNU koru. Sadece hatalı veya uydurma kısmı çıkarıp düzelt.
+- Müşterinin mesajı uygunsuz veya cinsel değilse, alakasız güvenlik/politika reddine SAPMA.
 
 FİYAT SORUSU:
 - Müşteri GENEL fiyat sorduğunda ("fiyat nedir", "ne kadar", "ücret"): Hangi hizmet için fiyat öğrenmek istediğini sor. Örnek: "Merhaba! Hangi hizmetimizin fiyatını öğrenmek istersiniz? Masaj, üyelik, PT dersleri gibi seçeneklerimiz var."
@@ -522,10 +525,13 @@ ${allowedFactsHint}`;
 
     const userPrompt = `Müşteri mesajı: ${customerMessage}
 
+Reddedilen yanıt (konuyu koru, sadece hatalı kısımları düzelt): ${failedResponse}
+
 Önceki yanıtın reddedildi çünkü: ${validation.violations.join(', ')}
 ${validation.reason}
 
 KRİTİK: Yanıtındaki HER bilgi yukarıdaki BILGI_BANKASI'ndan gelmeli. Bilgi bankasında olmayan adres, fiyat, saat YAZMA.
+İstenen detay bilgi açıkça yoksa "bu konuda net bilgi veremiyorum" diyerek kısa ve aynı konuya bağlı kal.
 
 Kurallara uygun yeni bir yanıt yaz.`;
 
@@ -544,7 +550,7 @@ Kurallara uygun yeni bir yanıt yaz.`;
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          temperature: 0.3,
+          temperature: 0,
           max_tokens: 500,
         }),
         signal: AbortSignal.timeout(15000), // 15s timeout

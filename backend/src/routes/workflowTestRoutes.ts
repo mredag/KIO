@@ -6,6 +6,7 @@ import { InstagramContextService } from '../services/InstagramContextService.js'
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
+import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -212,6 +213,29 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         }
       } catch { /* knowledge fetch failed, continue */ }
 
+      try {
+        const supportEntries = knowledgeBaseService.getAll().filter(entry =>
+          ['faq', 'hours', 'policies'].includes(entry.category),
+        );
+        const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
+        const augmentedKnowledge = knowledgeSelector.augmentContext({
+          baseContextJson: knowledgeContext,
+          messageText: text,
+          followUpHint: analysis.followUpHint,
+          primaryCategories: kbCategories,
+        });
+
+        if (augmentedKnowledge.addedEntriesCount > 0) {
+          knowledgeContext = augmentedKnowledge.knowledgeContext;
+          knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
+          for (const addedCategory of augmentedKnowledge.addedCategories) {
+            kbCategories.add(addedCategory);
+          }
+        }
+      } catch (knowledgeSelectionErr) {
+        console.error('[Simulator] Knowledge selection supplement failed:', knowledgeSelectionErr);
+      }
+
       // Format KB from raw JSON to clean labeled text (anti-hallucination)
       const formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
 
@@ -318,7 +342,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           followUpHint: analysis.followUpHint,
           responseDirective: analysis.responseDirective,
         },
-        knowledgeCategoriesFetched: analysis.intentCategories,
+        knowledgeCategoriesFetched: Array.from(kbCategories),
         knowledgeFetchStatus: knowledgeContext ? 'success' : 'fail',
         knowledgeEntriesCount,
         openclawDispatchStatus: 'skipped',

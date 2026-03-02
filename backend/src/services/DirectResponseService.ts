@@ -111,6 +111,11 @@ export class DirectResponseService {
       systemParts.push(selectedEvidence.trim());
       systemParts.push('');
     }
+    systemParts.push('KISMEN CEVAP KURALI:');
+    systemParts.push('- Musteri birden fazla detay soruyorsa ve verilen bilgiler bunlarin sadece bir kismini kapsiyorsa, bildigin kisimlari ver.');
+    systemParts.push('- Sadece eksik kalan kisim icin "bu konuda net bilgi veremiyorum" diyebilirsin.');
+    systemParts.push('- Tum yaniti telefon yonlendirmesine cevirme; once eldeki net bilgiyi kullan.');
+    systemParts.push('');
     systemParts.push(systemPrompt);
     const enhancedSystemPrompt = systemParts.join('\n');
 

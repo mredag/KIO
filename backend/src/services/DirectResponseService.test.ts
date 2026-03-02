@@ -73,6 +73,7 @@ describe('DirectResponseService', () => {
     const systemPrompt = body.messages[0].content;
 
     expect(systemPrompt).toContain('ONCELIKLI KANIT:');
+    expect(systemPrompt).toContain('KISMEN CEVAP KURALI:');
     expect(systemPrompt).toContain('[pricing] courses_kids');
     expect(systemPrompt.indexOf('ONCELIKLI KANIT:')).toBeLessThan(systemPrompt.indexOf('VERILEN BILGILER:'));
   });

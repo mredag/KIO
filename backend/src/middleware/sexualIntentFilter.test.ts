@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { classifySexualIntent, getSexualIntentReply } from './sexualIntentFilter.js';
+import { classifySexualIntent, evaluateSexualIntent, getSexualIntentReply } from './sexualIntentFilter.js';
 
 describe('sexualIntentFilter', () => {
   let originalApiKey: string | undefined;
@@ -73,5 +73,34 @@ describe('sexualIntentFilter', () => {
     expect(body.messages[1].content).toContain('Original message: mut lu son lu biten varmi');
     expect(body.messages[1].content).toContain('Compact text (ignore spaces/punctuation): mutlusonlubitenvarmi');
     expect(body.messages[1].content).toContain('Classify the underlying meaning after mentally removing separators.');
+  });
+
+  it('fails closed for explicit high-risk euphemisms even if the model returns allow', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                label: 'non_sexual',
+                isSexual: false,
+                confidence: 0,
+                reason: 'Model missed the euphemism',
+              }),
+            },
+          },
+        ],
+        model: 'openai/gpt-4o-mini',
+      }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('mutlu sonlu mu peki');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.confidence).toBe(0.9);
+    expect(decision.reason).toContain('High-risk euphemism');
   });
 });

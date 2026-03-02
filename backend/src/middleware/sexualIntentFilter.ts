@@ -101,6 +101,11 @@ function buildSexualIntentPrompt(messageText: string): string {
   ].join('\n');
 }
 
+function hasHighRiskSexualCue(messageText: string): boolean {
+  const compact = buildCompactClassifierText(messageText);
+  return compact.includes('mutluson') || compact.includes('happyending');
+}
+
 export function decideSexualIntent(classification: SexualIntentClassification): SexualIntentDecision {
   const sexualScore = classification.isSexual ? classification.confidence : 0;
 
@@ -217,5 +222,16 @@ export async function classifySexualIntent(messageText: string): Promise<SexualI
 
 export async function evaluateSexualIntent(messageText: string): Promise<SexualIntentDecision> {
   const classification = await classifySexualIntent(messageText);
-  return decideSexualIntent(classification);
+  const decision = decideSexualIntent(classification);
+
+  if (decision.action === 'allow' && hasHighRiskSexualCue(messageText)) {
+    return {
+      action: 'block_message',
+      confidence: Math.max(decision.confidence, 0.9),
+      reason: 'High-risk euphemism detected despite low model confidence.',
+      modelUsed: decision.modelUsed,
+    };
+  }
+
+  return decision;
 }

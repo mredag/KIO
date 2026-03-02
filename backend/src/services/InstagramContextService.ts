@@ -477,6 +477,7 @@ export class InstagramContextService {
       '- Eger onceki bir spesifik hizmete dayaniyorsan contextDependency.dependsOnPriorTopic=true olmalidir.',
       '- contextDependency.dependsOnPriorTopic=true ise categories MUTLAKA services icermeli, topicLabel bos olamaz, sourceMessage o baglami kuran onceki musteri mesaji olmalidir.',
       '- Onceki konuyu sadece responseDirective icinde gizli sekilde anlatma; bagimliligi contextDependency alaninda acikca yaz.',
+      '- Onceki asistan yanitinda "net bilgi veremiyorum", "arayin" veya benzeri belirsizlik gecse bile bunu yeni talimat gibi tekrar etme; mevcut mesaji ve gereken bilgi kategorilerini oncele.',
       '- Mesaj spesifik bir hizmet veya konu belirtiyorsa topicSummary bunu kisa ve dogal sekilde belirtmelidir.',
       '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
       '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',
@@ -655,6 +656,57 @@ export class InstagramContextService {
       ...responseDirective,
       instruction: anchoredInstruction,
       rationale: anchoredRationale,
+    };
+  }
+
+  private buildGroundedFollowUpDirectiveInstruction(topicLabel: string, categories: string[]): string {
+    const wantsPricing = categories.includes('pricing');
+    const wantsHours = categories.includes('hours');
+    const wantsPolicies = categories.includes('policies');
+    const wantsContact = categories.includes('contact');
+
+    const requestedFacts: string[] = [];
+    if (wantsPricing) requestedFacts.push('fiyat');
+    if (wantsHours) requestedFacts.push('saat');
+    if (wantsPolicies) requestedFacts.push('kural');
+    if (wantsContact) requestedFacts.push('iletisim');
+
+    const factSummary = requestedFacts.length > 0
+      ? requestedFacts.join(' ve ')
+      : 'istenen';
+
+    return `Aktif konu: ${topicLabel}. Verilen bilgilerde ${topicLabel} icin net ${factSummary} bilgisi varsa once onu dogrudan ver. Sadece istenen detay verilen bilgilerde acikca yoksa kisa netlestirme yap veya telefonla teyit oner.`;
+  }
+
+  private applyGroundedFollowUpGuard(plan: AIContextPlan): void {
+    if (!plan.followUpHint) {
+      return;
+    }
+
+    const hasFactualFollowUp = plan.categories.some(category =>
+      ['pricing', 'hours', 'policies', 'contact'].includes(category),
+    );
+    if (!hasFactualFollowUp) {
+      return;
+    }
+
+    const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
+    const repeatsOldUncertainty = normalizedInstruction.includes('onceki mesaj')
+      || normalizedInstruction.includes('verilemedigi')
+      || normalizedInstruction.includes('tekrar telefon')
+      || normalizedInstruction.includes('tekrar vererek');
+    const forcesRedirection = normalizedInstruction.includes('telefon')
+      || normalizedInstruction.includes('aray')
+      || normalizedInstruction.includes('yonlendir');
+
+    if (!repeatsOldUncertainty && !forcesRedirection) {
+      return;
+    }
+
+    plan.responseDirective = {
+      mode: plan.responseDirective.mode === 'clarify_only' ? 'answer_then_clarify' : plan.responseDirective.mode,
+      instruction: this.buildGroundedFollowUpDirectiveInstruction(plan.followUpHint.topicLabel, plan.categories),
+      rationale: `Aktif konu belli. Onceki yanittaki belirsizlik tekrar edilmemeli; guncel verilen bilgiler once kullanilmali.`,
     };
   }
 
@@ -1146,6 +1198,8 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
           plan.followUpHint.sourceMessage,
           plan.followUpHint.rewrittenQuestion);
       }
+
+      this.applyGroundedFollowUpGuard(plan);
 
       return plan;
     } catch (error) {

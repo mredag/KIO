@@ -90,6 +90,7 @@ export class DirectResponseService {
       systemParts.push(`- Bu yeni mesaji "${followUpHint.rewrittenQuestion}" olarak yorumla.`);
       systemParts.push('- Musteriye tekrar "hangi hizmet" diye sorma.');
       systemParts.push('- Sadece bu aktif konuya ait bilgiyi ver.');
+      systemParts.push('- Eger verilen bilgiler aktif konu icin net cevap iceriyorsa, konusma gecmisinde daha once "net bilgi veremiyorum" denmis olsa bile bu guncel bilgiyi kullan.');
       systemParts.push('');
     }
     systemParts.push(systemPrompt);

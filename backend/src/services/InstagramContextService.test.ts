@@ -188,6 +188,42 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Aktif konu: taekwondo dersleri.');
   });
 
+  it('overrides follow-up directives that only repeat prior uncertainty', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['pricing', 'hours'],
+      semanticSignals: ['recent_follow_up', 'topic_specific_info_request'],
+      contextDependency: {
+        dependsOnPriorTopic: true,
+        topicLabel: 'taekwondo dersleri',
+        sourceMessage: 'taewondo dersi varmi',
+        rationale: 'Kisa takip sorusu onceki hizmete bagli.',
+      },
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Onceki mesajda bu bilgiler verilemedigi icin telefon numarasini tekrar vererek yonlendir.',
+        rationale: 'Onceki belirsizlik tekrar edilmeli.',
+      },
+      tier: 'standard',
+      tierReason: 'Baglama dayali standart bilgi talebi',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'fiyat nedir saat kacta ne zaman',
+      createHistory([
+        { text: 'taewondo dersi varmi', minutesAgo: 1 },
+        { direction: 'outbound', text: 'Bu konuda arayabilirsiniz.', minutesAgo: 0.5 },
+      ]),
+    );
+
+    expect(result.followUpHint?.topicLabel).toBe('taekwondo dersleri');
+    expect(result.responseDirective.mode).toBe('answer_then_clarify');
+    expect(result.responseDirective.instruction).toContain('Verilen bilgilerde taekwondo dersleri icin net fiyat ve saat bilgisi varsa once onu dogrudan ver');
+    expect(result.responseDirective.instruction).not.toContain('Onceki mesajda');
+  });
+
   it('uses AI context repair when the planner leaves a modifier-only follow-up underspecified', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn()

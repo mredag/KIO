@@ -77,4 +77,42 @@ describe('ResponsePolicyService deterministic grounding', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.valid).toBe(true);
   });
+
+  it('passes active follow-up topic scope into the rule validator prompt', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: 'fiyat nedir saat kacta ne zaman',
+      agentResponse: 'Taekwondo dersimiz var.',
+      knowledgeContext: 'Taekwondo 2000 TL\nTaekwondo: Sali-Persembe-Cumartesi 18:00-19:00',
+      followUpHint: {
+        topicLabel: 'taekwondo dersleri',
+        rewrittenQuestion: 'taekwondo dersleri icin fiyat nedir saat kacta ne zaman',
+        sourceMessage: 'taewondo dersi varmi',
+      },
+      activeTopic: 'taekwondo dersleri',
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Aktif konu: taekwondo dersleri. Verilen bilgilerde net fiyat ve saat varsa once onu ver.',
+        rationale: 'Aktif konu belli.',
+      },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(requestInit.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const userPrompt = body.messages[1].content;
+
+    expect(userPrompt).toContain('AKTIF_KONU: taekwondo dersleri');
+    expect(userPrompt).toContain('YORUMLANMIS_SORU: taekwondo dersleri icin fiyat nedir saat kacta ne zaman');
+    expect(userPrompt).toContain('KAPSAM KURALI: Bu mesaj kisa veya genel gorunse bile once AKTIF_KONU kapsaminda yorumlanmali.');
+  });
 });

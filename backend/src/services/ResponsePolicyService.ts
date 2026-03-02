@@ -32,6 +32,8 @@
  * See PipelineTrace.policyValidation for trace data.
  */
 
+import type { FollowUpContextHint, ResponseDirective } from './InstagramContextService.js';
+
 const VALIDATION_MODEL = 'google/gemini-2.5-flash-lite';
 
 /**
@@ -69,6 +71,7 @@ Aşağıdaki kurallara göre yanıtı kontrol et:
    - Müşteri "merhaba" dediyse → yanıt sadece selamlama + "nasıl yardımcı olabilirim?" olmalı. Fiyat listesi, adres, saat bilgisi gibi SORULMAYAN detaylı bilgi verilmişse FAIL.
    - Müşteri GENEL fiyat sorduysa ("fiyat nedir", "ne kadar") → yanıt ya fiyat listesi vermeli ya da "hangi hizmet için?" diye sormalı ya da telefon numarasına yönlendirmeli. Bunların hepsi DOĞRU.
    - Müşteri SPESİFİK fiyat sorduysa ("masaj fiyatları") → fiyat bilgisi + telefon/iletişim bilgisi vermek DOĞRU. Sadece fiyat sorulduğunda adres veya saat bilgisi verilmemeli (ama telefon numarası vermek sorun değil).
+   - EGER AKTIF_KONU verilmisse ve mesaj kisa/genel bir takip sorusuysa, bunu once AKTIF_KONU kapsaminda degerlendir. Bu durumda tum hizmetleri listelemek GEREKMEZ; yalnizca aktif konuya uygun yanit yeterlidir.
    - Müşteri adres sorduysa → adres + telefon/iletişim bilgisi vermek DOĞRU. Sadece adres sorulduğunda fiyat listesi verilmemeli.
    - Yanıt BILGI_BANKASI'ndan SORULMAYAN bilgileri rastgele döküyorsa FAIL — bu "papağan yanıt" hatasıdır.
    - Kısa bir selamlama mesajına uzun bilgi dolu yanıt verilmişse FAIL.
@@ -92,6 +95,9 @@ export interface PolicyValidationContext {
   customerMessage: string;
   agentResponse: string;
   knowledgeContext: string;
+  followUpHint?: FollowUpContextHint | null;
+  activeTopic?: string | null;
+  responseDirective?: ResponseDirective | null;
 }
 
 interface DeterministicGroundingResult {
@@ -106,6 +112,32 @@ export class ResponsePolicyService {
 
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
+  }
+
+  private getActiveTopic(context: PolicyValidationContext): string | null {
+    return context.followUpHint?.topicLabel || context.activeTopic || null;
+  }
+
+  private buildTopicScopeLines(context: PolicyValidationContext): string[] {
+    const activeTopic = this.getActiveTopic(context);
+    if (!activeTopic) {
+      return [];
+    }
+
+    const lines = [
+      `AKTIF_KONU: ${activeTopic}`,
+      'KAPSAM KURALI: Bu mesaj kisa veya genel gorunse bile once AKTIF_KONU kapsaminda yorumlanmali. Tum hizmetleri kapsayan bir yanit bekleme; aktif konuya odakli yanit yeterlidir.',
+    ];
+
+    if (context.followUpHint?.rewrittenQuestion) {
+      lines.push(`YORUMLANMIS_SORU: ${context.followUpHint.rewrittenQuestion}`);
+    }
+
+    if (context.responseDirective?.instruction) {
+      lines.push(`YANIT_PLANI: ${context.responseDirective.instruction}`);
+    }
+
+    return lines;
   }
 
   /**
@@ -184,6 +216,7 @@ export class ResponsePolicyService {
 
     const userPrompt = [
       `MUSTERI_MESAJI: ${context.customerMessage}`,
+      ...this.buildTopicScopeLines(context),
       '',
       `ASISTAN_YANITI: ${context.agentResponse}`,
       '',
@@ -388,8 +421,11 @@ GÖREV:
 - Asistan tüm fiyatları listelemek zorunda DEĞİL — BILGI_BANKASI'nda olan fiyatlardan bir kısmını vermesi DOĞRU'dur
 - Adres bilgisinde mahalle, sokak, bina adı BİREBİR aynı olmalı — yakın ama farklı = UYDURMA
 - Emoji ve format farkları SORUN DEĞİL — içerik aynıysa DOĞRU say
+- Eger AKTIF_KONU verilmisse, musteri mesajini once bu konu kapsaminda yorumla; tum hizmetleri kapsayan cevap bekleme
 
 MUSTERI_MESAJI: ${context.customerMessage}
+
+${this.buildTopicScopeLines(context).join('\n')}
 
 ASISTAN_YANITI: ${context.agentResponse}
 
@@ -481,6 +517,7 @@ veya
     validation: PolicyValidationResult,
     knowledgeContext: string,
     modelId: string = 'moonshotai/kimi-k2',
+    context: Pick<PolicyValidationContext, 'followUpHint' | 'activeTopic' | 'responseDirective'> = {},
   ): Promise<{ response: string | null; latencyMs: number; tokensEstimated: number }> {
     if (!this.apiKey) {
       return { response: null, latencyMs: 0, tokensEstimated: 0 };
@@ -488,6 +525,7 @@ veya
 
     const startTime = Date.now();
     const allowedFactsHint = this.buildAllowedFactsHint(knowledgeContext);
+    const scopeLines = this.buildTopicScopeLines(context as PolicyValidationContext);
 
     const systemPrompt = `Sen Eform Spor Merkezi'nin Instagram DM asistanısın. Müşteriye Türkçe yanıt ver.
 
@@ -503,6 +541,7 @@ SADECE SORULAN SORUYA CEVAP VER:
 - Müşteri "merhaba" dediyse: sadece selamla + "Size nasıl yardımcı olabilirim?" de. Başka bilgi VERME.
 - Reddedilen önceki yanıtın ANA KONUSUNU koru. Sadece hatalı veya uydurma kısmı çıkarıp düzelt.
 - Müşterinin mesajı uygunsuz veya cinsel değilse, alakasız güvenlik/politika reddine SAPMA.
+- Eger AKTIF_KONU verilmisse, mesaji once bu konu kapsaminda yorumla. Tum hizmetleri listeleme; yalnizca aktif konuya uygun cevap ver.
 
 FİYAT SORUSU:
 - Müşteri GENEL fiyat sorduğunda ("fiyat nedir", "ne kadar", "ücret"): Hangi hizmet için fiyat öğrenmek istediğini sor. Örnek: "Merhaba! Hangi hizmetimizin fiyatını öğrenmek istersiniz? Masaj, üyelik, PT dersleri gibi seçeneklerimiz var."
@@ -524,6 +563,8 @@ SAYISAL GUVENCE:
 ${allowedFactsHint}`;
 
     const userPrompt = `Müşteri mesajı: ${customerMessage}
+
+${scopeLines.join('\n')}
 
 Reddedilen yanıt (konuyu koru, sadece hatalı kısımları düzelt): ${failedResponse}
 

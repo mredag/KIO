@@ -950,6 +950,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   customerMessage: messageText,
                   agentResponse: finalResponse,
                   knowledgeContext: formattedKnowledge,
+                  followUpHint: analysis.followUpHint,
+                  activeTopic: analysis.activeTopicLabel,
+                  responseDirective: analysis.responseDirective,
                 }, attempt);
                 lastValidation = validation;
                 policyTotalLatencyMs += validation.latencyMs;
@@ -977,7 +980,16 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 if (attempt <= MAX_POLICY_RETRIES) {
                   const correctionModelId = pipelineConfigService.getCorrectionModel(analysis.modelId);
                   const correction = await policyService.generateCorrectedResponse(
-                    messageText, finalResponse, validation, formattedKnowledge, correctionModelId
+                    messageText,
+                    finalResponse,
+                    validation,
+                    formattedKnowledge,
+                    correctionModelId,
+                    {
+                      followUpHint: analysis.followUpHint,
+                      activeTopic: analysis.activeTopicLabel,
+                      responseDirective: analysis.responseDirective,
+                    },
                   );
                   policyTotalLatencyMs += correction.latencyMs;
                   policyTotalTokens += correction.tokensEstimated;

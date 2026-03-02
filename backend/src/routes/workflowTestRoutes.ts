@@ -329,6 +329,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           customerMessage: text,
           agentResponse: finalResponse,
           knowledgeContext: formattedKnowledge,
+          followUpHint: analysis.followUpHint,
+          activeTopic: analysis.activeTopicLabel,
+          responseDirective: analysis.responseDirective,
         });
         policyResult = validation;
 
@@ -336,7 +339,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           // Try correction
           const correctionModelId = pipelineConfigService.getCorrectionModel(analysis.modelId);
           const correction = await policyService.generateCorrectedResponse(
-            text, finalResponse, validation, formattedKnowledge, correctionModelId
+            text,
+            finalResponse,
+            validation,
+            formattedKnowledge,
+            correctionModelId,
+            {
+              followUpHint: analysis.followUpHint,
+              activeTopic: analysis.activeTopicLabel,
+              responseDirective: analysis.responseDirective,
+            },
           );
           if (correction.response) {
             finalResponse = correction.response;
@@ -345,6 +357,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               customerMessage: text,
               agentResponse: finalResponse,
               knowledgeContext: formattedKnowledge,
+              followUpHint: analysis.followUpHint,
+              activeTopic: analysis.activeTopicLabel,
+              responseDirective: analysis.responseDirective,
             });
             policyResult = {
               ...revalidation,

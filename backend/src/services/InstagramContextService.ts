@@ -1059,8 +1059,8 @@ export class InstagramContextService {
   private async legacyDetectIntentAI(messageText: string): Promise<IntentResult> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.warn('[InstagramContextService] No API key — falling back to keyword matching');
-      return this.detectIntentKeywords(messageText);
+      console.warn('[InstagramContextService] No API key - using conservative AI recovery');
+      return { categories: ['general', 'faq'], keywords: [] };
     }
 
     try {
@@ -1111,15 +1111,51 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       const parsed = JSON.parse(content);
       const categories = Array.isArray(parsed.categories) ? parsed.categories : ['general', 'faq'];
 
-      // Extract keywords from the original message for backward compatibility
-      const keywords = this.extractKeywords(messageText);
-
-      return { categories, keywords };
+      return { categories, keywords: [] };
     } catch (error) {
       console.error('[InstagramContextService] AI intent detection failed:', error);
-      console.log('[InstagramContextService] Falling back to keyword matching for message:', messageText.substring(0, 50));
-      return this.detectIntentKeywords(messageText);
+      console.log('[InstagramContextService] Falling back to conservative AI recovery for message:', messageText.substring(0, 50));
+      return { categories: ['general', 'faq'], keywords: [] };
     }
+  }
+
+  private async buildRecoveryContextPlan(messageText: string, history: ConversationEntry[]): Promise<AIContextPlan> {
+    const currentIntent = await this.legacyDetectIntentAI(messageText);
+    const recentInbound = this.getRecentInboundForContext(history);
+    const historyIntents = await Promise.all(
+      recentInbound.map(entry => this.legacyDetectIntentAI(entry.messageText)),
+    );
+    const contextCategories = new Set(currentIntent.categories);
+    const hasModifier = currentIntent.categories.some(category => ['pricing', 'hours', 'contact', 'policies'].includes(category));
+    const hasTopic = currentIntent.categories.includes('services');
+
+    if (hasModifier && !hasTopic) {
+      for (const historyIntent of historyIntents) {
+        if (historyIntent.categories.includes('services')) {
+          contextCategories.add('services');
+          break;
+        }
+      }
+    }
+
+    const categories = [...contextCategories];
+    const isGeneralRecovery = categories.length === 2
+      && categories.includes('general')
+      && categories.includes('faq');
+    const modelTier: ModelTier = isGeneralRecovery ? 'light' : 'standard';
+
+    return {
+      categories,
+      keywords: currentIntent.keywords,
+      followUpHint: null,
+      topicSummary: null,
+      responseDirective: this.buildFallbackResponseDirective(categories),
+      tier: modelTier,
+      tierReason: modelTier === 'light'
+        ? 'AI kurtarma plani: guvenli genel netlestirme'
+        : 'AI kurtarma plani: baglamli varsayilan standart',
+      stateRepairApplied: false,
+    };
   }
 
   private buildFallbackContextPlan(messageText: string, history: ConversationEntry[]): AIContextPlan {
@@ -1191,8 +1227,8 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
   ): Promise<AIContextPlan> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.warn('[InstagramContextService] No API key - using legacy fallback planner');
-      return this.buildFallbackContextPlan(messageText, history);
+      console.warn('[InstagramContextService] No API key - using AI recovery planner');
+      return this.buildRecoveryContextPlan(messageText, history);
     }
 
     try {
@@ -1287,8 +1323,8 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       return plan;
     } catch (error) {
       console.error('[InstagramContextService] AI context planner failed:', error);
-      console.log('[InstagramContextService] Falling back to legacy planner for message:', messageText.substring(0, 80));
-      return this.buildFallbackContextPlan(messageText, history);
+      console.log('[InstagramContextService] Falling back to AI recovery planner for message:', messageText.substring(0, 80));
+      return this.buildRecoveryContextPlan(messageText, history);
     }
   }
 

@@ -75,32 +75,52 @@ describe('sexualIntentFilter', () => {
     expect(body.messages[1].content).toContain('Classify the underlying meaning after mentally removing separators.');
   });
 
-  it('fails closed for explicit high-risk euphemisms even if the model returns allow', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                label: 'non_sexual',
-                isSexual: false,
-                confidence: 0,
-                reason: 'Model missed the euphemism',
-              }),
+  it('uses a stricter second AI pass to escalate unsafe euphemisms', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  label: 'non_sexual',
+                  isSexual: false,
+                  confidence: 0.1,
+                  reason: 'Primary pass is lenient',
+                }),
+              },
             },
-          },
-        ],
-        model: 'openai/gpt-4o-mini',
-      }),
-    });
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  label: 'sexual',
+                  isSexual: true,
+                  confidence: 0.91,
+                  reason: 'Second pass catches euphemistic sexual request',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      });
 
     vi.stubGlobal('fetch', fetchMock);
 
     const decision = await evaluateSexualIntent('mutlu sonlu mu peki');
 
     expect(decision.action).toBe('block_message');
-    expect(decision.confidence).toBe(0.9);
-    expect(decision.reason).toContain('High-risk euphemism');
+    expect(decision.confidence).toBe(0.91);
+    expect(decision.reason).toContain('Second pass');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

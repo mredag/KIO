@@ -11,6 +11,8 @@ export type SexualIntentDecision =
   | { action: 'retry_question'; confidence: number; reason: string; modelUsed: string }
   | { action: 'block_message'; confidence: number; reason: string; modelUsed: string };
 
+type SexualIntentPass = 'primary' | 'review';
+
 const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
@@ -101,11 +103,6 @@ function buildSexualIntentPrompt(messageText: string): string {
   ].join('\n');
 }
 
-function hasHighRiskSexualCue(messageText: string): boolean {
-  const compact = buildCompactClassifierText(messageText);
-  return compact.includes('mutluson') || compact.includes('happyending');
-}
-
 export function decideSexualIntent(classification: SexualIntentClassification): SexualIntentDecision {
   const sexualScore = classification.isSexual ? classification.confidence : 0;
 
@@ -147,7 +144,64 @@ export function getSexualIntentReply(action: SexualIntentDecision['action']): st
   return '';
 }
 
-export async function classifySexualIntent(messageText: string): Promise<SexualIntentClassification> {
+function buildSexualIntentSystemPrompt(pass: SexualIntentPass): string {
+  const baseRules = [
+    'You are a strict content safety classifier for Instagram DMs.',
+    'The business is a legitimate spa and fitness center.',
+    'Detect only sexual intent or sexually explicit content.',
+    'Questions asking about erotic endings, sexual gratification, or inappropriate touching are sexual even when phrased indirectly.',
+    'Users may obfuscate sexual requests by splitting words with spaces, punctuation, or syllables.',
+    'Detect the underlying meaning after removing separators, not just the literal surface form.',
+    'Treat normal wellness or sports service questions as non-sexual by default.',
+    'Plain mentions of massage, spa, hamam, sauna, pool, fitness, pilates, courses, or memberships are NOT sexual unless the message adds explicit sexual service intent.',
+    'A message like "masaj" by itself is a standard service inquiry, not sexual content.',
+  ];
+
+  const reviewRules = pass === 'review'
+    ? [
+        'You are the SECOND PASS reviewer. Assume the first classifier may be too lenient.',
+        'If there is a plausible reading that the user is requesting a prohibited sexual service, classify as sexual.',
+        'When in doubt between allow and retry/block for an obfuscated euphemistic message, prefer the safer classification.',
+      ]
+    : [
+        'You are the PRIMARY classifier. Be precise and avoid false positives for normal spa or sports requests.',
+      ];
+
+  return [
+    ...baseRules,
+    ...reviewRules,
+    'Return JSON only with fields: label, isSexual, confidence, reason.',
+    'label must be one of: sexual, non_sexual.',
+    'confidence must be a number between 0 and 1 and represent sexual-intent confidence.',
+    'Be conservative: if uncertain, choose lower confidence values.',
+  ].join(' ');
+}
+
+function mergeSexualIntentDecisions(
+  primary: SexualIntentDecision,
+  review: SexualIntentDecision,
+): SexualIntentDecision {
+  const severity = {
+    allow: 0,
+    retry_question: 1,
+    block_message: 2,
+  } as const;
+
+  if (severity[review.action] > severity[primary.action]) {
+    return review;
+  }
+
+  if (severity[review.action] < severity[primary.action]) {
+    return primary;
+  }
+
+  return review.confidence > primary.confidence ? review : primary;
+}
+
+export async function classifySexualIntent(
+  messageText: string,
+  pass: SexualIntentPass = 'primary',
+): Promise<SexualIntentClassification> {
   const apiKey = process.env.OPENROUTER_API_KEY || '';
   const model = process.env.SEXUAL_INTENT_MODEL || DEFAULT_MODEL;
 
@@ -160,21 +214,7 @@ export async function classifySexualIntent(messageText: string): Promise<SexualI
     };
   }
 
-  const systemPrompt = [
-    'You are a strict content safety classifier for Instagram DMs.',
-    'The business is a legitimate spa and fitness center.',
-    'Detect only sexual intent or sexually explicit content.',
-    'Questions asking about erotic endings, sexual gratification, or inappropriate touching are sexual even when phrased indirectly.',
-    'Users may obfuscate sexual requests by splitting words with spaces, punctuation, or syllables.',
-    'Detect the underlying meaning after removing separators, not just the literal surface form.',
-    'Treat normal wellness or sports service questions as non-sexual by default.',
-    'Plain mentions of massage, spa, hamam, sauna, pool, fitness, pilates, courses, or memberships are NOT sexual unless the message adds explicit sexual service intent.',
-    'A message like "masaj" by itself is a standard service inquiry, not sexual content.',
-    'Return JSON only with fields: label, isSexual, confidence, reason.',
-    'label must be one of: sexual, non_sexual.',
-    'confidence must be a number between 0 and 1 and represent sexual-intent confidence.',
-    'Be conservative: if uncertain, choose lower confidence values.',
-  ].join(' ');
+  const systemPrompt = buildSexualIntentSystemPrompt(pass);
 
   const userPrompt = buildSexualIntentPrompt(messageText);
 
@@ -221,17 +261,13 @@ export async function classifySexualIntent(messageText: string): Promise<SexualI
 }
 
 export async function evaluateSexualIntent(messageText: string): Promise<SexualIntentDecision> {
-  const classification = await classifySexualIntent(messageText);
-  const decision = decideSexualIntent(classification);
+  const [primaryClassification, reviewClassification] = await Promise.all([
+    classifySexualIntent(messageText, 'primary'),
+    classifySexualIntent(messageText, 'review'),
+  ]);
 
-  if (decision.action === 'allow' && hasHighRiskSexualCue(messageText)) {
-    return {
-      action: 'block_message',
-      confidence: Math.max(decision.confidence, 0.9),
-      reason: 'High-risk euphemism detected despite low model confidence.',
-      modelUsed: decision.modelUsed,
-    };
-  }
-
-  return decision;
+  return mergeSexualIntentDecisions(
+    decideSexualIntent(primaryClassification),
+    decideSexualIntent(reviewClassification),
+  );
 }

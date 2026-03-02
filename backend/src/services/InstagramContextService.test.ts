@@ -557,4 +557,37 @@ describe('InstagramContextService AI context planner', () => {
     expect(insertRuns).toHaveLength(1);
     expect(insertRuns[0][4]).toBe('cocuklar icin yuzme dersi varmi');
   });
+
+  it('uses conservative AI recovery instead of keyword guessing when the planner is unavailable', async () => {
+    delete process.env.OPENROUTER_API_KEY;
+
+    const fakeDb = {
+      prepare(sql: string) {
+        if (sql.includes('ORDER BY created_at DESC')) {
+          return {
+            all: () => [],
+          };
+        }
+
+        if (sql.includes('COUNT(*) as c')) {
+          return { get: () => ({ c: 2 }) };
+        }
+
+        if (sql.includes('FROM dm_conversation_state')) {
+          return {
+            get: () => null,
+          };
+        }
+
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    } as any;
+
+    const service = new InstagramContextService(fakeDb);
+    const analysis = await service.analyzeMessage('ig-user', 'mutli sonli olan hangisi');
+
+    expect(analysis.intentCategories).toEqual(['general', 'faq']);
+    expect(analysis.matchedKeywords).toEqual([]);
+    expect(analysis.modelTier).toBe('light');
+  });
 });

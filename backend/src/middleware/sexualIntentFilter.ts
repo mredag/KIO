@@ -15,8 +15,9 @@ type SexualIntentPass = 'primary' | 'review';
 
 const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
+const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const SEXUAL_BLOCK_REPLY = 'Uygunsuz hizmet sunmuyoruz. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.';
+const SEXUAL_BLOCK_REPLY = 'O soylediginiz hizmet bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
 const SEXUAL_RETRY_REPLY = 'Mesajınızı daha açık yazar mısınız? Yalnızca profesyonel spa ve spor hizmetleri konusunda yardımcı olabiliyoruz.';
 
 function toNumber(value: unknown): number | null {
@@ -107,6 +108,17 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
   const sexualScore = classification.isSexual ? classification.confidence : 0;
 
   if (sexualScore >= HIGH_THRESHOLD) {
+    return {
+      action: 'block_message',
+      confidence: sexualScore,
+      reason: classification.reason,
+      modelUsed: classification.modelUsed,
+    };
+  }
+
+  // Scores close to the hard block threshold should still get a firm business
+  // boundary, not a clarification prompt that invites further probing.
+  if (sexualScore >= NEAR_BLOCK_THRESHOLD) {
     return {
       action: 'block_message',
       confidence: sexualScore,

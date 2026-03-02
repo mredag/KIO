@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { classifySexualIntent, evaluateSexualIntent, getSexualIntentReply } from './sexualIntentFilter.js';
+import {
+  classifySexualIntent,
+  decideSexualIntent,
+  evaluateSexualIntent,
+  getSexualIntentReply,
+} from './sexualIntentFilter.js';
 
 describe('sexualIntentFilter', () => {
   let originalApiKey: string | undefined;
@@ -31,9 +36,21 @@ describe('sexualIntentFilter', () => {
 
   it('returns the stronger business-safe block reply', () => {
     expect(getSexualIntentReply('block_message')).toBe(
-      'Uygunsuz hizmet sunmuyoruz. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.',
+      'O soylediginiz hizmet bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.',
     );
     expect(getSexualIntentReply('retry_question')).toContain('profesyonel spa ve spor');
+  });
+
+  it('treats near-block sexual scores as a hard block instead of clarification', () => {
+    const decision = decideSexualIntent({
+      isSexual: true,
+      confidence: 0.8,
+      reason: 'Clear prohibited service request',
+      modelUsed: 'openai/gpt-4o-mini',
+    });
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.confidence).toBe(0.8);
   });
 
   it('sends obfuscation-aware message variants to the classifier', async () => {

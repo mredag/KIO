@@ -46,7 +46,9 @@ export function createIntentRoutes(): Router {
         decision,
         thresholds: {
           retry_question_gte: 0.7,
-          block_message_gte: 0.85,
+          retry_question_lt: 0.8,
+          block_message_gte: 0.8,
+          hard_block_target: 0.85,
         },
       });
     } catch (error: unknown) {

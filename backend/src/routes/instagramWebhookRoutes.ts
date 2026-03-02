@@ -14,7 +14,7 @@ import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalSer
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
-import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
+import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
@@ -503,9 +503,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 VALUES (?, ?, 'inbound', ?, ?, ?, ?)
               `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, executionId, now);
 
-              const replyText = sexualDecision.action === 'block_message'
-                ? SEXUAL_BLOCK_MESSAGE
-                : SEXUAL_RETRY_MESSAGE;
+              const replyText = getSexualIntentReply(sexualDecision.action);
               const outboundIntent = sexualDecision.action === 'block_message'
                 ? 'security_block'
                 : 'retry_question';
@@ -1007,6 +1005,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   customerMessage: messageText,
                   agentResponse: finalResponse,
                   knowledgeContext: formattedKnowledge,
+                  selectedEvidence,
                   followUpHint: analysis.followUpHint,
                   activeTopic: analysis.activeTopicLabel,
                   responseDirective: analysis.responseDirective,
@@ -1043,6 +1042,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                     formattedKnowledge,
                     correctionModelId,
                     {
+                      selectedEvidence,
                       followUpHint: analysis.followUpHint,
                       activeTopic: analysis.activeTopicLabel,
                       responseDirective: analysis.responseDirective,

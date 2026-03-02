@@ -422,4 +422,139 @@ describe('InstagramContextService AI context planner', () => {
     expect(analysis.activeTopicLabel).toBe('reformer pilates');
     expect(analysis.conversationState?.repairedFromState).toBe(true);
   });
+  it('uses recent conversation state instead of a stale planner follow-up when topics conflict', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services', 'pricing', 'hours'],
+      semanticSignals: ['recent_follow_up', 'topic_specific_info_request'],
+      topicSummary: 'taekwondo dersleri',
+      contextDependency: {
+        dependsOnPriorTopic: true,
+        topicLabel: 'taekwondo dersleri',
+        sourceMessage: 'taekwondo dersi varmi',
+        rationale: 'Mesaj onceki taekwondo sorusuna bagli gorunuyor.',
+      },
+      responseDirective: {
+        mode: 'answer_directly',
+        instruction: 'Aktif konu olarak taekwondo derslerini ele al.',
+        rationale: 'Baglam onceki mesajdan geliyor.',
+      },
+      tier: 'standard',
+      tierReason: 'Baglama dayali standart bilgi talebi',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const fakeDb = {
+      prepare(sql: string) {
+        if (sql.includes('ORDER BY created_at DESC')) {
+          return {
+            all: () => [
+              { direction: 'outbound', message_text: 'Evet, cocuklar icin yuzme derslerimiz mevcut.', created_at: minutesAgo(1) },
+              { direction: 'inbound', message_text: 'cocuklar icin yuzme dersi varmi', created_at: minutesAgo(1) },
+              { direction: 'outbound', message_text: 'Taekwondo 2000 TL.', created_at: minutesAgo(2) },
+              { direction: 'inbound', message_text: 'taekwondo dersi varmi', created_at: minutesAgo(2) },
+            ],
+          };
+        }
+
+        if (sql.includes('COUNT(*) as c')) {
+          return { get: () => ({ c: 6 }) };
+        }
+
+        if (sql.includes('FROM dm_conversation_state')) {
+          return {
+            get: () => ({
+              channel: 'instagram',
+              customer_id: 'ig-user',
+              active_topic: 'yuzme dersleri',
+              active_topic_confidence: 0.82,
+              topic_source_message: 'taekwondo dersi varmi',
+              last_question_type: 'service_topic',
+              pending_categories: '["services"]',
+              last_customer_message: 'cocuklar icin yuzme dersi varmi',
+              last_assistant_message: 'Evet, cocuklar icin yuzme derslerimiz mevcut.',
+              turn_count: 4,
+              expires_at: minutesFromNow(10),
+              created_at: minutesAgo(2),
+              updated_at: minutesAgo(1),
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    } as any;
+
+    const service = new InstagramContextService(fakeDb);
+    const analysis = await service.analyzeMessage('ig-user', 'fiyat nedir saat kacta ne zaman');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(analysis.followUpHint).toEqual({
+      topicLabel: 'yuzme dersleri',
+      rewrittenQuestion: 'yuzme dersleri icin fiyat nedir saat kacta ne zaman',
+      sourceMessage: 'cocuklar icin yuzme dersi varmi',
+    });
+    expect(analysis.activeTopicLabel).toBe('yuzme dersleri');
+  });
+
+  it('resets the stored topic source when the user explicitly switches services', () => {
+    const insertRuns: unknown[][] = [];
+    const fakeDb = {
+      prepare(sql: string) {
+        if (sql.includes('FROM dm_conversation_state')) {
+          return {
+            get: () => ({
+              channel: 'instagram',
+              customer_id: 'ig-user',
+              active_topic: 'taekwondo dersleri',
+              active_topic_confidence: 0.95,
+              topic_source_message: 'taekwondo dersi varmi',
+              last_question_type: 'follow_up',
+              pending_categories: '["services","pricing","hours"]',
+              last_customer_message: 'fiyat nedir saat kacta ne zaman',
+              last_assistant_message: 'Taekwondo 2000 TL.',
+              turn_count: 3,
+              expires_at: minutesFromNow(10),
+              created_at: minutesAgo(2),
+              updated_at: minutesAgo(1),
+            }),
+          };
+        }
+
+        if (sql.includes('INSERT INTO dm_conversation_state')) {
+          return {
+            run: (...args: unknown[]) => {
+              insertRuns.push(args);
+              return { changes: 1 };
+            },
+          };
+        }
+
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    } as any;
+
+    const service = new InstagramContextService(fakeDb);
+    service.saveConversationState(
+      'ig-user',
+      'cocuklar icin yuzme dersi varmi',
+      'Evet, cocuklar icin yuzme derslerimiz mevcut.',
+      {
+        activeTopicLabel: 'yuzme dersleri',
+        followUpHint: null,
+        conversationState: {
+          activeTopic: 'taekwondo dersleri',
+          activeTopicConfidence: 0.95,
+          topicSourceMessage: 'taekwondo dersi varmi',
+          expiresAt: minutesFromNow(10),
+          usedForPlanning: true,
+          repairedFromState: false,
+        },
+        intentCategories: ['services'],
+      } as any,
+    );
+
+    expect(insertRuns).toHaveLength(1);
+    expect(insertRuns[0][4]).toBe('cocuklar icin yuzme dersi varmi');
+  });
 });

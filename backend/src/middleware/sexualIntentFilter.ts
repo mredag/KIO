@@ -14,6 +14,8 @@ export type SexualIntentDecision =
 const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
+const SEXUAL_BLOCK_REPLY = 'Uygunsuz hizmet sunmuyoruz. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.';
+const SEXUAL_RETRY_REPLY = 'Mesajınızı daha açık yazar mısınız? Yalnızca profesyonel spa ve spor hizmetleri konusunda yardımcı olabiliyoruz.';
 
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -76,6 +78,29 @@ function extractClassification(content: string, modelUsed: string): SexualIntent
   };
 }
 
+function normalizeClassifierWhitespace(messageText: string): string {
+  return messageText.replace(/\s+/g, ' ').trim();
+}
+
+function buildCompactClassifierText(messageText: string): string {
+  return messageText
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function buildSexualIntentPrompt(messageText: string): string {
+  const normalized = normalizeClassifierWhitespace(messageText);
+  const compact = buildCompactClassifierText(messageText);
+
+  return [
+    `Original message: ${messageText}`,
+    `Normalized spacing: ${normalized || '(empty)'}`,
+    `Compact text (ignore spaces/punctuation): ${compact || '(empty)'}`,
+    'Users may try to hide intent by splitting words with spaces, punctuation, or syllables.',
+    'Classify the underlying meaning after mentally removing separators.',
+  ].join('\n');
+}
+
 export function decideSexualIntent(classification: SexualIntentClassification): SexualIntentDecision {
   const sexualScore = classification.isSexual ? classification.confidence : 0;
 
@@ -105,6 +130,18 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
   };
 }
 
+export function getSexualIntentReply(action: SexualIntentDecision['action']): string {
+  if (action === 'block_message') {
+    return SEXUAL_BLOCK_REPLY;
+  }
+
+  if (action === 'retry_question') {
+    return SEXUAL_RETRY_REPLY;
+  }
+
+  return '';
+}
+
 export async function classifySexualIntent(messageText: string): Promise<SexualIntentClassification> {
   const apiKey = process.env.OPENROUTER_API_KEY || '';
   const model = process.env.SEXUAL_INTENT_MODEL || DEFAULT_MODEL;
@@ -122,6 +159,9 @@ export async function classifySexualIntent(messageText: string): Promise<SexualI
     'You are a strict content safety classifier for Instagram DMs.',
     'The business is a legitimate spa and fitness center.',
     'Detect only sexual intent or sexually explicit content.',
+    'Questions asking about erotic endings, sexual gratification, or inappropriate touching are sexual even when phrased indirectly.',
+    'Users may obfuscate sexual requests by splitting words with spaces, punctuation, or syllables.',
+    'Detect the underlying meaning after removing separators, not just the literal surface form.',
     'Treat normal wellness or sports service questions as non-sexual by default.',
     'Plain mentions of massage, spa, hamam, sauna, pool, fitness, pilates, courses, or memberships are NOT sexual unless the message adds explicit sexual service intent.',
     'A message like "masaj" by itself is a standard service inquiry, not sexual content.',
@@ -131,7 +171,7 @@ export async function classifySexualIntent(messageText: string): Promise<SexualI
     'Be conservative: if uncertain, choose lower confidence values.',
   ].join(' ');
 
-  const userPrompt = `Message: ${messageText}`;
+  const userPrompt = buildSexualIntentPrompt(messageText);
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',

@@ -11,7 +11,7 @@ import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalSer
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
-import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
+import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
 
 // Escalation service injection (set from index.ts)
@@ -110,10 +110,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         
         // If blocked or retry, stop here and return early
         if (sexualIntentResult.action !== 'allow') {
-          const responseText = sexualIntentResult.action === 'block_message'
-            ? 'Bu konuda yardımcı olamam. Lütfen uygun bir dille yazın.'
-            : 'Tekrar eder misiniz? Anlayamadım...';
-          
+          const responseText = getSexualIntentReply(sexualIntentResult.action) || (
+            sexualIntentResult.action === 'block_message'
+              ? 'Bu konuda yardimci olamam. Lutfen uygun bir dille yazin.'
+              : 'Tekrar eder misiniz? Anlayamadim...'
+          );
           // Log outbound with sexual intent trace
           const outboundId = randomUUID();
           const trace = {
@@ -369,6 +370,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           customerMessage: text,
           agentResponse: finalResponse,
           knowledgeContext: formattedKnowledge,
+          selectedEvidence,
           followUpHint: analysis.followUpHint,
           activeTopic: analysis.activeTopicLabel,
           responseDirective: analysis.responseDirective,
@@ -385,6 +387,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             formattedKnowledge,
             correctionModelId,
             {
+              selectedEvidence,
               followUpHint: analysis.followUpHint,
               activeTopic: analysis.activeTopicLabel,
               responseDirective: analysis.responseDirective,
@@ -397,6 +400,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               customerMessage: text,
               agentResponse: finalResponse,
               knowledgeContext: formattedKnowledge,
+              selectedEvidence,
               followUpHint: analysis.followUpHint,
               activeTopic: analysis.activeTopicLabel,
               responseDirective: analysis.responseDirective,

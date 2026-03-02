@@ -269,9 +269,18 @@ export class InstagramContextService {
           : Math.max(analysis.conversationState?.activeTopicConfidence || 0.7, 0.7);
 
     const ttlMinutes = analysis.followUpHint ? 15 : 12;
-    const topicSourceMessage = analysis.followUpHint?.sourceMessage
-      || analysis.conversationState?.topicSourceMessage
-      || customerMessage;
+    const previousActiveTopic = analysis.conversationState?.activeTopic
+      ? normalizeTurkish(analysis.conversationState.activeTopic.toLowerCase())
+      : null;
+    const currentActiveTopic = normalizeTurkish(activeTopic.toLowerCase());
+    const activeTopicChanged = previousActiveTopic !== currentActiveTopic;
+    const shouldResetTopicSource = !analysis.followUpHint
+      && (activeTopicChanged || analysis.intentCategories.includes('services'));
+    const topicSourceMessage = shouldResetTopicSource
+      ? customerMessage
+      : analysis.followUpHint?.sourceMessage
+        || analysis.conversationState?.topicSourceMessage
+        || customerMessage;
 
     this.conversationStateService.saveState({
       channel: 'instagram',
@@ -798,6 +807,58 @@ export class InstagramContextService {
     return plan.responseDirective.mode === 'clarify_only' || !plan.categories.includes('services');
   }
 
+  private shouldOverrideFollowUpWithState(
+    plan: AIContextPlan,
+    conversationState: ConversationStateRecord | null,
+  ): boolean {
+    if (!conversationState || !plan.followUpHint) {
+      return false;
+    }
+
+    const nonServiceCategories = plan.categories.filter(category => category !== 'services');
+    if (!this.isModifierOnlyRequest(nonServiceCategories)) {
+      return false;
+    }
+
+    if (!conversationState.activeTopic || conversationState.activeTopicConfidence < 0.75) {
+      return false;
+    }
+
+    if (!conversationState.lastCustomerMessage) {
+      return false;
+    }
+
+    const normalizedPlanTopic = normalizeTurkish(plan.followUpHint.topicLabel.toLowerCase());
+    const normalizedStateTopic = normalizeTurkish(conversationState.activeTopic.toLowerCase());
+
+    if (!normalizedPlanTopic || normalizedPlanTopic === normalizedStateTopic) {
+      return false;
+    }
+
+    return conversationState.lastQuestionType === 'service_topic'
+      || conversationState.pendingCategories.includes('services');
+  }
+
+  private buildStateFollowUpHint(
+    messageText: string,
+    conversationState: ConversationStateRecord,
+  ): FollowUpContextHint | null {
+    if (!conversationState.activeTopic) {
+      return null;
+    }
+
+    const cleanedMessage = messageText.trim();
+    if (!cleanedMessage) {
+      return null;
+    }
+
+    return {
+      topicLabel: conversationState.activeTopic,
+      rewrittenQuestion: `${conversationState.activeTopic} icin ${cleanedMessage}`,
+      sourceMessage: conversationState.lastCustomerMessage || conversationState.topicSourceMessage || conversationState.activeTopic,
+    };
+  }
+
   private async repairImplicitFollowUpAI(messageText: string, history: ConversationEntry[]): Promise<ContextDependency> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     const latestCustomerEntry = this.getLatestCustomerEntry(history);
@@ -1191,6 +1252,28 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
           console.log('[InstagramContextService] State context repair resolved: "%s" -> "%s"',
             repairedFollowUpHint.sourceMessage,
             repairedFollowUpHint.rewrittenQuestion);
+        }
+      }
+      if (this.shouldOverrideFollowUpWithState(plan, conversationState)) {
+        const overriddenFollowUpHint = this.buildStateFollowUpHint(messageText, conversationState!);
+        if (overriddenFollowUpHint) {
+          plan.followUpHint = overriddenFollowUpHint;
+          plan.topicSummary = conversationState!.activeTopic;
+          plan.categories = this.applyContextDependencyToCategories(plan.categories, {
+            dependsOnPriorTopic: true,
+            topicLabel: conversationState!.activeTopic,
+            sourceMessage: overriddenFollowUpHint.sourceMessage,
+            rationale: 'Aktif konusma durumu, planlanan konudan daha yeni ve daha guvenilir.',
+          });
+          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, {
+            dependsOnPriorTopic: true,
+            topicLabel: conversationState!.activeTopic,
+            sourceMessage: overriddenFollowUpHint.sourceMessage,
+            rationale: 'Aktif konusma durumu, planlanan konudan daha yeni ve daha guvenilir.',
+          });
+          console.log('[InstagramContextService] Follow-up conflict override: "%s" -> "%s"',
+            overriddenFollowUpHint.sourceMessage,
+            overriddenFollowUpHint.rewrittenQuestion);
         }
       }
       if (plan.followUpHint) {

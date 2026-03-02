@@ -95,6 +95,7 @@ export interface PolicyValidationContext {
   customerMessage: string;
   agentResponse: string;
   knowledgeContext: string;
+  selectedEvidence?: string;
   followUpHint?: FollowUpContextHint | null;
   activeTopic?: string | null;
   responseDirective?: ResponseDirective | null;
@@ -138,6 +139,75 @@ export class ResponsePolicyService {
     }
 
     return lines;
+  }
+
+  private buildSelectedEvidenceLines(selectedEvidence?: string): string[] {
+    const trimmed = selectedEvidence?.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    return [
+      'ONCELIKLI_KANIT:',
+      trimmed,
+    ];
+  }
+
+  private extractEvidenceTokens(rawText: string): string[] {
+    const normalized = rawText
+      .toLocaleLowerCase('tr-TR')
+      .replace(/[ğ]/g, 'g')
+      .replace(/[ü]/g, 'u')
+      .replace(/[ş]/g, 's')
+      .replace(/[ı]/g, 'i')
+      .replace(/[ö]/g, 'o')
+      .replace(/[ç]/g, 'c')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ');
+
+    return [...new Set(
+      normalized
+        .split(/\s+/)
+        .map(token => token.trim())
+        .filter(token => token.length >= 3),
+    )];
+  }
+
+  private buildNearbyEvidenceLines(context: Pick<PolicyValidationContext, 'customerMessage' | 'knowledgeContext' | 'followUpHint' | 'activeTopic'>): string[] {
+    if (!context.knowledgeContext) {
+      return [];
+    }
+
+    const querySource = [
+      context.customerMessage,
+      context.followUpHint?.rewrittenQuestion || '',
+      context.followUpHint?.topicLabel || '',
+      context.activeTopic || '',
+    ].join(' ');
+    const queryTokens = this.extractEvidenceTokens(querySource);
+
+    if (queryTokens.length === 0) {
+      return [];
+    }
+
+    const scoredLines = context.knowledgeContext
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('['))
+      .map((line, index) => {
+        const normalizedLine = this.extractEvidenceTokens(line);
+        const overlap = queryTokens.filter(token => normalizedLine.some(lineToken => lineToken.includes(token) || token.includes(lineToken)));
+        const hasNumericRange = /\b\d+\s*-\s*\d+\b/.test(line) ? 0.5 : 0;
+
+        return {
+          line,
+          index,
+          score: overlap.length + hasNumericRange,
+        };
+      })
+      .filter(item => item.score > 0)
+      .sort((a, b) => (b.score - a.score) || (a.index - b.index));
+
+    return [...new Set(scoredLines.slice(0, 4).map(item => item.line))];
   }
 
   /**
@@ -217,6 +287,7 @@ export class ResponsePolicyService {
     const userPrompt = [
       `MUSTERI_MESAJI: ${context.customerMessage}`,
       ...this.buildTopicScopeLines(context),
+      ...this.buildSelectedEvidenceLines(context.selectedEvidence),
       '',
       `ASISTAN_YANITI: ${context.agentResponse}`,
       '',
@@ -517,7 +588,7 @@ veya
     validation: PolicyValidationResult,
     knowledgeContext: string,
     modelId: string = 'moonshotai/kimi-k2',
-    context: Pick<PolicyValidationContext, 'followUpHint' | 'activeTopic' | 'responseDirective'> = {},
+    context: Pick<PolicyValidationContext, 'selectedEvidence' | 'followUpHint' | 'activeTopic' | 'responseDirective'> = {},
   ): Promise<{ response: string | null; latencyMs: number; tokensEstimated: number }> {
     if (!this.apiKey) {
       return { response: null, latencyMs: 0, tokensEstimated: 0 };
@@ -526,6 +597,13 @@ veya
     const startTime = Date.now();
     const allowedFactsHint = this.buildAllowedFactsHint(knowledgeContext);
     const scopeLines = this.buildTopicScopeLines(context as PolicyValidationContext);
+    const selectedEvidenceLines = this.buildSelectedEvidenceLines(context.selectedEvidence);
+    const nearbyEvidenceLines = this.buildNearbyEvidenceLines({
+      customerMessage,
+      knowledgeContext,
+      followUpHint: context.followUpHint,
+      activeTopic: context.activeTopic,
+    });
 
     const systemPrompt = `Sen Eform Spor Merkezi'nin Instagram DM asistanısın. Müşteriye Türkçe yanıt ver.
 
@@ -565,6 +643,10 @@ ${allowedFactsHint}`;
     const userPrompt = `Müşteri mesajı: ${customerMessage}
 
 ${scopeLines.join('\n')}
+
+${selectedEvidenceLines.join('\n')}
+
+${nearbyEvidenceLines.length > 0 ? `YAKIN_KANIT_SATIRLARI:\n${nearbyEvidenceLines.join('\n')}` : ''}
 
 Reddedilen yanıt (konuyu koru, sadece hatalı kısımları düzelt): ${failedResponse}
 

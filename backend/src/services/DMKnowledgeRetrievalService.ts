@@ -39,10 +39,24 @@ export interface SemanticRetrievalTrace {
   skippedReason: string | null;
 }
 
+export interface SemanticRetrievalCandidate {
+  id: string;
+  category: string;
+  keyName: string;
+  value: string;
+  description: string | null;
+  score: number;
+}
+
 export interface SemanticRetrievalResult {
   knowledgeContext: string;
   addedEntriesCount: number;
   addedCategories: string[];
+  trace: SemanticRetrievalTrace;
+}
+
+export interface SemanticRetrievalCandidateResult {
+  candidates: SemanticRetrievalCandidate[];
   trace: SemanticRetrievalTrace;
 }
 
@@ -112,10 +126,45 @@ export class DMKnowledgeRetrievalService {
     activeTopic: string | null;
     primaryCategories: Iterable<string>;
     maxEntries?: number;
+    maxCandidates?: number;
     minScore?: number;
   }): SemanticRetrievalResult {
-    const startedAt = Date.now();
     const maxEntries = Math.max(0, params.maxEntries ?? 3);
+    const searchResult = this.findCandidates(params);
+
+    if (searchResult.candidates.length === 0) {
+      return {
+        knowledgeContext: params.baseContextJson,
+        addedEntriesCount: 0,
+        addedCategories: [],
+        trace: searchResult.trace,
+      };
+    }
+
+    const mergeResult = this.applyCandidatesToContext(
+      params.baseContextJson,
+      searchResult.candidates.slice(0, maxEntries),
+    );
+
+    return {
+      knowledgeContext: mergeResult.knowledgeContext,
+      addedEntriesCount: mergeResult.addedEntriesCount,
+      addedCategories: mergeResult.addedCategories,
+      trace: searchResult.trace,
+    };
+  }
+
+  findCandidates(params: {
+    baseContextJson: string;
+    messageText: string;
+    followUpHint: FollowUpContextHint | null;
+    activeTopic: string | null;
+    primaryCategories: Iterable<string>;
+    maxCandidates?: number;
+    minScore?: number;
+  }): SemanticRetrievalCandidateResult {
+    const startedAt = Date.now();
+    const maxCandidates = Math.max(0, params.maxCandidates ?? 8);
     const minScore = params.minScore ?? 0.18;
     const queryText = this.buildQueryText(params.messageText, params.followUpHint, params.activeTopic);
 
@@ -132,9 +181,7 @@ export class DMKnowledgeRetrievalService {
 
     if (!queryText.trim()) {
       return {
-        knowledgeContext: params.baseContextJson,
-        addedEntriesCount: 0,
-        addedCategories: [],
+        candidates: [],
         trace: {
           ...baseTrace,
           latencyMs: Date.now() - startedAt,
@@ -147,9 +194,7 @@ export class DMKnowledgeRetrievalService {
     const queryVector = this.buildQueryVector(queryText, index.idf);
     if (queryVector.size === 0) {
       return {
-        knowledgeContext: params.baseContextJson,
-        addedEntriesCount: 0,
-        addedCategories: [],
+        candidates: [],
         trace: {
           ...baseTrace,
           refreshedIndex: refreshed,
@@ -167,7 +212,7 @@ export class DMKnowledgeRetrievalService {
       ],
     );
 
-    const scored = index.documents
+    const candidates = index.documents
       .filter(document => !blockedCategories.has(document.category.toLowerCase()))
       .map(document => ({
         document,
@@ -179,37 +224,56 @@ export class DMKnowledgeRetrievalService {
         || a.document.category.localeCompare(b.document.category)
         || a.document.key_name.localeCompare(b.document.key_name),
       )
-      .slice(0, maxEntries);
+      .slice(0, maxCandidates)
+      .map(({ document, score }) => ({
+        id: document.id,
+        category: document.category,
+        keyName: document.key_name,
+        value: document.value,
+        description: document.description,
+        score: Number(score.toFixed(4)),
+      }));
 
-    if (scored.length === 0) {
-      return {
-        knowledgeContext: params.baseContextJson,
-        addedEntriesCount: 0,
-        addedCategories: [],
-        trace: {
-          ...baseTrace,
-          refreshedIndex: refreshed,
-          candidateCount: 0,
-          latencyMs: Date.now() - startedAt,
-          skippedReason: 'no_matches',
-        },
-      };
-    }
+    return {
+      candidates,
+      trace: {
+        ...baseTrace,
+        refreshedIndex: refreshed,
+        candidateCount: candidates.length,
+        selectedEntries: candidates.map(candidate => ({
+          category: candidate.category,
+          keyName: candidate.keyName,
+          score: candidate.score,
+        })),
+        latencyMs: Date.now() - startedAt,
+        skippedReason: candidates.length === 0 ? 'no_matches' : null,
+      },
+    };
+  }
 
+  applyCandidatesToContext(
+    baseContextJson: string,
+    candidates: SemanticRetrievalCandidate[],
+  ): {
+    knowledgeContext: string;
+    addedEntriesCount: number;
+    addedCategories: string[];
+  } {
+    const currentContext = this.parseContext(baseContextJson);
     const addedCategories = new Set<string>();
     let addedEntriesCount = 0;
 
-    for (const { document } of scored) {
-      if (!currentContext[document.category]) {
-        currentContext[document.category] = {};
+    for (const candidate of candidates) {
+      if (!currentContext[candidate.category]) {
+        currentContext[candidate.category] = {};
       }
 
-      if (currentContext[document.category][document.key_name]) {
+      if (currentContext[candidate.category][candidate.keyName]) {
         continue;
       }
 
-      currentContext[document.category][document.key_name] = document.value;
-      addedCategories.add(document.category);
+      currentContext[candidate.category][candidate.keyName] = candidate.value;
+      addedCategories.add(candidate.category);
       addedEntriesCount += 1;
     }
 
@@ -217,17 +281,6 @@ export class DMKnowledgeRetrievalService {
       knowledgeContext: JSON.stringify(currentContext),
       addedEntriesCount,
       addedCategories: Array.from(addedCategories),
-      trace: {
-        ...baseTrace,
-        refreshedIndex: refreshed,
-        candidateCount: scored.length,
-        selectedEntries: scored.map(({ document, score }) => ({
-          category: document.category,
-          keyName: document.key_name,
-          score: Number(score.toFixed(4)),
-        })),
-        latencyMs: Date.now() - startedAt,
-      },
     };
   }
 

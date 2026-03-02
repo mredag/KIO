@@ -8,6 +8,7 @@ import { DirectResponseService } from '../services/DirectResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
+import { DMKnowledgeRerankerService } from '../services/DMKnowledgeRerankerService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -29,6 +30,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const rawDb = db.getDb();
   const knowledgeBaseService = new KnowledgeBaseService(db);
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(rawDb);
+  const semanticReranker = new DMKnowledgeRerankerService();
 
   // Middleware: session auth (admin panel) OR API key auth (external)
   const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -210,6 +212,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         refreshedIndex: false,
         skippedReason: 'not_run' as string | null,
       };
+      let semanticRerankTrace = {
+        enabled: true,
+        modelId: 'disabled',
+        candidateCount: 0,
+        selectedCount: 0,
+        selectedEntries: [] as Array<{ category: string; keyName: string; score: number }>,
+        latencyMs: 0,
+        skippedReason: 'not_run' as string | null,
+        rationale: null as string | null,
+      };
       try {
         const kRes = await fetch(
           `http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
@@ -226,25 +238,40 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       } catch { /* knowledge fetch failed, continue */ }
 
       try {
-        const semanticRetrieval = semanticKnowledgeService.augmentContext({
+        const semanticRetrieval = semanticKnowledgeService.findCandidates({
           baseContextJson: knowledgeContext,
           messageText: text,
           followUpHint: analysis.followUpHint,
           activeTopic: analysis.activeTopicLabel,
           primaryCategories: kbCategories,
+          maxCandidates: 8,
         });
 
         semanticRetrievalTrace = semanticRetrieval.trace;
 
-        if (semanticRetrieval.addedEntriesCount > 0) {
-          knowledgeContext = semanticRetrieval.knowledgeContext;
-          knowledgeEntriesCount += semanticRetrieval.addedEntriesCount;
-          for (const addedCategory of semanticRetrieval.addedCategories) {
+        const rerankResult = await semanticReranker.rerank({
+          messageText: text,
+          followUpHint: analysis.followUpHint,
+          activeTopic: analysis.activeTopicLabel,
+          requestedCategories: analysis.intentCategories,
+          candidates: semanticRetrieval.candidates,
+          maxSelections: 3,
+        });
+        semanticRerankTrace = rerankResult.trace;
+
+        if (rerankResult.selectedCandidates.length > 0) {
+          const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
+            knowledgeContext,
+            rerankResult.selectedCandidates,
+          );
+          knowledgeContext = mergedKnowledge.knowledgeContext;
+          knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
+          for (const addedCategory of mergedKnowledge.addedCategories) {
             kbCategories.add(addedCategory);
           }
         }
       } catch (semanticRetrievalErr) {
-        console.error('[Simulator] Semantic KB retrieval failed:', semanticRetrievalErr);
+        console.error('[Simulator] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
         semanticRetrievalTrace = {
           enabled: true,
           strategy: 'sparse_tfidf_chargram',
@@ -254,6 +281,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           latencyMs: 0,
           refreshedIndex: false,
           skippedReason: 'error',
+        };
+        semanticRerankTrace = {
+          enabled: true,
+          modelId: 'disabled',
+          candidateCount: 0,
+          selectedCount: 0,
+          selectedEntries: [],
+          latencyMs: 0,
+          skippedReason: 'error',
+          rationale: null,
         };
       }
 
@@ -406,6 +443,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         knowledgeFetchStatus: knowledgeContext ? 'success' : 'fail',
         knowledgeEntriesCount,
         semanticRetrieval: semanticRetrievalTrace,
+        semanticRerank: semanticRerankTrace,
         openclawDispatchStatus: 'skipped',
         openclawSessionKey: 'simulator',
         agentPollDurationMs: 0,

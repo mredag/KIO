@@ -1,0 +1,121 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DMKnowledgeRerankerService } from './DMKnowledgeRerankerService.js';
+import type { SemanticRetrievalCandidate } from './DMKnowledgeRetrievalService.js';
+
+function createCandidate(
+  id: string,
+  category: string,
+  keyName: string,
+  score: number,
+  value: string,
+): SemanticRetrievalCandidate {
+  return {
+    id,
+    category,
+    keyName,
+    value,
+    description: null,
+    score,
+  };
+}
+
+describe('DMKnowledgeRerankerService', () => {
+  let originalApiKey: string | undefined;
+
+  beforeEach(() => {
+    originalApiKey = process.env.OPENROUTER_API_KEY;
+  });
+
+  afterEach(() => {
+    if (originalApiKey === undefined) {
+      delete process.env.OPENROUTER_API_KEY;
+    } else {
+      process.env.OPENROUTER_API_KEY = originalApiKey;
+    }
+
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('uses LLM-selected candidate ids when rerank succeeds', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                selectedIds: ['c2'],
+                rationale: 'Bu aday dogrudan havuz sicakligi sorusunu cevapluyor.',
+              }),
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'havuz kac derece',
+      followUpHint: null,
+      activeTopic: null,
+      requestedCategories: ['faq'],
+      candidates: [
+        createCandidate('c1', 'policies', 'pool_rules', 0.29, 'Bone zorunludur.'),
+        createCandidate('c2', 'faq', 'havuz_sicaklik', 0.27, 'Havuz 28-30 derece arasindadir.'),
+      ],
+      maxSelections: 2,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.selectedCandidates).toHaveLength(1);
+    expect(result.selectedCandidates[0].id).toBe('c2');
+    expect(result.trace.selectedEntries[0]).toMatchObject({
+      category: 'faq',
+      keyName: 'havuz_sicaklik',
+    });
+  });
+
+  it('allows the reranker to reject weak single support candidates', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                selectedIds: [],
+                rationale: 'Bu destek girdisi aktif fiyat/saat sorusuna dogrudan yardim etmiyor.',
+              }),
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'fiyat nedir saat kacta ne zaman',
+      followUpHint: {
+        topicLabel: 'taekwondo dersleri',
+        rewrittenQuestion: 'taekwondo dersleri icin fiyat nedir saat kacta ne zaman',
+        sourceMessage: 'taewondo dersi varmi',
+      },
+      activeTopic: 'taekwondo dersleri',
+      requestedCategories: ['services', 'pricing', 'hours'],
+      candidates: [
+        createCandidate('c1', 'policies', 'age_groups', 0.2473, 'Taekwondo 8+'),
+      ],
+      maxSelections: 3,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.selectedCandidates).toEqual([]);
+    expect(result.trace.selectedCount).toBe(0);
+    expect(result.trace.rationale).toContain('dogrudan yardim etmiyor');
+  });
+});

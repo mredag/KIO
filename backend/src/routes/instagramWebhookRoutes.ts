@@ -11,6 +11,7 @@ import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
+import { DMKnowledgeRerankerService } from '../services/DMKnowledgeRerankerService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -81,6 +82,20 @@ export interface PipelineTrace {
     refreshedIndex: boolean;
     skippedReason: string | null;
   };
+  semanticRerank?: {
+    enabled: boolean;
+    modelId: string;
+    candidateCount: number;
+    selectedCount: number;
+    selectedEntries: Array<{
+      category: string;
+      keyName: string;
+      score: number;
+    }>;
+    latencyMs: number;
+    skippedReason: string | null;
+    rationale: string | null;
+  };
   openclawDispatchStatus: 'success' | 'fail';
   openclawSessionKey: string;
   agentPollDurationMs: number;
@@ -126,6 +141,7 @@ export interface PipelineError {
 export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const router = Router();
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(db);
+  const semanticReranker = new DMKnowledgeRerankerService();
   
   const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'spa-kiosk-instagram-verify';
   const OPENCLAW_WEBHOOK_URL = process.env.OPENCLAW_IG_WEBHOOK_URL || '';
@@ -685,6 +701,16 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               refreshedIndex: false,
               skippedReason: 'not_run',
             };
+            trace.semanticRerank = {
+              enabled: true,
+              modelId: 'disabled',
+              candidateCount: 0,
+              selectedCount: 0,
+              selectedEntries: [],
+              latencyMs: 0,
+              skippedReason: 'not_run',
+              rationale: null,
+            };
             if (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) {
               const kData = await knowledgeRes.value.json() as Record<string, unknown>;
               knowledgeContext = typeof kData === 'object' ? JSON.stringify(kData) : String(kData);
@@ -697,25 +723,40 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
 
             try {
-              const semanticRetrieval = semanticKnowledgeService.augmentContext({
+              const semanticRetrieval = semanticKnowledgeService.findCandidates({
                 baseContextJson: knowledgeContext,
                 messageText,
                 followUpHint: analysis.followUpHint,
                 activeTopic: analysis.activeTopicLabel,
                 primaryCategories: categories,
+                maxCandidates: 8,
               });
 
               trace.semanticRetrieval = semanticRetrieval.trace;
 
-              if (semanticRetrieval.addedEntriesCount > 0) {
-                knowledgeContext = semanticRetrieval.knowledgeContext;
-                knowledgeEntriesCount += semanticRetrieval.addedEntriesCount;
-                for (const addedCategory of semanticRetrieval.addedCategories) {
+              const rerankResult = await semanticReranker.rerank({
+                messageText,
+                followUpHint: analysis.followUpHint,
+                activeTopic: analysis.activeTopicLabel,
+                requestedCategories: analysis.intentCategories,
+                candidates: semanticRetrieval.candidates,
+                maxSelections: 3,
+              });
+              trace.semanticRerank = rerankResult.trace;
+
+              if (rerankResult.selectedCandidates.length > 0) {
+                const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
+                  knowledgeContext,
+                  rerankResult.selectedCandidates,
+                );
+                knowledgeContext = mergedKnowledge.knowledgeContext;
+                knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
+                for (const addedCategory of mergedKnowledge.addedCategories) {
                   categories.add(addedCategory);
                 }
               }
             } catch (semanticRetrievalErr) {
-              console.error('[Instagram Webhook] Semantic KB retrieval failed:', semanticRetrievalErr);
+              console.error('[Instagram Webhook] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
               trace.semanticRetrieval = {
                 enabled: true,
                 strategy: 'sparse_tfidf_chargram',
@@ -725,6 +766,16 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 latencyMs: 0,
                 refreshedIndex: false,
                 skippedReason: 'error',
+              };
+              trace.semanticRerank = {
+                enabled: true,
+                modelId: 'disabled',
+                candidateCount: 0,
+                selectedCount: 0,
+                selectedEntries: [],
+                latencyMs: 0,
+                skippedReason: 'error',
+                rationale: null,
               };
             }
 

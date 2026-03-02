@@ -49,14 +49,37 @@ function readOpenClawConfig(): any {
 function writeOpenClawConfig(config: any): void {
   writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 }
+
+function expandOpenClawPath(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[\\/]+/g, path.sep);
+  if (normalized === '~') return homedir();
+  if (normalized.startsWith(`~${path.sep}`)) {
+    return path.normalize(path.join(homedir(), normalized.slice(2)));
+  }
+  return path.normalize(normalized);
+}
+
+function resolveMissionControlAgentId(agentId: string): string {
+  if (agentId === 'instagram') return 'instagram-dm';
+  if (agentId === 'whatsapp') return 'whatsapp-dm';
+  return agentId;
+}
+
 function createAgentWorkspace(agentId: string, name: string, role: string, objective: string): void {
   const wsDir = join(OPENCLAW_WORKSPACES_DIR, agentId);
   if (!existsSync(wsDir)) mkdirSync(wsDir, { recursive: true });
+  const apiKey = process.env.N8N_API_KEY || '<N8N_API_KEY>';
+  const resolvedObjective = objective || 'Complete the assigned task accurately.';
 
   const files: Record<string, string> = {
-    'AGENTS.md': `# ${name} - ${role}\n\nYou are **${name}**, a specialized agent for Eform Spor Merkezi.\n\n## Identity\n- Name: ${name}\n- Role: ${role}\n- Objective: ${objective}\n\n## KIO API\nBase: \`http://localhost:3001\`\nAuth: \`Bearer ${process.env.N8N_API_KEY || '<N8N_API_KEY>'}\`\n`,
-    'IDENTITY.md': `# IDENTITY.md - ${name}\n\n- **Name:** ${name}\n- **Role:** ${role}\n- **Objective:** ${objective}\n`,
-    'BOOTSTRAP.md': `# BOOTSTRAP.md - ${name}\n\nOn startup, read AGENTS.md for your instructions.\n`,
+    'AGENTS.md': `# ${name} - ${role}\n\nYou are ${name}, a Mission Control sub-agent for Eform Spor Merkezi.\n\n## Identity\n- Name: ${name}\n- Role: ${role}\n- Objective: ${resolvedObjective}\n\n## Operating Rules\n- Stay focused on the assigned task.\n- Read relevant files before changing them.\n- Use the KIO HTTP API for live operational data.\n- Verify the result before reporting completion.\n`,
+    'SOUL.md': `# SOUL.md - ${name}\n\nMission:\n- Protect customer trust and business data.\n- Prefer facts over guesses.\n- Keep changes minimal and reversible.\n`,
+    'TOOLS.md': `# TOOLS.md - ${name}\n\nKIO API base: http://localhost:3001\nAuth header: X-API-Key: ${apiKey}\n\nWorkflow:\n1. Read the task and the relevant files first.\n2. Use HTTP API calls for operational data.\n3. Verify the result before marking the task complete.\n`,
+    'IDENTITY.md': `# IDENTITY.md - ${name}\n\n- Name: ${name}\n- Role: ${role}\n- Objective: ${resolvedObjective}\n`,
+    'BOOTSTRAP.md': `# BOOTSTRAP.md - ${name}\n\nOn startup, read AGENTS.md, TOOLS.md, IDENTITY.md, USER.md, and MEMORY.md before acting.\n`,
     'HEARTBEAT.md': `# HEARTBEAT.md - ${name}\n\nHEARTBEAT_OK\n`,
     'MEMORY.md': `# MEMORY.md - ${name}\n\nNo memories yet.\n`,
     'USER.md': `# USER.md - ${name}\n\nOperator: Eform Spor Merkezi admin team.\n`,
@@ -383,6 +406,7 @@ router.post('/agents/sync', (_req: Request, res: Response) => {
 
     for (const ocAgent of config.agents.list) {
       const agentId = ocAgent.id;
+      const mcAgentId = resolveMissionControlAgentId(agentId);
       const name = ocAgent.identity?.name || ocAgent.name || agentId;
       const model = (ocAgent.model || config.agents?.defaults?.model?.primary || 'moonshotai/kimi-k2')
         .replace(/^openrouter\//, '');
@@ -395,24 +419,28 @@ router.post('/agents/sync', (_req: Request, res: Response) => {
                           identityContent.match(/\*\*Creature:\*\*\s*(.+)/i);
         if (roleMatch) role = roleMatch[1].trim();
       }
-      if (agentId === 'main') role = 'lead_intelligence_orchestrator';
+      if (mcAgentId === 'main') role = 'lead_intelligence_orchestrator';
 
-      if (existingIds.has(agentId)) {
-        db.prepare('UPDATE mc_agents SET model = ?, provider = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .run(model, 'openrouter', agentId);
+      if (existingIds.has(mcAgentId)) {
+        db.prepare('UPDATE mc_agents SET name = ?, role = ?, model = ?, provider = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(name, role, model, 'openrouter', mcAgentId);
+        updated++;
+      } else if (agentId !== mcAgentId && existingIds.has(agentId)) {
+        db.prepare('UPDATE mc_agents SET id = ?, name = ?, role = ?, model = ?, provider = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(mcAgentId, name, role, model, 'openrouter', agentId);
         updated++;
       } else if (existingNames.has(name.toLowerCase())) {
         const oldId = existingNames.get(name.toLowerCase())!;
-        db.prepare('UPDATE mc_agents SET id = ?, model = ?, provider = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .run(agentId, model, 'openrouter', oldId);
+        db.prepare('UPDATE mc_agents SET id = ?, name = ?, role = ?, model = ?, provider = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(mcAgentId, name, role, model, 'openrouter', oldId);
         updated++;
       } else {
         db.prepare(`INSERT INTO mc_agents (id, name, role, model, provider, status) VALUES (?, ?, ?, ?, ?, 'idle')`)
-          .run(agentId, name, role, model, 'openrouter');
-        emitEvent('agent', agentId, 'synced', `Agent "${name}" synced from OpenClaw`);
+          .run(mcAgentId, name, role, model, 'openrouter');
+        emitEvent('agent', mcAgentId, 'synced', `Agent "${name}" synced from OpenClaw`);
         created++;
       }
-      synced.push(agentId);
+      synced.push(mcAgentId);
     }
 
     const syncedSet = new Set(synced);
@@ -477,7 +505,8 @@ router.patch('/agents/:id', (req: Request, res: Response) => {
     if (model) {
       const config = readOpenClawConfig();
       if (config?.agents?.list) {
-        const ocAgent = config.agents.list.find((a: any) => a.id === req.params.id);
+        const resolvedAgentId = resolveOpenClawAgentId(req.params.id);
+        const ocAgent = config.agents.list.find((a: any) => a.id === resolvedAgentId);
         if (ocAgent) {
           ocAgent.model = model.startsWith('openrouter/') ? model : `openrouter/${model}`;
           if (name) ocAgent.identity = { ...ocAgent.identity, name };
@@ -503,7 +532,7 @@ router.delete('/agents/:id', (req: Request, res: Response) => {
     const agent = db.prepare('SELECT name FROM mc_agents WHERE id = ?').get(agentId) as any;
 
     db.prepare('DELETE FROM mc_agents WHERE id = ?').run(agentId);
-    const removedFromConfig = removeAgentFromOpenClawConfig(agentId);
+    const removedFromConfig = removeAgentFromOpenClawConfig(resolveOpenClawAgentId(agentId));
 
     emitEvent('agent', agentId, 'deleted', `Agent "${agent?.name || agentId}" deleted${removedFromConfig ? ' + removed from OpenClaw config' : ''}`);
     res.json({ deleted: true, openclaw_synced: removedFromConfig });
@@ -547,28 +576,102 @@ router.get('/agents/lifecycle/summary', async (_req: Request, res: Response) => 
 // ============================================================
 const CORE_FILES = ['AGENTS.md', 'SOUL.md', 'TOOLS.md', 'IDENTITY.md', 'USER.md', 'HEARTBEAT.md', 'BOOTSTRAP.md', 'MEMORY.md'];
 
-function getAgentWorkspacePath(agentId: string): string {
-  const home = process.env.USERPROFILE || process.env.HOME || '';
-  if (agentId === 'main') {
-    return path.join(home, '.openclaw', 'workspace');
+function resolveOpenClawAgentId(agentId: string): string {
+  const config = readOpenClawConfig();
+  const configuredIds = new Set((config?.agents?.list || []).map((agent: any) => agent.id));
+  if (configuredIds.has(agentId)) {
+    return agentId;
   }
-  return path.join(home, '.openclaw', 'workspaces', agentId);
+
+  const unsuffixedId = agentId.replace(/-dm$/, '');
+  if (configuredIds.has(unsuffixedId)) {
+    return unsuffixedId;
+  }
+
+  return unsuffixedId;
+}
+
+function getAgentWorkspacePath(agentId: string): string {
+  const resolvedAgentId = resolveOpenClawAgentId(agentId);
+  const config = readOpenClawConfig();
+  const configuredAgent = config?.agents?.list?.find((agent: any) => agent.id === resolvedAgentId);
+  const configuredPath = expandOpenClawPath(configuredAgent?.workspace)
+    || (resolvedAgentId === 'main' ? expandOpenClawPath(config?.agents?.defaults?.workspace) : null);
+
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  if (resolvedAgentId === 'main') {
+    return path.join(homedir(), '.openclaw', 'workspace');
+  }
+  if (resolvedAgentId === 'whatsapp') {
+    return path.join(homedir(), '.openclaw', 'workspace-whatsapp');
+  }
+  return path.join(homedir(), '.openclaw', 'workspaces', resolvedAgentId);
+}
+
+function getRepoRootPath(): string {
+  const cwd = process.cwd();
+  if (fs.existsSync(path.join(cwd, 'openclaw-config'))) {
+    return cwd;
+  }
+
+  const parent = path.resolve(cwd, '..');
+  if (fs.existsSync(path.join(parent, 'openclaw-config'))) {
+    return parent;
+  }
+
+  return cwd;
+}
+
+function getAgentRepoWorkspacePath(agentId: string): string {
+  const resolvedAgentId = resolveOpenClawAgentId(agentId);
+  const repoRoot = getRepoRootPath();
+  if (resolvedAgentId === 'main') {
+    return path.join(repoRoot, 'openclaw-config', 'workspace');
+  }
+  if (resolvedAgentId === 'whatsapp') {
+    return path.join(repoRoot, 'openclaw-config', 'workspace-whatsapp');
+  }
+  return path.join(repoRoot, 'openclaw-config', 'workspaces', resolvedAgentId);
+}
+
+function getCoreFileState(workspacePath: string, repoPath: string, filename: string) {
+  const workspaceFilePath = path.join(workspacePath, filename);
+  const repoFilePath = path.join(repoPath, filename);
+  const exists = fs.existsSync(workspaceFilePath);
+  const templateExists = fs.existsSync(repoFilePath);
+  const size = exists
+    ? fs.statSync(workspaceFilePath).size
+    : templateExists
+      ? fs.statSync(repoFilePath).size
+      : 0;
+
+  return {
+    workspaceFilePath,
+    repoFilePath,
+    exists,
+    templateExists,
+    size,
+  };
 }
 
 router.get('/agents/:id/files', (req: Request, res: Response) => {
   try {
     const wsPath = getAgentWorkspacePath(req.params.id);
-    const files: { name: string; size: number; exists: boolean }[] = [];
+    const repoPath = getAgentRepoWorkspacePath(req.params.id);
+    const files: { name: string; size: number; exists: boolean; templateExists: boolean }[] = [];
     for (const f of CORE_FILES) {
-      const fp = path.join(wsPath, f);
-      try {
-        const stat = fs.statSync(fp);
-        files.push({ name: f, size: stat.size, exists: true });
-      } catch {
-        files.push({ name: f, size: 0, exists: false });
-      }
+      const fileState = getCoreFileState(wsPath, repoPath, f);
+      files.push({
+        name: f,
+        size: fileState.size,
+        exists: fileState.exists,
+        templateExists: fileState.templateExists,
+      });
     }
-    res.json({ agentId: req.params.id, workspacePath: wsPath, files });
+    res.json({ agentId: req.params.id, workspacePath: wsPath, repoPath, files });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -579,13 +682,20 @@ router.get('/agents/:id/files/:filename', (req: Request, res: Response) => {
       res.status(400).json({ error: `Invalid core file. Allowed: ${CORE_FILES.join(', ')}` });
       return;
     }
-    const fp = path.join(getAgentWorkspacePath(id), filename);
-    if (!fs.existsSync(fp)) {
-      res.json({ agentId: id, filename, content: '', exists: false });
+    const wsPath = getAgentWorkspacePath(id);
+    const repoPath = getAgentRepoWorkspacePath(id);
+    const fileState = getCoreFileState(wsPath, repoPath, filename);
+    if (fileState.exists) {
+      const content = fs.readFileSync(fileState.workspaceFilePath, 'utf-8');
+      res.json({ agentId: id, filename, content, exists: true, templateExists: fileState.templateExists, workspacePath: wsPath, repoPath });
       return;
     }
-    const content = fs.readFileSync(fp, 'utf-8');
-    res.json({ agentId: id, filename, content, exists: true });
+    if (fileState.templateExists) {
+      const content = fs.readFileSync(fileState.repoFilePath, 'utf-8');
+      res.json({ agentId: id, filename, content, exists: false, templateExists: true, workspacePath: wsPath, repoPath });
+      return;
+    }
+    res.json({ agentId: id, filename, content: '', exists: false, templateExists: false, workspacePath: wsPath, repoPath });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -605,21 +715,15 @@ router.put('/agents/:id/files/:filename', (req: Request, res: Response) => {
     if (!fs.existsSync(wsPath)) {
       fs.mkdirSync(wsPath, { recursive: true });
     }
-    const fp = path.join(wsPath, filename);
-    fs.writeFileSync(fp, content, 'utf-8');
+    const filePath = path.join(wsPath, filename);
+    fs.writeFileSync(filePath, content, 'utf-8');
 
-    // Also sync to openclaw-config/ repo copy for main agent
-    if (id === 'main') {
-      const repoPath = path.join(process.cwd(), 'openclaw-config', 'workspace', filename);
-      try { fs.writeFileSync(repoPath, content, 'utf-8'); } catch { /* ignore */ }
-    } else {
-      const repoPath = path.join(process.cwd(), 'openclaw-config', 'workspaces', id, filename);
-      try {
-        const dir = path.dirname(repoPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(repoPath, content, 'utf-8');
-      } catch { /* ignore */ }
-    }
+    const repoPath = getAgentRepoWorkspacePath(id);
+    const repoFilePath = path.join(repoPath, filename);
+    try {
+      if (!fs.existsSync(repoPath)) fs.mkdirSync(repoPath, { recursive: true });
+      fs.writeFileSync(repoFilePath, content, 'utf-8');
+    } catch { /* ignore */ }
 
     emitEvent('agent', id, 'file_updated', `Core file "${filename}" updated for agent "${id}"`);
     res.json({ saved: true, agentId: id, filename, size: content.length });

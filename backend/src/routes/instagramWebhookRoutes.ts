@@ -10,6 +10,7 @@ import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
+import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -66,6 +67,20 @@ export interface PipelineTrace {
   knowledgeCategoriesFetched: string[];
   knowledgeFetchStatus: 'success' | 'fail' | 'skipped';
   knowledgeEntriesCount: number;
+  semanticRetrieval?: {
+    enabled: boolean;
+    strategy: 'sparse_tfidf_chargram';
+    queryText: string;
+    candidateCount: number;
+    selectedEntries: Array<{
+      category: string;
+      keyName: string;
+      score: number;
+    }>;
+    latencyMs: number;
+    refreshedIndex: boolean;
+    skippedReason: string | null;
+  };
   openclawDispatchStatus: 'success' | 'fail';
   openclawSessionKey: string;
   agentPollDurationMs: number;
@@ -110,6 +125,7 @@ export interface PipelineError {
  */
 export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const router = Router();
+  const semanticKnowledgeService = new DMKnowledgeRetrievalService(db);
   
   const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'spa-kiosk-instagram-verify';
   const OPENCLAW_WEBHOOK_URL = process.env.OPENCLAW_IG_WEBHOOK_URL || '';
@@ -659,6 +675,16 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
             let knowledgeContext = '';
             let knowledgeEntriesCount = 0;
+            trace.semanticRetrieval = {
+              enabled: true,
+              strategy: 'sparse_tfidf_chargram',
+              queryText: '',
+              candidateCount: 0,
+              selectedEntries: [],
+              latencyMs: 0,
+              refreshedIndex: false,
+              skippedReason: 'not_run',
+            };
             if (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) {
               const kData = await knowledgeRes.value.json() as Record<string, unknown>;
               knowledgeContext = typeof kData === 'object' ? JSON.stringify(kData) : String(kData);
@@ -668,6 +694,38 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   else knowledgeEntriesCount += 1;
                 }
               }
+            }
+
+            try {
+              const semanticRetrieval = semanticKnowledgeService.augmentContext({
+                baseContextJson: knowledgeContext,
+                messageText,
+                followUpHint: analysis.followUpHint,
+                activeTopic: analysis.activeTopicLabel,
+                primaryCategories: categories,
+              });
+
+              trace.semanticRetrieval = semanticRetrieval.trace;
+
+              if (semanticRetrieval.addedEntriesCount > 0) {
+                knowledgeContext = semanticRetrieval.knowledgeContext;
+                knowledgeEntriesCount += semanticRetrieval.addedEntriesCount;
+                for (const addedCategory of semanticRetrieval.addedCategories) {
+                  categories.add(addedCategory);
+                }
+              }
+            } catch (semanticRetrievalErr) {
+              console.error('[Instagram Webhook] Semantic KB retrieval failed:', semanticRetrievalErr);
+              trace.semanticRetrieval = {
+                enabled: true,
+                strategy: 'sparse_tfidf_chargram',
+                queryText: '',
+                candidateCount: 0,
+                selectedEntries: [],
+                latencyMs: 0,
+                refreshedIndex: false,
+                skippedReason: 'error',
+              };
             }
 
             try {

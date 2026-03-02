@@ -7,6 +7,7 @@ import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
+import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -25,7 +26,9 @@ export function setSimulatorEscalation(svc: EscalationService): void {
  */
 export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const router = Router();
+  const rawDb = db.getDb();
   const knowledgeBaseService = new KnowledgeBaseService(db);
+  const semanticKnowledgeService = new DMKnowledgeRetrievalService(rawDb);
 
   // Middleware: session auth (admin panel) OR API key auth (external)
   const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -58,7 +61,6 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         return;
       }
 
-      const rawDb = db.getDb();
       const contextService = new InstagramContextService(rawDb);
       const pipelineConfigService = new PipelineConfigService(rawDb);
       const policyService = new ResponsePolicyService();
@@ -198,6 +200,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const API_KEY = process.env.N8N_API_KEY || '';
       let knowledgeContext = '';
       let knowledgeEntriesCount = 0;
+      let semanticRetrievalTrace = {
+        enabled: true,
+        strategy: 'sparse_tfidf_chargram' as const,
+        queryText: '',
+        candidateCount: 0,
+        selectedEntries: [] as Array<{ category: string; keyName: string; score: number }>,
+        latencyMs: 0,
+        refreshedIndex: false,
+        skippedReason: 'not_run' as string | null,
+      };
       try {
         const kRes = await fetch(
           `http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
@@ -212,6 +224,38 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           }
         }
       } catch { /* knowledge fetch failed, continue */ }
+
+      try {
+        const semanticRetrieval = semanticKnowledgeService.augmentContext({
+          baseContextJson: knowledgeContext,
+          messageText: text,
+          followUpHint: analysis.followUpHint,
+          activeTopic: analysis.activeTopicLabel,
+          primaryCategories: kbCategories,
+        });
+
+        semanticRetrievalTrace = semanticRetrieval.trace;
+
+        if (semanticRetrieval.addedEntriesCount > 0) {
+          knowledgeContext = semanticRetrieval.knowledgeContext;
+          knowledgeEntriesCount += semanticRetrieval.addedEntriesCount;
+          for (const addedCategory of semanticRetrieval.addedCategories) {
+            kbCategories.add(addedCategory);
+          }
+        }
+      } catch (semanticRetrievalErr) {
+        console.error('[Simulator] Semantic KB retrieval failed:', semanticRetrievalErr);
+        semanticRetrievalTrace = {
+          enabled: true,
+          strategy: 'sparse_tfidf_chargram',
+          queryText: '',
+          candidateCount: 0,
+          selectedEntries: [],
+          latencyMs: 0,
+          refreshedIndex: false,
+          skippedReason: 'error',
+        };
+      }
 
       try {
         const supportEntries = knowledgeBaseService.getAll().filter(entry =>
@@ -346,6 +390,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         knowledgeCategoriesFetched: Array.from(kbCategories),
         knowledgeFetchStatus: knowledgeContext ? 'success' : 'fail',
         knowledgeEntriesCount,
+        semanticRetrieval: semanticRetrievalTrace,
         openclawDispatchStatus: 'skipped',
         openclawSessionKey: 'simulator',
         agentPollDurationMs: 0,

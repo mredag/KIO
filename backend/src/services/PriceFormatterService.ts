@@ -1,14 +1,8 @@
 /**
- * PriceFormatterService — Formats price lists from KB data for mobile-friendly display.
+ * PriceFormatterService formats KB pricing data for DM responses.
  *
- * Takes raw KB pricing data (pipe-separated format) and formats it beautifully
- * for Instagram/WhatsApp DM display on mobile devices.
- *
- * Key features:
- * - No hardcoded prices — all data from KB
- * - Mobile-optimized layout (emojis, spacing, grouping)
- * - Category-specific templates (massage, membership, courses, etc.)
- * - Preserves all KB data integrity
+ * It supports both the original pipe-separated seed format and the newer
+ * multiline KB blocks that are already structured with arrows/newlines.
  */
 
 export interface FormattedPriceList {
@@ -20,10 +14,8 @@ export interface FormattedPriceList {
 export class PriceFormatterService {
   /**
    * Format pricing data based on category.
-   * Detects category from KB key and applies appropriate template.
    */
   formatPricing(kbKey: string, rawValue: string): FormattedPriceList {
-    // Detect category from KB key
     if (kbKey.includes('spa_massage')) {
       return this.formatSpaMassage(rawValue);
     }
@@ -49,19 +41,13 @@ export class PriceFormatterService {
       return this.formatWomenCourses(rawValue);
     }
 
-    // Fallback: generic formatting
     return this.formatGeneric(rawValue);
   }
 
-  /**
-   * SPA Massage pricing — most complex, needs clear grouping.
-   * Input: "30dk masaj: 800₺ | 30dk masaj + kese + köpük: 900₺ | ..."
-   */
   private formatSpaMassage(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['💆 Masaj Fiyatlarımız:', ''];
 
-    // Group by duration
     const groups = this.groupByDuration(items);
 
     for (const [duration, groupItems] of Object.entries(groups)) {
@@ -71,10 +57,9 @@ export class PriceFormatterService {
         const desc = this.extractDescription(item);
         lines.push(`  ${desc} → ${price}`);
       }
-      lines.push(''); // blank line between groups
+      lines.push('');
     }
 
-    // Extract footer note (after last |)
     const footerMatch = raw.match(/\.\s*(.+)$/);
     if (footerMatch) {
       lines.push(`ℹ️ ${footerMatch[1]}`);
@@ -87,10 +72,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Other massage programs (MIX, Hot Stone, Medical).
-   * Input: "MIX Masaj (70dk): 2.000₺ | Sıcak Taş (60dk): 1.600₺ | ..."
-   */
   private formatOtherMassage(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['🌟 Özel Masaj Programları:', ''];
@@ -108,10 +89,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Individual membership pricing.
-   * Input: "Ferdi Üyelik: Aylık 3.000 TL | 3 Aylık 7.500 TL | ..."
-   */
   private formatMembershipIndividual(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['🏋️ Ferdi Üyelik Fiyatları:', ''];
@@ -122,7 +99,6 @@ export class PriceFormatterService {
       lines.push(`${period} → ${price}`);
     }
 
-    // Extract footer note
     const footerMatch = raw.match(/\.\s*(.+)$/);
     if (footerMatch) {
       lines.push('');
@@ -136,9 +112,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Family membership pricing.
-   */
   private formatMembershipFamily(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['👨‍👩‍👧 Aile Üyeliği Fiyatları:', ''];
@@ -149,7 +122,6 @@ export class PriceFormatterService {
       lines.push(`${period} → ${price}`);
     }
 
-    // Extract footer note
     const footerMatch = raw.match(/\.\s*(.+)$/);
     if (footerMatch) {
       lines.push('');
@@ -163,9 +135,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Reformer Pilates pricing.
-   */
   private formatReformerPilates(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['🧘 Reformer Pilates:', ''];
@@ -176,7 +145,6 @@ export class PriceFormatterService {
       lines.push(`${desc} → ${price}`);
     }
 
-    // Extract footer note
     const footerMatch = raw.match(/\.\s*(.+)$/);
     if (footerMatch) {
       lines.push('');
@@ -190,9 +158,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Personal Trainer pricing.
-   */
   private formatPT(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['💪 Personal Trainer:', ''];
@@ -203,7 +168,6 @@ export class PriceFormatterService {
       lines.push(`${desc} → ${price}`);
     }
 
-    // Extract footer note
     const footerMatch = raw.match(/\.\s*(.+)$/);
     if (footerMatch) {
       lines.push('');
@@ -217,9 +181,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Kids courses pricing.
-   */
   private formatKidsCourses(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['👶 Çocuk Kursları:', ''];
@@ -237,9 +198,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Women courses pricing.
-   */
   private formatWomenCourses(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = ['👩 Kadın Kursları:', ''];
@@ -250,7 +208,6 @@ export class PriceFormatterService {
       lines.push(`${desc} → ${price}`);
     }
 
-    // Extract footer note
     const footerMatch = raw.match(/\.\s*(.+)$/);
     if (footerMatch) {
       lines.push('');
@@ -264,9 +221,6 @@ export class PriceFormatterService {
     };
   }
 
-  /**
-   * Generic fallback formatting.
-   */
   private formatGeneric(raw: string): FormattedPriceList {
     const items = this.parseItems(raw);
     const lines: string[] = [];
@@ -282,54 +236,75 @@ export class PriceFormatterService {
     };
   }
 
-  // --- Helper methods ---
-
-  /**
-   * Parse pipe-separated items.
-   * Handles: "item1 | item2 | item3. Footer note"
-   */
   private parseItems(raw: string): string[] {
-    // Split by | but preserve text after last period (footer)
-    const mainPart = raw.split(/\.\s+[A-Z]/).shift() || raw;
-    return mainPart.split('|').map(s => s.trim()).filter(Boolean);
+    const normalized = raw.replace(/\r\n/g, '\n').trim();
+    if (!normalized) {
+      return [];
+    }
+
+    if (normalized.includes('|')) {
+      const parts = normalized
+        .split('|')
+        .map(part => part.trim())
+        .filter(Boolean);
+
+      if (parts.length > 1 && /^[^:\n]{1,60}:\s+.+/.test(parts[0])) {
+        const first = parts[0];
+        const separatorIndex = first.indexOf(':');
+        const remainder = first.slice(separatorIndex + 1).trim();
+        if (remainder) {
+          parts[0] = remainder;
+        }
+      }
+
+      return parts;
+    }
+
+    const lines = normalized
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    const pricedLines = lines.filter(line => /(?:[:\u2192]|->).*(?:\u20BA|TL)/i.test(line));
+    if (pricedLines.length > 0) {
+      return pricedLines;
+    }
+
+    return [normalized];
   }
 
-  /**
-   * Extract price from item (supports ₺, TL, both).
-   */
   private extractPrice(item: string): string {
-    const match = item.match(/(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s*(?:₺|TL)/i);
+    const match = item.match(/(\d+(?:[.,]\d{3})*(?:[.,]\d{2})?)\s*(?:\u20BA|TL)/i);
     return match ? match[0] : '';
   }
 
-  /**
-   * Extract description (everything before the colon or price).
-   */
   private extractDescription(item: string): string {
-    // Remove price part
-    const withoutPrice = item.replace(/:\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:₺|TL)/i, '');
+    const withoutPrice = item.replace(
+      /(?:[:\u2192]|->)\s*\d+(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:\u20BA|TL)(?:\s*\/\S+)?/i,
+      '',
+    );
     return withoutPrice.trim();
   }
 
-  /**
-   * Extract period (Aylık, 3 Aylık, Yıllık, etc.).
-   */
   private extractPeriod(item: string): string {
-    const match = item.match(/(Aylık|3 Aylık|6 Aylık|Yıllık|Tek ders|Tek seans)/i);
+    const match = item.match(/(\d+\s*Ayl[ıi]k|Ayl[ıi]k|Y[ıi]ll[ıi]k|Tek ders|Tek seans)/i);
     return match ? match[1] : this.extractDescription(item);
   }
 
-  /**
-   * Extract course name (Taekwondo, Jimnastik, etc.).
-   */
   private extractCourseName(item: string): string {
     const match = item.match(/^([^:]+):/);
-    return match ? match[1].trim() : this.extractDescription(item);
+    if (match) {
+      return match[1].trim();
+    }
+
+    const withoutPrice = item
+      .replace(/\d+(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:\u20BA|TL).*/i, '')
+      .replace(/\b(?:aylık|aylik|tek ders|tek seans)\b/gi, '')
+      .trim();
+
+    return withoutPrice || this.extractDescription(item);
   }
 
-  /**
-   * Group massage items by duration (30dk, 40dk, 60dk, 90dk, Kese).
-   */
   private groupByDuration(items: string[]): Record<string, string[]> {
     const groups: Record<string, string[]> = {};
 
@@ -340,11 +315,12 @@ export class PriceFormatterService {
       else if (item.includes('90dk')) duration = '90dk';
       else if (item.toLowerCase().includes('kese')) duration = 'Kese Köpük';
 
-      if (!groups[duration]) groups[duration] = [];
+      if (!groups[duration]) {
+        groups[duration] = [];
+      }
       groups[duration].push(item);
     }
 
     return groups;
   }
 }
-

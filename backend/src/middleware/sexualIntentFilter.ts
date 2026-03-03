@@ -17,7 +17,7 @@ const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const SEXUAL_BLOCK_REPLY = 'O dediğiniz hizmet bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
+const SEXUAL_BLOCK_REPLY = 'O dediğiniz şey bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
 const SEXUAL_RETRY_REPLY = 'Mesajınızı daha açık yazar mısınız? Yalnızca profesyonel spa ve spor hizmetleri konusunda yardımcı olabiliyoruz.';
 
 function toNumber(value: unknown): number | null {

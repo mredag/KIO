@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { classifySexualIntent, decideSexualIntent } from '../middleware/sexualIntentFilter.js';
+import { classifySexualIntent, evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
 
 const STATIC_INTENT_API_KEY = 'dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=';
 
@@ -36,12 +36,14 @@ export function createIntentRoutes(): Router {
     }
 
     try {
-      const classification = await classifySexualIntent(messageText);
-      const decision = decideSexualIntent(classification);
+      const [classification, decision] = await Promise.all([
+        classifySexualIntent(messageText),
+        evaluateSexualIntent(messageText),
+      ]);
 
       res.json({
         ok: true,
-        model: classification.modelUsed,
+        model: decision.modelUsed,
         classification,
         decision,
         thresholds: {

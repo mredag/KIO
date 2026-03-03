@@ -12,13 +12,24 @@ export type SexualIntentDecision =
   | { action: 'block_message'; confidence: number; reason: string; modelUsed: string };
 
 type SexualIntentPass = 'primary' | 'review';
+type SexualIntentAction = SexualIntentDecision['action'];
+
+interface BoundaryProbeContext {
+  normalized: string;
+  compact: string;
+  tokenCount: number;
+  hasBusinessAnchor: boolean;
+  shapeHint: 'short_vague_probe_candidate' | 'anchored_or_descriptive';
+}
 
 const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const SEXUAL_BLOCK_REPLY = 'O dediğiniz şey bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
-const SEXUAL_RETRY_REPLY = 'Mesajınızı daha açık yazar mısınız? Yalnızca profesyonel spa ve spor hizmetleri konusunda yardımcı olabiliyoruz.';
+const SEXUAL_BLOCK_REPLY = 'O dediginiz sey bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
+const SEXUAL_RETRY_REPLY = 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.';
+const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist)\b/u;
+const SHORT_PROBE_PATTERN = /\b(nasil|oluyor|olur|var|varmi|nedir|ne)\b/u;
 
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -29,16 +40,17 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-function normalizeConfidence(raw: unknown, sexualHint: boolean): number {
+function normalizeConfidence(raw: unknown, positiveSignal: boolean): number {
   const parsed = toNumber(raw);
-  if (parsed === null) return sexualHint ? 0.5 : 0;
+  if (parsed === null) return positiveSignal ? 0.5 : 0;
   if (parsed > 1) return Math.min(parsed / 100, 1);
   if (parsed < 0) return 0;
   return parsed;
 }
 
-function extractClassification(content: string, modelUsed: string): SexualIntentClassification {
+function extractJsonRecord(content: string): Record<string, unknown> | null {
   let parsed: Record<string, unknown> | null = null;
+
   try {
     parsed = JSON.parse(content) as Record<string, unknown>;
   } catch {
@@ -51,6 +63,12 @@ function extractClassification(content: string, modelUsed: string): SexualIntent
       }
     }
   }
+
+  return parsed;
+}
+
+function extractClassification(content: string, modelUsed: string): SexualIntentClassification {
+  const parsed = extractJsonRecord(content);
 
   if (!parsed) {
     const lowered = content.toLowerCase();
@@ -112,6 +130,23 @@ function normalizeEuphemismText(messageText: string): { spaced: string; compact:
   };
 }
 
+function buildBoundaryProbeContext(messageText: string): BoundaryProbeContext {
+  const { spaced, compact } = normalizeEuphemismText(messageText);
+  const tokenCount = spaced ? spaced.split(' ').length : 0;
+  const hasBusinessAnchor = SAFE_BUSINESS_ANCHOR_PATTERN.test(spaced);
+  const shapeHint = !hasBusinessAnchor && tokenCount > 0 && tokenCount <= 5 && SHORT_PROBE_PATTERN.test(spaced)
+    ? 'short_vague_probe_candidate'
+    : 'anchored_or_descriptive';
+
+  return {
+    normalized: spaced,
+    compact,
+    tokenCount,
+    hasBusinessAnchor,
+    shapeHint,
+  };
+}
+
 function detectSexualEuphemismGuard(messageText: string): SexualIntentDecision | null {
   const { spaced, compact } = normalizeEuphemismText(messageText);
 
@@ -146,20 +181,12 @@ function detectSexualEuphemismGuard(messageText: string): SexualIntentDecision |
     };
   }
 
-  const hasExtraServiceProbe = spaced.includes('extra hizmet')
-    || spaced.includes('ekstra hizmet')
-    || compact.includes('extrahizmet')
-    || compact.includes('ekstrahizmet');
-
   const hasMutlulukProbe = compact.includes('mutlulukvarmi')
-    || compact.includes('mutlulukvarmı')
-    || spaced.includes('mutluluk var mi')
-    || spaced.includes('mutluluk var mı');
+    || compact.includes('mutlulukvar')
+    || spaced.includes('mutluluk var mi');
 
   const hasOzelMuameleProbe = spaced.includes('ozel muamele')
-    || spaced.includes('özel muamele')
-    || compact.includes('ozelmuamele')
-    || compact.includes('özelmuamele');
+    || compact.includes('ozelmuamele');
 
   if (hasMutlulukProbe || hasOzelMuameleProbe) {
     return {
@@ -169,6 +196,11 @@ function detectSexualEuphemismGuard(messageText: string): SexualIntentDecision |
       modelUsed: 'heuristic-euphemism-guard',
     };
   }
+
+  const hasExtraServiceProbe = spaced.includes('extra hizmet')
+    || spaced.includes('ekstra hizmet')
+    || compact.includes('extrahizmet')
+    || compact.includes('ekstrahizmet');
 
   if (hasExtraServiceProbe) {
     return {
@@ -219,8 +251,6 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
     };
   }
 
-  // Scores close to the hard block threshold should still get a firm business
-  // boundary, not a clarification prompt that invites further probing.
   if (sexualScore >= NEAR_BLOCK_THRESHOLD) {
     return {
       action: 'block_message',
@@ -267,6 +297,7 @@ function buildSexualIntentSystemPrompt(pass: SexualIntentPass): string {
     'Questions asking about erotic endings, sexual gratification, or inappropriate touching are sexual even when phrased indirectly.',
     'Users may obfuscate sexual requests by splitting words with spaces, punctuation, or syllables.',
     'Detect the underlying meaning after removing separators, not just the literal surface form.',
+    'Very short vague probes about how the treatment goes, what happens, whether there is something extra, or whether there is special handling can still be coded sexual-service checks.',
     'Common spa euphemisms such as "mutlu son", "mutu son", "sonunda mutlu oluyor muyum", "extra/ekstra hizmet", or a vague "premium paket" can be indirect sexual-service probes.',
     'Treat normal wellness or sports service questions as non-sexual by default.',
     'Plain mentions of massage, spa, hamam, sauna, pool, fitness, pilates, courses, or memberships are NOT sexual unless the message adds explicit sexual service intent.',
@@ -314,6 +345,148 @@ function mergeSexualIntentDecisions(
   return review.confidence > primary.confidence ? review : primary;
 }
 
+function normalizeDecisionAction(value: unknown): SexualIntentAction {
+  const action = String(value ?? '').trim().toLowerCase();
+
+  if (action === 'block_message' || action === 'block' || action === 'unsafe' || action === 'unsafe_probe') {
+    return 'block_message';
+  }
+
+  if (action === 'retry_question' || action === 'retry' || action === 'clarify' || action === 'review') {
+    return 'retry_question';
+  }
+
+  return 'allow';
+}
+
+function extractBoundaryProbeDecision(content: string, modelUsed: string): SexualIntentDecision {
+  const parsed = extractJsonRecord(content);
+
+  if (!parsed) {
+    const lowered = content.toLowerCase();
+    return {
+      action: lowered.includes('block') ? 'block_message' : lowered.includes('retry') ? 'retry_question' : 'allow',
+      confidence: lowered.includes('block') || lowered.includes('retry') ? 0.6 : 0,
+      reason: 'Boundary review response was not valid JSON',
+      modelUsed,
+    };
+  }
+
+  const fallbackAction = parsed.shouldBlock === true
+    ? 'block_message'
+    : parsed.shouldClarify === true
+      ? 'retry_question'
+      : 'allow';
+  const action = normalizeDecisionAction(parsed.action ?? parsed.label ?? parsed.decision ?? fallbackAction);
+  const confidence = normalizeConfidence(parsed.confidence ?? parsed.score ?? parsed.probability, action !== 'allow');
+  const reason = String(parsed.reason ?? parsed.explanation ?? '').trim() || 'No reason provided';
+
+  return {
+    action,
+    confidence,
+    reason,
+    modelUsed,
+  };
+}
+
+async function evaluateBoundaryProbeIntent(messageText: string): Promise<SexualIntentDecision> {
+  const apiKey = process.env.OPENROUTER_API_KEY || '';
+  const model = process.env.SEXUAL_INTENT_MODEL || DEFAULT_MODEL;
+  const context = buildBoundaryProbeContext(messageText);
+
+  if (!apiKey) {
+    if (context.shapeHint === 'short_vague_probe_candidate') {
+      return {
+        action: 'retry_question',
+        confidence: 0.72,
+        reason: 'No API key; conservative boundary review escalated a short vague probe.',
+        modelUsed: 'heuristic-boundary-probe',
+      };
+    }
+
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'OPENROUTER_API_KEY is missing',
+      modelUsed: model,
+    };
+  }
+
+  const systemPrompt = [
+    'You are a business-boundary safety reviewer for Instagram DMs.',
+    'The business is a legitimate spa and fitness center.',
+    'Your job is to catch coded probing for prohibited sexual services even when the wording is vague, indirect, or newly phrased.',
+    'A suspicious boundary probe is often short, vague, and asks how the treatment goes, what happens, whether there is something extra, whether there is special handling, or similar coded curiosity without naming a normal business detail.',
+    'A normal business question usually names a concrete service or a concrete detail such as price, schedule, address, membership, class, package, duration, therapist, or reservation.',
+    'If a message is short, vague, and lacks a concrete business anchor, prefer the safer boundary.',
+    'Return JSON only with fields: action, confidence, reason.',
+    'action must be one of: allow, retry_question, block_message.',
+    'Use block_message when the message is likely probing for a prohibited service.',
+    'Use retry_question when the message is suspicious but still ambiguous.',
+    'Use allow only when the message is clearly a normal business request.',
+  ].join(' ');
+
+  const userPrompt = [
+    `Original message: ${messageText}`,
+    `Normalized spacing: ${context.normalized || '(empty)'}`,
+    `Compact text: ${context.compact || '(empty)'}`,
+    `Token count: ${context.tokenCount}`,
+    `Concrete business anchor detected: ${context.hasBusinessAnchor ? 'yes' : 'no'}`,
+    `Question shape hint: ${context.shapeHint}`,
+    'Decide the safest business-boundary response.',
+  ].join('\n');
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://spa-kiosk.local',
+        'X-Title': 'Eform Boundary Probe Review',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 160,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: {
+          type: 'json_object',
+        },
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Boundary probe API error ${response.status}: ${body}`);
+    }
+
+    const data = await response.json() as {
+      choices?: Array<{
+        message?: {
+          content?: string;
+        };
+      }>;
+      model?: string;
+    };
+
+    const content = data.choices?.[0]?.message?.content ?? '';
+    const modelUsed = data.model || model;
+    return extractBoundaryProbeDecision(content, modelUsed);
+  } catch (error) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: `Boundary review unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      modelUsed: 'boundary-review-error',
+    };
+  }
+}
+
 export async function classifySexualIntent(
   messageText: string,
   pass: SexualIntentPass = 'primary',
@@ -331,7 +504,6 @@ export async function classifySexualIntent(
   }
 
   const systemPrompt = buildSexualIntentSystemPrompt(pass);
-
   const userPrompt = buildSexualIntentPrompt(messageText);
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -377,9 +549,15 @@ export async function classifySexualIntent(
 }
 
 export async function evaluateSexualIntent(messageText: string): Promise<SexualIntentDecision> {
-  const [primaryClassification, reviewClassification] = await Promise.all([
+  const heuristicDecision = detectSexualEuphemismGuard(messageText);
+  if (heuristicDecision) {
+    return heuristicDecision;
+  }
+
+  const [primaryClassification, reviewClassification, boundaryDecision] = await Promise.all([
     classifySexualIntent(messageText, 'primary'),
     classifySexualIntent(messageText, 'review'),
+    evaluateBoundaryProbeIntent(messageText),
   ]);
 
   const modelDecision = mergeSexualIntentDecisions(
@@ -387,9 +565,5 @@ export async function evaluateSexualIntent(messageText: string): Promise<SexualI
     decideSexualIntent(reviewClassification),
   );
 
-  const heuristicDecision = detectSexualEuphemismGuard(messageText);
-
-  return heuristicDecision
-    ? mergeSexualIntentDecisions(modelDecision, heuristicDecision)
-    : modelDecision;
+  return mergeSexualIntentDecisions(modelDecision, boundaryDecision);
 }

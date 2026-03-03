@@ -34,9 +34,9 @@ describe('sexualIntentFilter', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns the stronger business-safe block reply', () => {
+  it('returns the business-safe block reply and retry guidance', () => {
     expect(getSexualIntentReply('block_message')).toBe(
-      'O soylediginiz hizmet bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.',
+      'O dediginiz sey bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.',
     );
     expect(getSexualIntentReply('retry_question')).toContain('profesyonel spa ve spor');
   });
@@ -92,7 +92,7 @@ describe('sexualIntentFilter', () => {
     expect(body.messages[1].content).toContain('Classify the underlying meaning after mentally removing separators.');
   });
 
-  it('uses a stricter second AI pass to escalate unsafe euphemisms', async () => {
+  it('uses the stricter second AI pass when the primary classifier is too lenient', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
@@ -129,15 +129,196 @@ describe('sexualIntentFilter', () => {
           ],
           model: 'openai/gpt-4o-mini',
         }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  action: 'allow',
+                  confidence: 0.1,
+                  reason: 'Boundary review sees no additional signal',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
       });
 
     vi.stubGlobal('fetch', fetchMock);
 
-    const decision = await evaluateSexualIntent('mutlu sonlu mu peki');
+    const decision = await evaluateSexualIntent('ozel bir sey oluyor mu');
 
     expect(decision.action).toBe('block_message');
     expect(decision.confidence).toBe(0.91);
     expect(decision.reason).toContain('Second pass');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses boundary-probe review to block short vague coded probes without exact euphemism matches', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  label: 'non_sexual',
+                  isSexual: false,
+                  confidence: 0.05,
+                  reason: 'Looks harmless',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  label: 'non_sexual',
+                  isSexual: false,
+                  confidence: 0.1,
+                  reason: 'Still not explicit',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  action: 'block_message',
+                  confidence: 0.88,
+                  reason: 'Short vague unanchored probe about treatment quality.',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('muamele nasil');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.confidence).toBe(0.88);
+    expect(decision.reason).toContain('Short vague');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps the primary/review decision if boundary review is unavailable', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  label: 'non_sexual',
+                  isSexual: false,
+                  confidence: 0.1,
+                  reason: 'Primary pass is lenient',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  label: 'sexual',
+                  isSexual: true,
+                  confidence: 0.86,
+                  reason: 'Review pass sees a plausible prohibited request',
+                }),
+              },
+            },
+          ],
+          model: 'openai/gpt-4o-mini',
+        }),
+      })
+      .mockRejectedValueOnce(new Error('timeout'));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('ozel bir sey var mi');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.confidence).toBe(0.86);
+    expect(decision.reason).toContain('Review pass');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('blocks happy-ending euphemisms immediately without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('mutu sonlu mu peki');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.modelUsed).toBe('heuristic-euphemism-guard');
+    expect(decision.reason).toContain('happy-ending');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('blocks mutluluk probes immediately without relying on the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('mutluluk varmi');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.modelUsed).toBe('heuristic-euphemism-guard');
+    expect(decision.reason).toContain('mutluluk');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('escalates vague extra-service euphemisms immediately to clarification', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('extra hizmetiniz ne kadar');
+
+    expect(decision.action).toBe('retry_question');
+    expect(decision.modelUsed).toBe('heuristic-euphemism-guard');
+    expect(decision.reason).toContain('extra services');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('escalates vague premium-package euphemisms immediately when not tied to a normal package', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('premium paket varmi');
+
+    expect(decision.action).toBe('retry_question');
+    expect(decision.modelUsed).toBe('heuristic-euphemism-guard');
+    expect(decision.reason).toContain('premium-package');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 });

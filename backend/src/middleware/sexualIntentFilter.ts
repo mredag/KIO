@@ -17,7 +17,7 @@ const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const SEXUAL_BLOCK_REPLY = 'O soylediginiz hizmet bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
+const SEXUAL_BLOCK_REPLY = 'O dediğiniz hizmet bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
 const SEXUAL_RETRY_REPLY = 'Mesajınızı daha açık yazar mısınız? Yalnızca profesyonel spa ve spor hizmetleri konusunda yardımcı olabiliyoruz.';
 
 function toNumber(value: unknown): number | null {
@@ -89,6 +89,109 @@ function buildCompactClassifierText(messageText: string): string {
   return messageText
     .toLocaleLowerCase('tr-TR')
     .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function normalizeEuphemismText(messageText: string): { spaced: string; compact: string } {
+  const folded = messageText
+    .toLocaleLowerCase('tr-TR')
+    .replace(/\u00E7/g, 'c')
+    .replace(/\u011F/g, 'g')
+    .replace(/\u0131/g, 'i')
+    .replace(/\u00F6/g, 'o')
+    .replace(/\u015F/g, 's')
+    .replace(/\u00FC/g, 'u');
+
+  const spaced = folded
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    spaced,
+    compact: spaced.replace(/\s+/g, ''),
+  };
+}
+
+function detectSexualEuphemismGuard(messageText: string): SexualIntentDecision | null {
+  const { spaced, compact } = normalizeEuphemismText(messageText);
+
+  if (!compact) {
+    return null;
+  }
+
+  const hasHappyEndingProbe = compact.includes('mutluson')
+    || compact.includes('mutuson')
+    || compact.includes('happyending');
+
+  if (hasHappyEndingProbe) {
+    return {
+      action: 'block_message',
+      confidence: 0.92,
+      reason: 'Detected euphemistic sexual-service request (happy-ending phrasing).',
+      modelUsed: 'heuristic-euphemism-guard',
+    };
+  }
+
+  const hasIndirectEndingProbe = compact.includes('sonundamutlu')
+    || compact.includes('mutluoluyormuyum')
+    || compact.includes('mutlubiter')
+    || compact.includes('mutlubitiyor');
+
+  if (hasIndirectEndingProbe) {
+    return {
+      action: 'block_message',
+      confidence: 0.84,
+      reason: 'Detected indirect euphemistic probe about the service ending.',
+      modelUsed: 'heuristic-euphemism-guard',
+    };
+  }
+
+  const hasExtraServiceProbe = spaced.includes('extra hizmet')
+    || spaced.includes('ekstra hizmet')
+    || compact.includes('extrahizmet')
+    || compact.includes('ekstrahizmet');
+
+  const hasMutlulukProbe = compact.includes('mutlulukvarmi')
+    || compact.includes('mutlulukvarmı')
+    || spaced.includes('mutluluk var mi')
+    || spaced.includes('mutluluk var mı');
+
+  const hasOzelMuameleProbe = spaced.includes('ozel muamele')
+    || spaced.includes('özel muamele')
+    || compact.includes('ozelmuamele')
+    || compact.includes('özelmuamele');
+
+  if (hasMutlulukProbe || hasOzelMuameleProbe) {
+    return {
+      action: 'block_message',
+      confidence: 0.9,
+      reason: 'Detected euphemistic sexual-service probe (mutluluk/ozel muamele wording).',
+      modelUsed: 'heuristic-euphemism-guard',
+    };
+  }
+
+  if (hasExtraServiceProbe) {
+    return {
+      action: 'retry_question',
+      confidence: 0.78,
+      reason: 'Detected ambiguous euphemistic request for extra services.',
+      modelUsed: 'heuristic-euphemism-guard',
+    };
+  }
+
+  const hasLegitimatePackageAnchor = /\b(uyelik|membership|ders|kurs|reformer|pilates|aile|bireysel)\b/u.test(spaced);
+  const hasPremiumPackageProbe = compact.includes('premiumpaket');
+
+  if (hasPremiumPackageProbe && !hasLegitimatePackageAnchor) {
+    return {
+      action: 'retry_question',
+      confidence: 0.74,
+      reason: 'Detected vague premium-package phrasing that often masks prohibited service requests.',
+      modelUsed: 'heuristic-euphemism-guard',
+    };
+  }
+
+  return null;
 }
 
 function buildSexualIntentPrompt(messageText: string): string {
@@ -164,6 +267,7 @@ function buildSexualIntentSystemPrompt(pass: SexualIntentPass): string {
     'Questions asking about erotic endings, sexual gratification, or inappropriate touching are sexual even when phrased indirectly.',
     'Users may obfuscate sexual requests by splitting words with spaces, punctuation, or syllables.',
     'Detect the underlying meaning after removing separators, not just the literal surface form.',
+    'Common spa euphemisms such as "mutlu son", "mutu son", "sonunda mutlu oluyor muyum", "extra/ekstra hizmet", or a vague "premium paket" can be indirect sexual-service probes.',
     'Treat normal wellness or sports service questions as non-sexual by default.',
     'Plain mentions of massage, spa, hamam, sauna, pool, fitness, pilates, courses, or memberships are NOT sexual unless the message adds explicit sexual service intent.',
     'A message like "masaj" by itself is a standard service inquiry, not sexual content.',
@@ -278,8 +382,14 @@ export async function evaluateSexualIntent(messageText: string): Promise<SexualI
     classifySexualIntent(messageText, 'review'),
   ]);
 
-  return mergeSexualIntentDecisions(
+  const modelDecision = mergeSexualIntentDecisions(
     decideSexualIntent(primaryClassification),
     decideSexualIntent(reviewClassification),
   );
+
+  const heuristicDecision = detectSexualEuphemismGuard(messageText);
+
+  return heuristicDecision
+    ? mergeSexualIntentDecisions(modelDecision, heuristicDecision)
+    : modelDecision;
 }

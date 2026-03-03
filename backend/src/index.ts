@@ -35,7 +35,7 @@ import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.
 import { createIntegrationRoutes } from './routes/integrationRoutes.js';
 import { createAIPromptsRoutes } from './routes/aiPromptsRoutes.js';
 import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsRoutes.js';
-import { createWorkflowTestRoutes, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
+import { createWorkflowTestRoutes, setSimulatorDMSafety, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
 import { createMissionControlRoutes, setSchedulerService } from './routes/missionControlRoutes.js';
 import { MCSchedulerService } from './services/MCSchedulerService.js';
 import { createJarvisRoutes, setJarvisHardwareWatchdog } from './routes/jarvisRoutes.js';
@@ -49,7 +49,7 @@ import { createAuditRoutes, setAuditService } from './routes/auditRoutes.js';
 import { createCronRoutes, registerCronToggle, registerCronTrigger } from './routes/cronRoutes.js';
 import { createEscalationRoutes, setEscalationActionService } from './routes/escalationRoutes.js';
 import { createBriefingRoutes, setBriefingService } from './routes/briefingRoutes.js';
-import { createIntentRoutes } from './routes/intentRoutes.js';
+import { createIntentRoutes, setIntentDMSafety } from './routes/intentRoutes.js';
 import { createHardwareRoutes, setHardwareWatchdogService } from './routes/hardwareRoutes.js';
 import { MorningBriefingService } from './services/MorningBriefingService.js';
 import { HardwareWatchdogService } from './services/HardwareWatchdogService.js';
@@ -59,7 +59,8 @@ import { AutoPilotService } from './services/AutoPilotService.js';
 import { NightlyAuditService } from './services/NightlyAuditService.js';
 import { TelegramNotificationService } from './services/TelegramNotificationService.js';
 import { EscalationService } from './services/EscalationService.js';
-import { setEscalationService as setWebhookEscalation } from './routes/instagramWebhookRoutes.js';
+import { DMSafetyPhraseService } from './services/DMSafetyPhraseService.js';
+import { setDMSafetyPhraseService as setWebhookDMSafety, setEscalationService as setWebhookEscalation } from './routes/instagramWebhookRoutes.js';
 import { AgentLifecycleService } from './services/AgentLifecycleService.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -185,71 +186,85 @@ const logRotationService = new LogRotationService(dbService, 30);
 const whatsappNumber = process.env.WHATSAPP_NUMBER || '';
 const couponService = new CouponService(db, whatsappNumber);
 const eventLogService = new EventLogService(db);
-const rateLimitService = new RateLimitService(db);
 const couponPolicyService = new CouponPolicyService(db);
+const ENABLE_LEGACY_COUPON_AND_SURVEY_CRONS = false;
 
 // Start Google Sheets initialization and sync queue
 initializeGoogleSheets().then(() => {
   logger.info('Application initialized successfully');
 
-  // Schedule sync queue to run every 5 minutes
-  syncQueueService.scheduleSync();
-
   // Schedule daily backups at 3 AM
   backupService.scheduleDaily();
 
-  // Schedule log rotation daily at 2 AM
-  logRotationService.scheduleRotation();
+  if (ENABLE_LEGACY_COUPON_AND_SURVEY_CRONS) {
+    const rateLimitService = new RateLimitService(db);
 
-  // Schedule coupon system jobs
-  // Requirements: 22.3, 23.5, 24.3, 28.1, 28.2
-  
-  // Token cleanup: daily at 3:00 AM Istanbul time
-  cron.schedule('0 3 * * *', () => {
-    try {
-      const deletedCount = couponService.cleanupExpiredTokens();
-      logger.info('Token cleanup job completed', { deletedCount });
-    } catch (error: any) {
-      logger.error('Token cleanup job failed', {
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }, {
-    timezone: 'Europe/Istanbul'
-  });
+    // Schedule sync queue to run every 5 minutes
+    syncQueueService.scheduleSync();
 
-  // Redemption expiration: daily at 3:00 AM Istanbul time
-  cron.schedule('0 3 * * *', () => {
-    try {
-      const expiredCount = couponService.expirePendingRedemptions();
-      logger.info('Redemption expiration job completed', { expiredCount });
-    } catch (error: any) {
-      logger.error('Redemption expiration job failed', {
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }, {
-    timezone: 'Europe/Istanbul'
-  });
+    // Schedule log rotation daily at 2 AM
+    logRotationService.scheduleRotation();
 
-  // Rate limit counter cleanup: daily at 12:01 AM Istanbul time
-  cron.schedule('1 0 * * *', () => {
-    try {
-      rateLimitService.resetExpiredCounters();
-      logger.info('Rate limit counter cleanup job completed');
-    } catch (error: any) {
-      logger.error('Rate limit counter cleanup job failed', {
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }, {
-    timezone: 'Europe/Istanbul'
-  });
+    // Schedule coupon system jobs
+    // Requirements: 22.3, 23.5, 24.3, 28.1, 28.2
 
-  logger.info('Coupon system scheduled jobs initialized');
+    // Token cleanup: daily at 3:00 AM Istanbul time
+    cron.schedule('0 3 * * *', () => {
+      try {
+        const deletedCount = couponService.cleanupExpiredTokens();
+        logger.info('Token cleanup job completed', { deletedCount });
+      } catch (error: any) {
+        logger.error('Token cleanup job failed', {
+          error: error.message,
+          stack: error.stack,
+        });
+      }
+    }, {
+      timezone: 'Europe/Istanbul'
+    });
+
+    // Redemption expiration: daily at 3:00 AM Istanbul time
+    cron.schedule('0 3 * * *', () => {
+      try {
+        const expiredCount = couponService.expirePendingRedemptions();
+        logger.info('Redemption expiration job completed', { expiredCount });
+      } catch (error: any) {
+        logger.error('Redemption expiration job failed', {
+          error: error.message,
+          stack: error.stack,
+        });
+      }
+    }, {
+      timezone: 'Europe/Istanbul'
+    });
+
+    // Rate limit counter cleanup: daily at 12:01 AM Istanbul time
+    cron.schedule('1 0 * * *', () => {
+      try {
+        rateLimitService.resetExpiredCounters();
+        logger.info('Rate limit counter cleanup job completed');
+      } catch (error: any) {
+        logger.error('Rate limit counter cleanup job failed', {
+          error: error.message,
+          stack: error.stack,
+        });
+      }
+    }, {
+      timezone: 'Europe/Istanbul'
+    });
+
+    logger.info('Coupon system scheduled jobs initialized');
+  } else {
+    logger.info('Legacy coupon/survey cron jobs disabled', {
+      jobs: [
+        'sync-queue',
+        'token-cleanup',
+        'redemption-expiry',
+        'rate-limit-reset',
+        'log-rotation',
+      ],
+    });
+  }
 }).catch((error) => {
   logger.error('Failed to initialize application', {
     error: error.message,
@@ -316,19 +331,23 @@ nightlyAudit.start();
 
 // Initialize Telegram + Escalation Services (closed-loop DM quality system)
 const telegramNotifier = new TelegramNotificationService(db);
+const dmSafetyPhraseService = new DMSafetyPhraseService(db, telegramNotifier);
 const escalationService = new EscalationService(db, telegramNotifier);
 
 // Wire escalation into all pipeline components
 autoPilot.setEscalationService(escalationService);
 nightlyAudit.setEscalationService(escalationService);
 setWebhookEscalation(escalationService);
+setWebhookDMSafety(dmSafetyPhraseService);
 setSimulatorEscalation(escalationService);
+setSimulatorDMSafety(dmSafetyPhraseService);
+setIntentDMSafety(dmSafetyPhraseService);
 setEscalationActionService(escalationService);
-setTelegramWebhookDeps(escalationService, telegramNotifier);
+setTelegramWebhookDeps(escalationService, telegramNotifier, dmSafetyPhraseService);
 
 // Start Telegram callback poller (handles inline keyboard button presses)
 // Auto-detects OpenClaw gateway and defers when it's running
-const telegramPoller = new TelegramCallbackPoller(escalationService, telegramNotifier);
+const telegramPoller = new TelegramCallbackPoller(escalationService, dmSafetyPhraseService, telegramNotifier);
 telegramPoller.start();
 
 // Initialize Morning Briefing Service

@@ -1,7 +1,13 @@
 import { Router, Request, Response } from 'express';
+import { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import { classifySexualIntent, evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
 
 const STATIC_INTENT_API_KEY = 'dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8=';
+let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
+
+export function setIntentDMSafety(svc: DMSafetyPhraseService): void {
+  _dmSafetyPhraseService = svc;
+}
 
 function authorizeIntentApi(req: Request, res: Response): boolean {
   const headerKey = req.header('X-API-Key') || req.header('x-api-key');
@@ -36,9 +42,16 @@ export function createIntentRoutes(): Router {
     }
 
     try {
+      const safetyDecisionPromise = _dmSafetyPhraseService
+        ? _dmSafetyPhraseService.evaluateMessage({
+            messageText,
+            channel: 'intent_debug',
+            allowReviewAlerts: false,
+          }).then((result) => result.decision)
+        : evaluateSexualIntent(messageText);
       const [classification, decision] = await Promise.all([
         classifySexualIntent(messageText),
-        evaluateSexualIntent(messageText),
+        safetyDecisionPromise,
       ]);
 
       res.json({

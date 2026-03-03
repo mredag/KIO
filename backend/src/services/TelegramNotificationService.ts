@@ -23,6 +23,17 @@ export interface TelegramMessage {
   };
 }
 
+export interface DMSafetyPhraseReviewMessage {
+  reviewId: string;
+  phrase: string;
+  normalizedPhrase: string;
+  aiAction: 'allow' | 'retry_question' | 'block_message';
+  confidence: number;
+  reason: string;
+  customerId?: string;
+  channel?: string;
+}
+
 interface TelegramConfig {
   botToken: string;
   adminChatId: string;
@@ -142,6 +153,80 @@ export class TelegramNotificationService {
       return true;
     } catch (err: any) {
       console.error('[Telegram] Send error:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Send a yes/no review prompt for a suspicious DM phrase.
+   */
+  async notifySafetyPhraseReview(msg: DMSafetyPhraseReviewMessage): Promise<boolean> {
+    if (!this.config.enabled) return false;
+    if (this.sentThisHour >= this.config.maxMessagesPerHour) {
+      console.log('[Telegram] Rate limit reached (%d/hr), skipping phrase review', this.config.maxMessagesPerHour);
+      return false;
+    }
+
+    const lines: string[] = [
+      '<b>DM Safety Phrase Review</b>',
+      '',
+      'AI is unsure about this DM phrase.',
+      'Is this inappropriate?',
+      '',
+      `<b>Phrase:</b> <code>${this.escapeHtml(this.truncateText(msg.phrase, 120))}</code>`,
+      `<b>Normalized:</b> <code>${this.escapeHtml(this.truncateText(msg.normalizedPhrase, 120))}</code>`,
+      `<b>AI action:</b> ${this.escapeHtml(msg.aiAction)}`,
+      `<b>Confidence:</b> ${(msg.confidence * 100).toFixed(1)}%`,
+      '',
+      this.escapeHtml(this.truncateText(msg.reason, 240)),
+    ];
+
+    if (msg.customerId) {
+      lines.splice(6, 0, `<b>Customer ID:</b> <code>${this.escapeHtml(msg.customerId)}</code>`);
+    }
+
+    if (msg.channel) {
+      lines.splice(6, 0, `<b>Channel:</b> ${this.escapeHtml(msg.channel)}`);
+    }
+
+    const text = lines.join('\n');
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: 'Yes - hard block', callback_data: `dmphr:block:${msg.reviewId}` },
+          { text: 'No - keep safe', callback_data: `dmphr:allow:${msg.reviewId}` },
+        ],
+        [
+          { text: 'Detail', callback_data: `dmphr:detail:${msg.reviewId}` },
+        ],
+      ],
+    };
+
+    try {
+      const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: this.config.adminChatId,
+          text,
+          parse_mode: 'HTML',
+          reply_markup: JSON.stringify(keyboard),
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error('[Telegram] Phrase review send failed:', res.status, err);
+        return false;
+      }
+
+      this.sentThisHour++;
+      console.log('[Telegram] Phrase review sent: %s', msg.reviewId);
+      return true;
+    } catch (err: any) {
+      console.error('[Telegram] Phrase review send error:', err.message);
       return false;
     }
   }
@@ -297,6 +382,10 @@ export class TelegramNotificationService {
 
   private escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  private truncateText(text: string, max: number): string {
+    return text.length > max ? `${text.slice(0, max - 3)}...` : text;
   }
 
   destroy(): void {

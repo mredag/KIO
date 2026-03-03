@@ -4,25 +4,42 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import Database from 'better-sqlite3';
+import { KnowledgeBaseService } from '../services/KnowledgeBaseService.js';
 import { InstagramContextService } from '../services/InstagramContextService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
+import { HardFactResponseService } from '../services/HardFactResponseService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
+import {
+  buildDeterministicClarifierResponse,
+  PRIMARY_PRICING_CONTEXT_SKIP_REASON,
+  TOPIC_SELECTION_CLARIFIER_SKIP_REASON,
+  shouldSkipSemanticSupplementForPricing,
+  shouldSkipSemanticSupplementForTopicSelection,
+} from '../services/DMPipelineHeuristics.js';
+import { DMInboundAggregationService } from '../services/DMInboundAggregationService.js';
+import type { AggregatedInboundTrace } from '../services/DMInboundAggregationService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
+import { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
+let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
 export function setEscalationService(svc: EscalationService): void {
   _escalationService = svc;
 }
+export function setDMSafetyPhraseService(svc: DMSafetyPhraseService): void {
+  _dmSafetyPhraseService = svc;
+}
 
 export interface PipelineTrace {
+  inputAggregation?: AggregatedInboundTrace;
   // Sexual intent filter (pre-processing safety check)
   sexualIntent?: {
     action: 'allow' | 'retry_question' | 'block_message';
@@ -140,8 +157,10 @@ export interface PipelineError {
  */
 export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const router = Router();
+  const knowledgeBaseService = new KnowledgeBaseService(db);
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(db);
   const semanticReranker = new DMKnowledgeRerankerService();
+  const hardFactResponseService = new HardFactResponseService();
   
   const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'spa-kiosk-instagram-verify';
   const OPENCLAW_WEBHOOK_URL = process.env.OPENCLAW_IG_WEBHOOK_URL || '';
@@ -373,6 +392,14 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     }
   }
 
+  let processBufferedMessage: ((
+    senderId: string,
+    messageText: string,
+    inputAggregation?: AggregatedInboundTrace | null,
+  ) => Promise<void>) | null = null;
+
+  const inboundAggregationService = new DMInboundAggregationService(db);
+
   /**
    * GET /webhook/instagram - Webhook verification
    * Meta sends a GET request to verify the webhook URL
@@ -457,16 +484,30 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             recentMessageIds.set(mid, now);
           }
 
-          const API_KEY = process.env.N8N_API_KEY || ''; // legacy env var name
-          const startTime = Date.now();
+          processBufferedMessage = async (
+            senderId: string,
+            messageText: string,
+            inputAggregation: AggregatedInboundTrace | null = null,
+          ): Promise<void> => {
+            const API_KEY = process.env.N8N_API_KEY || ''; // legacy env var name
+            const processingStartedAt = Date.now();
+            const aggregatedStartTime = inputAggregation
+              ? new Date(inputAggregation.lastReceivedAt).getTime()
+              : Number.NaN;
+            const startTime = !Number.isNaN(aggregatedStartTime)
+              ? aggregatedStartTime
+              : processingStartedAt;
           
-          // Generate unique execution ID for this DM pipeline run
-          const executionId = `EXE-${randomUUID().substring(0, 8)}`;
-          console.log('[Instagram Webhook] Starting pipeline execution: %s', executionId);
+            // Generate unique execution ID for this DM pipeline run
+            const executionId = `EXE-${randomUUID().substring(0, 8)}`;
+            console.log('[Instagram Webhook] Starting pipeline execution: %s', executionId);
 
-          // Initialize trace and error tracking
-          const trace: Partial<PipelineTrace> = {};
-          let pipelineError: PipelineError | null = null;
+            // Initialize trace and error tracking
+            const trace: Partial<PipelineTrace> = {};
+            if (inputAggregation) {
+              trace.inputAggregation = inputAggregation;
+            }
+            let pipelineError: PipelineError | null = null;
 
           // Safety filter (AI intent classification) — replaces hard regex rules
           // Flow:
@@ -475,7 +516,23 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           // - <70% => continue normal DM flow
           const sexualIntentStartTime = Date.now();
           try {
-            const sexualDecision = await evaluateSexualIntent(messageText);
+            const safetyResult = _dmSafetyPhraseService
+              ? await _dmSafetyPhraseService.evaluateMessage({
+                  messageText,
+                  channel: 'instagram',
+                  senderId,
+                  allowReviewAlerts: true,
+                })
+              : {
+                  decision: await evaluateSexualIntent(messageText),
+                  matchedPhrase: null,
+                  reviewRequest: {
+                    triggered: false,
+                    status: 'not_needed' as const,
+                    reviewId: null,
+                  },
+                };
+            const sexualDecision = safetyResult.decision;
             const sexualIntentLatency = Date.now() - sexualIntentStartTime;
 
             // Store sexual intent result in trace (for transparency in all cases)
@@ -489,6 +546,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
             if (sexualDecision.action !== 'allow') {
               const now = new Date().toISOString();
+              const inboundCreatedAt = inputAggregation?.lastReceivedAt || now;
 
               // Ensure customer exists before logging interaction rows
               db.prepare(`
@@ -501,7 +559,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               db.prepare(`
                 INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
                 VALUES (?, ?, 'inbound', ?, ?, ?, ?)
-              `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, executionId, now);
+              `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, executionId, inboundCreatedAt);
 
               const replyText = getSexualIntentReply(sexualDecision.action);
               const outboundIntent = sexualDecision.action === 'block_message'
@@ -638,6 +696,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           try {
             // Ensure customer exists (FK constraint) before logging interaction
             const now = new Date().toISOString();
+            const inboundCreatedAt = inputAggregation?.lastReceivedAt || now;
             db.prepare(`
               INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
               VALUES (?, 0, ?, ?)
@@ -649,7 +708,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             db.prepare(`
               INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
               VALUES (?, ?, 'inbound', ?, ?, ?, ?)
-            `).run(inboundId, senderId, messageText, intentStr, executionId, now);
+            `).run(inboundId, senderId, messageText, intentStr, executionId, inboundCreatedAt);
             console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
           } catch (inboundLogErr) {
             console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
@@ -681,14 +740,28 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // to see them to avoid false "hallucination" flags.
             const categories: Set<string> = new Set(analysis.intentCategories);
             categories.add('contact');
-            const categoriesParam = Array.from(categories).join(',');
-            const [knowledgeRes] = await Promise.allSettled([
-              fetch(`http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
-                { headers: { 'Authorization': `Bearer ${API_KEY}` } }),
-            ]);
+            const pricingTopicSlugs = analysis.intentCategories.includes('pricing')
+              ? knowledgeBaseService.resolvePricingTopicSlugs({
+                messageText,
+                followUpHintTopic: analysis.followUpHint?.topicLabel || null,
+                activeTopic: analysis.activeTopicLabel,
+              })
+              : [];
+            const deterministicClarifier = buildDeterministicClarifierResponse({
+              messageText,
+              intentCategories: analysis.intentCategories,
+              responseMode: analysis.responseDirective.mode,
+              semanticSignals: analysis.matchedKeywords,
+            });
+            const knowledgeData = knowledgeBaseService.getContext({
+              categories,
+              topicSlugsByCategory: pricingTopicSlugs.length > 0
+                ? { pricing: pricingTopicSlugs }
+                : undefined,
+            });
 
-            let knowledgeContext = '';
-            let knowledgeEntriesCount = 0;
+            let knowledgeContext = JSON.stringify(knowledgeData);
+            let knowledgeEntriesCount = knowledgeBaseService.countContextEntries(knowledgeData);
             let selectedEvidence = '';
             trace.semanticRetrieval = {
               enabled: true,
@@ -710,110 +783,130 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               skippedReason: 'not_run',
               rationale: null,
             };
-            if (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) {
-              const kData = await knowledgeRes.value.json() as Record<string, unknown>;
-              knowledgeContext = typeof kData === 'object' ? JSON.stringify(kData) : String(kData);
-              if (typeof kData === 'object' && kData !== null) {
-                for (const val of Object.values(kData)) {
-                  if (Array.isArray(val)) knowledgeEntriesCount += val.length;
-                  else knowledgeEntriesCount += 1;
-                }
-              }
-            }
+            const pricingContextSkip = shouldSkipSemanticSupplementForPricing({
+              messageText,
+              intentCategories: analysis.intentCategories,
+              primaryCategories: categories,
+              responseMode: analysis.responseDirective.mode,
+            });
+            const topicSelectionContextSkip = shouldSkipSemanticSupplementForTopicSelection({
+              intentCategories: analysis.intentCategories,
+              responseMode: analysis.responseDirective.mode,
+              semanticSignals: analysis.matchedKeywords,
+            });
+            const skipSemanticSupplement = pricingContextSkip || topicSelectionContextSkip;
 
-            try {
-              const semanticRetrieval = semanticKnowledgeService.findCandidates({
-                baseContextJson: knowledgeContext,
-                messageText,
-                followUpHint: analysis.followUpHint,
-                activeTopic: analysis.activeTopicLabel,
-                primaryCategories: categories,
-                maxCandidates: 8,
-              });
+            const semanticSkipReason = pricingContextSkip
+              ? PRIMARY_PRICING_CONTEXT_SKIP_REASON
+              : TOPIC_SELECTION_CLARIFIER_SKIP_REASON;
 
-              trace.semanticRetrieval = semanticRetrieval.trace;
-
-              const rerankResult = await semanticReranker.rerank({
-                messageText,
-                followUpHint: analysis.followUpHint,
-                activeTopic: analysis.activeTopicLabel,
-                requestedCategories: analysis.intentCategories,
-                candidates: semanticRetrieval.candidates,
-                maxSelections: 3,
-              });
-              trace.semanticRerank = rerankResult.trace;
-              selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
-
-              if (rerankResult.selectedCandidates.length > 0) {
-                const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
-                  knowledgeContext,
-                  rerankResult.selectedCandidates,
-                );
-                knowledgeContext = mergedKnowledge.knowledgeContext;
-                knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
-                for (const addedCategory of mergedKnowledge.addedCategories) {
-                  categories.add(addedCategory);
-                }
-              }
-            } catch (semanticRetrievalErr) {
-              console.error('[Instagram Webhook] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
+            if (skipSemanticSupplement) {
               trace.semanticRetrieval = {
-                enabled: true,
-                strategy: 'sparse_tfidf_chargram',
-                queryText: '',
-                candidateCount: 0,
-                selectedEntries: [],
-                latencyMs: 0,
-                refreshedIndex: false,
-                skippedReason: 'error',
+                ...trace.semanticRetrieval,
+                skippedReason: semanticSkipReason,
               };
               trace.semanticRerank = {
-                enabled: true,
-                modelId: 'disabled',
-                candidateCount: 0,
-                selectedCount: 0,
-                selectedEntries: [],
-                latencyMs: 0,
-                skippedReason: 'error',
-                rationale: null,
+                ...trace.semanticRerank,
+                modelId: 'skipped',
+                skippedReason: semanticSkipReason,
               };
+            } else {
+              try {
+                const semanticRetrieval = semanticKnowledgeService.findCandidates({
+                  baseContextJson: knowledgeContext,
+                  messageText,
+                  followUpHint: analysis.followUpHint,
+                  activeTopic: analysis.activeTopicLabel,
+                  primaryCategories: categories,
+                  maxCandidates: 8,
+                });
+
+                trace.semanticRetrieval = semanticRetrieval.trace;
+
+                const rerankResult = await semanticReranker.rerank({
+                  messageText,
+                  followUpHint: analysis.followUpHint,
+                  activeTopic: analysis.activeTopicLabel,
+                  requestedCategories: analysis.intentCategories,
+                  candidates: semanticRetrieval.candidates,
+                  maxSelections: 3,
+                });
+                trace.semanticRerank = rerankResult.trace;
+                selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
+
+                if (rerankResult.selectedCandidates.length > 0) {
+                  const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
+                    knowledgeContext,
+                    rerankResult.selectedCandidates,
+                  );
+                  knowledgeContext = mergedKnowledge.knowledgeContext;
+                  knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
+                  for (const addedCategory of mergedKnowledge.addedCategories) {
+                    categories.add(addedCategory);
+                  }
+                }
+              } catch (semanticRetrievalErr) {
+                console.error('[Instagram Webhook] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
+                trace.semanticRetrieval = {
+                  enabled: true,
+                  strategy: 'sparse_tfidf_chargram',
+                  queryText: '',
+                  candidateCount: 0,
+                  selectedEntries: [],
+                  latencyMs: 0,
+                  refreshedIndex: false,
+                  skippedReason: 'error',
+                };
+                trace.semanticRerank = {
+                  enabled: true,
+                  modelId: 'disabled',
+                  candidateCount: 0,
+                  selectedCount: 0,
+                  selectedEntries: [],
+                  latencyMs: 0,
+                  skippedReason: 'error',
+                  rationale: null,
+                };
+              }
             }
 
-            try {
-              const supportEntries = db.prepare(`
-                SELECT category, key_name, value, description
-                FROM knowledge_base
-                WHERE is_active = 1 AND category IN ('faq', 'hours', 'policies')
-                ORDER BY category, key_name
-              `).all() as Array<{
-                category: string;
-                key_name: string;
-                value: string;
-                description: string | null;
-              }>;
+            if (!skipSemanticSupplement) {
+              try {
+                const supportEntries = db.prepare(`
+                  SELECT category, key_name, value, description
+                  FROM knowledge_base
+                  WHERE is_active = 1 AND category IN ('faq', 'hours', 'policies')
+                  ORDER BY category, key_name
+                `).all() as Array<{
+                  category: string;
+                  key_name: string;
+                  value: string;
+                  description: string | null;
+                }>;
 
-              const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
-              const augmentedKnowledge = knowledgeSelector.augmentContext({
-                baseContextJson: knowledgeContext,
-                messageText,
-                followUpHint: analysis.followUpHint,
-                primaryCategories: categories,
-              });
+                const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
+                const augmentedKnowledge = knowledgeSelector.augmentContext({
+                  baseContextJson: knowledgeContext,
+                  messageText,
+                  followUpHint: analysis.followUpHint,
+                  primaryCategories: categories,
+                });
 
-              if (augmentedKnowledge.addedEntriesCount > 0) {
-                knowledgeContext = augmentedKnowledge.knowledgeContext;
-                knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
-                for (const addedCategory of augmentedKnowledge.addedCategories) {
-                  categories.add(addedCategory);
+                if (augmentedKnowledge.addedEntriesCount > 0) {
+                  knowledgeContext = augmentedKnowledge.knowledgeContext;
+                  knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
+                  for (const addedCategory of augmentedKnowledge.addedCategories) {
+                    categories.add(addedCategory);
+                  }
                 }
+              } catch (knowledgeSelectionErr) {
+                console.error('[Instagram Webhook] Knowledge selection supplement failed:', knowledgeSelectionErr);
               }
-            } catch (knowledgeSelectionErr) {
-              console.error('[Instagram Webhook] Knowledge selection supplement failed:', knowledgeSelectionErr);
             }
 
             // Update trace — knowledge fetch stage
             trace.knowledgeCategoriesFetched = Array.from(categories);
-            trace.knowledgeFetchStatus = (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) ? 'success' : 'fail';
+            trace.knowledgeFetchStatus = 'success';
             trace.knowledgeEntriesCount = knowledgeEntriesCount;
 
             // Format KB from raw JSON into clean labeled Turkish text.
@@ -840,8 +933,48 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             const skipPolicy = pipelineConfigService.shouldSkipPolicy(analysis.modelTier);
 
             let agentResponse: string | null = null;
+            let usedDeterministicResponse = false;
+            const deterministicResult = hardFactResponseService.tryGenerate({
+              messageText,
+              intentCategories: analysis.intentCategories,
+              knowledgeContextJson: knowledgeContext,
+              responseDirective: analysis.responseDirective,
+              hasFollowUpHint: !!analysis.followUpHint,
+            });
 
-            if (useDirectResponse) {
+            if (deterministicResult?.success && deterministicResult.response) {
+              console.log('[Instagram Webhook] Using DETERMINISTIC hard-fact path');
+              agentResponse = deterministicResult.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: deterministicResult.latencyMs,
+                modelId: deterministicResult.modelId,
+                tokensEstimated: deterministicResult.tokensEstimated,
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = deterministicResult.modelId;
+              usedDeterministicResponse = true;
+            }
+
+            if (!agentResponse && deterministicClarifier) {
+              console.log('[Instagram Webhook] Using DETERMINISTIC clarify-only path');
+              agentResponse = deterministicClarifier.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: deterministicClarifier.modelId,
+                tokensEstimated: 0,
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-clarifier';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = deterministicClarifier.modelId;
+              usedDeterministicResponse = true;
+            }
+
+            if (!agentResponse && useDirectResponse) {
               // ═══════════════════════════════════════════════════════════
               // DIRECT RESPONSE PATH — Bypass OpenClaw for eligible tiers
               // Saves ~8-10s by calling OpenRouter directly
@@ -991,11 +1124,12 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             let policyTotalLatencyMs = 0;
             let policyTotalTokens = 0;
             let policyAttempts = 0;
-            let policyStatus: 'pass' | 'fail' | 'corrected' | 'fallback' | 'skipped' = skipPolicy ? 'skipped' : 'pass';
+            const shouldSkipPolicy = skipPolicy || usedDeterministicResponse;
+            let policyStatus: 'pass' | 'fail' | 'corrected' | 'fallback' | 'skipped' = shouldSkipPolicy ? 'skipped' : 'pass';
             let lastValidation: PolicyValidationResult | null = null;
             let firstRejection: { violations: string[]; reason: string } | null = null;
 
-            if (skipPolicy) {
+            if (shouldSkipPolicy) {
               console.log('[PolicyAgent] Skipped for tier=%s (config)', analysis.modelTier);
             } else {
               // Validation + retry loop
@@ -1279,6 +1413,36 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           } catch (openclawError) {
             console.error('[Instagram Webhook] OpenClaw pipeline error:', openclawError);
           }
+          };
+
+          inboundAggregationService.setDispatchHandler(async payload => {
+            if (!processBufferedMessage) {
+              throw new Error('Instagram buffered message processor is not ready');
+            }
+
+            await processBufferedMessage(payload.customerId, payload.messageText, payload.trace);
+          });
+
+          const aggregationDecision = inboundAggregationService.ingest({
+            channel: 'instagram',
+            customerId: senderId,
+            messageText,
+          });
+
+          if (aggregationDecision.action === 'buffered') {
+            console.log('[Instagram Webhook] Buffered inbound fragment for sender %s (%d fragment%s)',
+              senderId,
+              aggregationDecision.trace.fragmentCount,
+              aggregationDecision.trace.fragmentCount === 1 ? '' : 's',
+            );
+            return;
+          }
+
+          await processBufferedMessage(
+            senderId,
+            aggregationDecision.messageText,
+            aggregationDecision.trace,
+          );
         }
       } else if (messaging?.read || messaging?.delivery) {
         console.log('[Instagram Webhook] Read/delivery receipt (not forwarding)');

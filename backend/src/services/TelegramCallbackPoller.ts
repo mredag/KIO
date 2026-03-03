@@ -1,24 +1,13 @@
 /**
- * TelegramCallbackPoller — Handles inline keyboard button presses from Telegram.
- *
- * Uses getUpdates long-polling BUT automatically defers to OpenClaw when the gateway
- * is running (they share the same bot token). Periodically checks if OpenClaw is
- * up/down and starts/stops polling accordingly.
- *
- * When OpenClaw IS running, callback_query updates are forwarded to the backend
- * via OpenClaw's Telegram plugin → the backend's /webhook/telegram endpoint.
- * When OpenClaw is NOT running, this poller handles callbacks directly.
- *
- * Flow:
- *   Admin clicks button → Telegram queues callback_query →
- *   Poller picks it up → EscalationService.handleAdminDecision() →
- *   answerCallbackQuery + editMessage (remove buttons, reply with result)
+ * TelegramCallbackPoller - handles Telegram callback_query buttons when OpenClaw is down.
  */
 import { EscalationService } from './EscalationService.js';
+import { DMSafetyPhraseService } from './DMSafetyPhraseService.js';
 import { TelegramNotificationService } from './TelegramNotificationService.js';
 
 export class TelegramCallbackPoller {
   private escalation: EscalationService;
+  private dmSafety: DMSafetyPhraseService;
   private telegram: TelegramNotificationService;
   private botToken: string;
   private running = false;
@@ -29,8 +18,13 @@ export class TelegramCallbackPoller {
   private openclawRunning = false;
   private openclawPort: string;
 
-  constructor(escalation: EscalationService, telegram: TelegramNotificationService) {
+  constructor(
+    escalation: EscalationService,
+    dmSafety: DMSafetyPhraseService,
+    telegram: TelegramNotificationService,
+  ) {
     this.escalation = escalation;
+    this.dmSafety = dmSafety;
     this.telegram = telegram;
     this.botToken = telegram.getBotToken();
     this.openclawPort = process.env.OPENCLAW_GATEWAY_PORT || '18789';
@@ -38,23 +32,20 @@ export class TelegramCallbackPoller {
 
   async start(): Promise<void> {
     if (!this.botToken || !this.telegram.isEnabled()) {
-      console.log('[TG Poller] Disabled — no bot token');
+      console.log('[TG Poller] Disabled - no bot token');
       return;
     }
 
     this.running = true;
-
-    // Check OpenClaw status and decide whether to poll
     const ocUp = await this.checkOpenClaw();
+
     if (ocUp) {
       this.openclawRunning = true;
-      console.log('[TG Poller] OpenClaw detected — deferring Telegram polling to gateway');
+      console.log('[TG Poller] OpenClaw detected - gateway handles Telegram callbacks');
     } else {
-      // No OpenClaw — we own Telegram getUpdates
       await this.startPolling();
     }
 
-    // Periodically check OpenClaw status (every 30s)
     this.openclawCheckTimer = setInterval(() => this.reconcile(), 30000);
   }
 
@@ -68,23 +59,17 @@ export class TelegramCallbackPoller {
     console.log('[TG Poller] Stopped');
   }
 
-  /**
-   * Reconcile state: if OpenClaw came up, stop polling. If it went down, start polling.
-   */
   private async reconcile(): Promise<void> {
     if (!this.running) return;
 
     const ocUp = await this.checkOpenClaw();
-
     if (ocUp && !this.openclawRunning) {
-      // OpenClaw just came up — stop our polling
       this.openclawRunning = true;
       this.stopPolling();
-      console.log('[TG Poller] OpenClaw came online — stopped polling, gateway handles Telegram');
+      console.log('[TG Poller] OpenClaw came online - stopped polling');
     } else if (!ocUp && this.openclawRunning) {
-      // OpenClaw went down — resume our polling
       this.openclawRunning = false;
-      console.log('[TG Poller] OpenClaw went offline — resuming callback polling');
+      console.log('[TG Poller] OpenClaw went offline - resuming callback polling');
       await this.startPolling();
     }
   }
@@ -103,16 +88,17 @@ export class TelegramCallbackPoller {
   private async startPolling(): Promise<void> {
     if (this.polling) return;
 
-    // Delete any existing webhook so getUpdates works
     try {
       await fetch(`https://api.telegram.org/bot${this.botToken}/deleteWebhook`, {
         method: 'POST',
         signal: AbortSignal.timeout(5000),
       });
-    } catch { /* ignore */ }
+    } catch {
+      // Non-fatal.
+    }
 
     this.polling = true;
-    console.log('[TG Poller] Started — polling for button callbacks');
+    console.log('[TG Poller] Started - polling for callback buttons');
     this.poll();
   }
 
@@ -128,8 +114,7 @@ export class TelegramCallbackPoller {
     if (!this.polling || !this.running) return;
 
     try {
-      const url = `https://api.telegram.org/bot${this.botToken}/getUpdates`;
-      const res = await fetch(url, {
+      const res = await fetch(`https://api.telegram.org/bot${this.botToken}/getUpdates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -152,15 +137,11 @@ export class TelegramCallbackPoller {
         }
       }
     } catch (err: any) {
-      if (this.running && this.polling) {
-        // Don't spam logs — only log non-409 errors
-        if (!err.message?.includes('409')) {
-          console.error('[TG Poller] Poll error:', err.message);
-        }
+      if (this.running && this.polling && !err.message?.includes('409')) {
+        console.error('[TG Poller] Poll error:', err.message);
       }
     }
 
-    // Schedule next poll
     if (this.polling && this.running) {
       this.pollTimer = setTimeout(() => this.poll(), 1000);
     }
@@ -172,36 +153,59 @@ export class TelegramCallbackPoller {
     const messageId = cbq.message?.message_id;
     const callbackQueryId = cbq.id;
 
-    if (!data || !data.startsWith('esc:')) {
-      await this.telegram.answerCallback(callbackQueryId, '❓ Bilinmeyen komut');
-      return;
-    }
-
-    const parts = data.split(':');
-    if (parts.length < 3) return;
-    const action = parts[1];
-    const jobId = parts.slice(2).join(':');
-
-    const validActions = ['approve', 'reject', 'assign_analyst', 'detail'];
-    if (!validActions.includes(action)) return;
-
     try {
-      const result = await this.escalation.handleAdminDecision(
-        jobId,
-        action as 'approve' | 'reject' | 'assign_analyst' | 'detail'
-      );
+      if (data?.startsWith('esc:')) {
+        const parts = data.split(':');
+        if (parts.length < 3) return;
 
-      const emoji = action === 'approve' ? '✅' : action === 'reject' ? '❌' : action === 'assign_analyst' ? '📊' : '📋';
-      await this.telegram.answerCallback(callbackQueryId, `${emoji} ${result}`);
+        const action = parts[1];
+        const jobId = parts.slice(2).join(':');
+        const validActions = ['approve', 'reject', 'assign_analyst', 'detail'];
+        if (!validActions.includes(action)) return;
 
-      if (action !== 'detail') {
-        await this.telegram.editMessageAfterAction(chatId, messageId, `${emoji} ${result}`);
+        const result = await this.escalation.handleAdminDecision(
+          jobId,
+          action as 'approve' | 'reject' | 'assign_analyst' | 'detail',
+        );
+        const label = action === 'approve' ? 'OK' : action === 'reject' ? 'NO' : action === 'assign_analyst' ? 'ANALYST' : 'INFO';
+        await this.telegram.answerCallback(callbackQueryId, `${label} ${result}`);
+
+        if (action !== 'detail') {
+          await this.telegram.editMessageAfterAction(chatId, messageId, `${label} ${result}`);
+        }
+
+        console.log('[TG Poller] Escalation action %s on %s -> %s', action, jobId.substring(0, 8), result);
+        return;
       }
 
-      console.log('[TG Poller] ✅ %s on %s → %s', action, jobId.substring(0, 8), result);
+      if (data?.startsWith('dmphr:')) {
+        const parts = data.split(':');
+        if (parts.length < 3) return;
+
+        const action = parts[1];
+        const reviewId = parts.slice(2).join(':');
+        const validActions = ['block', 'allow', 'detail'];
+        if (!validActions.includes(action)) return;
+
+        const result = this.dmSafety.handleReviewDecision(
+          reviewId,
+          action as 'block' | 'allow' | 'detail',
+        );
+        const label = action === 'block' ? 'BLOCK' : action === 'allow' ? 'ALLOW' : 'INFO';
+        await this.telegram.answerCallback(callbackQueryId, `${label} ${result}`);
+
+        if (action !== 'detail') {
+          await this.telegram.editMessageAfterAction(chatId, messageId, `${label} ${result}`);
+        }
+
+        console.log('[TG Poller] DM phrase action %s on %s -> %s', action, reviewId, result);
+        return;
+      }
+
+      await this.telegram.answerCallback(callbackQueryId, 'Unknown action');
     } catch (err: any) {
       console.error('[TG Poller] Error handling callback:', err.message);
-      await this.telegram.answerCallback(callbackQueryId, '❌ Hata oluştu');
+      await this.telegram.answerCallback(callbackQueryId, 'Action failed');
     }
   }
 }

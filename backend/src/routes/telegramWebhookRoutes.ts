@@ -1,86 +1,103 @@
 /**
- * Telegram Webhook Routes — Receives callback_query from inline keyboard buttons.
+ * Telegram Webhook Routes - receives callback_query button presses.
  *
- * When admin clicks a button on a notification message, Telegram sends a callback_query
- * to this webhook. We parse the action, execute it via EscalationService, and reply.
- *
- * callback_data format: "esc:{action}:{jobId}"
- * Actions: approve, reject, assign_analyst, detail
- *
- * NOTE: OpenClaw uses long-polling for Telegram conversations.
- * Setting a webhook does NOT conflict — Telegram sends callback_query to webhook
- * and regular messages to the polling consumer. They coexist.
+ * Supports:
+ * - Escalation job actions: esc:{action}:{jobId}
+ * - DM safety phrase review actions: dmphr:{action}:{reviewId}
  */
 import { Router, Request, Response } from 'express';
 import { EscalationService } from '../services/EscalationService.js';
+import { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import { TelegramNotificationService } from '../services/TelegramNotificationService.js';
 
 let _escalationService: EscalationService | null = null;
 let _telegramService: TelegramNotificationService | null = null;
+let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
 
-export function setTelegramWebhookDeps(esc: EscalationService, tg: TelegramNotificationService): void {
+export function setTelegramWebhookDeps(
+  esc: EscalationService,
+  tg: TelegramNotificationService,
+  dmSafety?: DMSafetyPhraseService,
+): void {
   _escalationService = esc;
   _telegramService = tg;
+  _dmSafetyPhraseService = dmSafety || null;
 }
 
 export function createTelegramWebhookRoutes(): Router {
   const router = Router();
 
-  /**
-   * POST /webhook/telegram — Telegram Bot API webhook endpoint.
-   * Receives callback_query when admin clicks inline keyboard buttons.
-   */
   router.post('/', async (req: Request, res: Response) => {
-    // Always respond 200 immediately — Telegram retries on non-200
     res.status(200).json({ ok: true });
 
-    const update = req.body;
+    const cbq = req.body?.callback_query;
+    if (!cbq) return;
 
-    // We only care about callback_query (button presses)
-    if (!update?.callback_query) return;
-
-    const cbq = update.callback_query;
     const data = cbq.data as string;
     const chatId = cbq.message?.chat?.id;
     const messageId = cbq.message?.message_id;
     const callbackQueryId = cbq.id;
 
-    if (!data || !data.startsWith('esc:')) return;
-
-    // Parse: "esc:{action}:{jobId}"
-    const parts = data.split(':');
-    if (parts.length < 3) return;
-    const action = parts[1];
-    const jobId = parts.slice(2).join(':'); // jobId may contain colons (UUID)
-
-    const validActions = ['approve', 'reject', 'assign_analyst', 'detail'];
-    if (!validActions.includes(action)) return;
-
-    if (!_escalationService || !_telegramService) {
-      await _telegramService?.answerCallback(callbackQueryId, '⚠️ Servis hazır değil');
-      return;
-    }
+    if (!_telegramService) return;
 
     try {
-      const result = await _escalationService.handleAdminDecision(
-        jobId,
-        action as 'approve' | 'reject' | 'assign_analyst' | 'detail'
-      );
+      if (data?.startsWith('esc:')) {
+        if (!_escalationService) {
+          await _telegramService.answerCallback(callbackQueryId, 'Service not ready');
+          return;
+        }
 
-      const emoji = action === 'approve' ? '✅' : action === 'reject' ? '❌' : action === 'assign_analyst' ? '📊' : '📋';
+        const parts = data.split(':');
+        if (parts.length < 3) return;
 
-      // Answer the callback (dismisses loading spinner, shows toast)
-      await _telegramService.answerCallback(callbackQueryId, `${emoji} ${result}`);
+        const action = parts[1];
+        const jobId = parts.slice(2).join(':');
+        const validActions = ['approve', 'reject', 'assign_analyst', 'detail'];
+        if (!validActions.includes(action)) return;
 
-      // For non-detail actions, remove buttons and reply with result
-      if (action !== 'detail') {
-        await _telegramService.editMessageAfterAction(chatId, messageId, `${emoji} ${result}`);
+        const result = await _escalationService.handleAdminDecision(
+          jobId,
+          action as 'approve' | 'reject' | 'assign_analyst' | 'detail',
+        );
+        const emoji = action === 'approve' ? 'OK' : action === 'reject' ? 'NO' : action === 'assign_analyst' ? 'ANALYST' : 'INFO';
+
+        await _telegramService.answerCallback(callbackQueryId, `${emoji} ${result}`);
+        if (action !== 'detail') {
+          await _telegramService.editMessageAfterAction(chatId, messageId, `${emoji} ${result}`);
+        }
+
+        console.log('[Telegram Webhook] Escalation action: %s on %s -> %s', action, jobId.substring(0, 8), result);
+        return;
       }
 
-      console.log('[Telegram Webhook] Action: %s on job %s → %s', action, jobId.substring(0, 8), result);
+      if (data?.startsWith('dmphr:') && _dmSafetyPhraseService) {
+        const parts = data.split(':');
+        if (parts.length < 3) return;
+
+        const action = parts[1];
+        const reviewId = parts.slice(2).join(':');
+        const validActions = ['block', 'allow', 'detail'];
+        if (!validActions.includes(action)) return;
+
+        const result = _dmSafetyPhraseService.handleReviewDecision(
+          reviewId,
+          action as 'block' | 'allow' | 'detail',
+        );
+        const emoji = action === 'block' ? 'BLOCK' : action === 'allow' ? 'ALLOW' : 'INFO';
+
+        await _telegramService.answerCallback(callbackQueryId, `${emoji} ${result}`);
+        if (action !== 'detail') {
+          await _telegramService.editMessageAfterAction(chatId, messageId, `${emoji} ${result}`);
+        }
+
+        console.log('[Telegram Webhook] DM phrase review: %s on %s -> %s', action, reviewId, result);
+        return;
+      }
+
+      await _telegramService.answerCallback(callbackQueryId, 'Unknown action');
     } catch (err: any) {
       console.error('[Telegram Webhook] Error:', err.message);
-      await _telegramService?.answerCallback(callbackQueryId, '❌ Hata oluştu');
+      await _telegramService.answerCallback(callbackQueryId, 'Action failed');
     }
   });
 

@@ -52,6 +52,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 
 ## Safety and Policy Notes
 - `sexualIntentFilter.ts` is AI-first, with a narrow euphemism guard for phrases like `mutlu son`, `extra hizmet`, and `premium paket`.
+- `sexualIntentFilter.ts` includes a clear-business guard for concrete pricing asks (including compact typo forms like `30daka ne kadar`) so they bypass boundary-probe hard blocks.
 - The first sexual-intent gate now receives bounded conversation context from `instagram_interactions`: last 24 hours only, capped to at most 6 short lines and ~600 chars before model prompts.
 - `ResponsePolicyService` now receives a compact conversation snippet for rule/faithfulness checks (max 4 lines, ~600 chars) so follow-up turns are judged with context without large token bloat.
 - Rule-stage style/format failures are treated as soft signals; hard blocking should come from moderation, explicit hard-rule violations, or deterministic grounding mismatches.

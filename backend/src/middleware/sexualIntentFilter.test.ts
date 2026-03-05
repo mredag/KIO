@@ -321,4 +321,27 @@ describe('sexualIntentFilter', () => {
     expect(decision.reason).toContain('premium-package');
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
+
+  it('allows compact typo price questions like "30daka ne kadar" without boundary escalation', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('30daka ne kadar');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('business pricing question');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('still blocks euphemistic sexual questions even when they look like pricing', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('mutlu son ne kadar');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.modelUsed).toBe('heuristic-euphemism-guard');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
 });

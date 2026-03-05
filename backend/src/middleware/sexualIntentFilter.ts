@@ -30,6 +30,9 @@ const SEXUAL_BLOCK_REPLY = 'O dediginiz sey bizde yoktur. Biz sadece profesyonel
 const SEXUAL_RETRY_REPLY = 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.';
 const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist)\b/u;
 const SHORT_PROBE_PATTERN = /\b(nasil|oluyor|olur|var|varmi|nedir|ne)\b/u;
+const PRICE_QUESTION_PATTERN = /\b(fiyat|ucret|price|ne\s*kadar|kac\s*(tl|lira))\b/u;
+const DURATION_PATTERN = /\b\d{1,3}\s*(dk|dak|daka|dakika|min|minute)\b/u;
+const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
 
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -145,6 +148,45 @@ function buildBoundaryProbeContext(messageText: string): BoundaryProbeContext {
     hasBusinessAnchor,
     shapeHint,
   };
+}
+
+function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecision | null {
+  const { spaced, compact } = normalizeEuphemismText(messageText);
+  if (!spaced) {
+    return null;
+  }
+
+  // Never force-allow if explicit or euphemistic sexual cues are present.
+  const hasExplicitSexualCue = EXPLICIT_SEXUAL_PATTERN.test(spaced);
+  const hasEuphemisticCue = compact.includes('mutluson')
+    || compact.includes('mutuson')
+    || compact.includes('happyending')
+    || compact.includes('extrahizmet')
+    || compact.includes('ekstrahizmet')
+    || compact.includes('ozelmuamele');
+  if (hasExplicitSexualCue || hasEuphemisticCue) {
+    return null;
+  }
+
+  const hasBusinessAnchor = SAFE_BUSINESS_ANCHOR_PATTERN.test(spaced);
+  const hasPriceQuestion = PRICE_QUESTION_PATTERN.test(spaced);
+  const hasDurationToken = DURATION_PATTERN.test(spaced);
+  const hasNumericToken = /\b\d{1,4}\b/.test(spaced);
+
+  // Covers compact typo forms like "30daka ne kadar".
+  const looksLikeDurationPriceQuestion = hasDurationToken && (hasPriceQuestion || hasNumericToken);
+  const looksLikeConcreteBusinessPriceQuestion = hasPriceQuestion && (hasBusinessAnchor || hasNumericToken);
+
+  if (looksLikeDurationPriceQuestion || looksLikeConcreteBusinessPriceQuestion) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected clear business pricing question with concrete duration/number anchor.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  return null;
 }
 
 function detectSexualEuphemismGuard(messageText: string): SexualIntentDecision | null {
@@ -552,6 +594,11 @@ export async function evaluateSexualIntent(messageText: string): Promise<SexualI
   const heuristicDecision = detectSexualEuphemismGuard(messageText);
   if (heuristicDecision) {
     return heuristicDecision;
+  }
+
+  const businessGuardDecision = detectClearBusinessIntentGuard(messageText);
+  if (businessGuardDecision) {
+    return businessGuardDecision;
   }
 
   const [primaryClassification, reviewClassification, boundaryDecision] = await Promise.all([

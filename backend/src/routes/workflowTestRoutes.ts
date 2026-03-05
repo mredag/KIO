@@ -11,13 +11,19 @@ import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalSer
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
+import { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
+let _simulatorDMSafetyPhraseService: DMSafetyPhraseService | null = null;
 export function setSimulatorEscalation(svc: EscalationService): void {
   _escalationService = svc;
+}
+
+export function setSimulatorDMSafety(svc: DMSafetyPhraseService): void {
+  _simulatorDMSafetyPhraseService = svc;
 }
 
 /**

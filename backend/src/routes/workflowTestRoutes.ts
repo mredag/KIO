@@ -5,32 +5,19 @@ import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { InstagramContextService } from '../services/InstagramContextService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
-import { HardFactResponseService } from '../services/HardFactResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
-import {
-  buildDeterministicClarifierResponse,
-  PRIMARY_PRICING_CONTEXT_SKIP_REASON,
-  TOPIC_SELECTION_CLARIFIER_SKIP_REASON,
-  shouldSkipSemanticSupplementForPricing,
-  shouldSkipSemanticSupplementForTopicSelection,
-} from '../services/DMPipelineHeuristics.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
-import { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
-let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
 export function setSimulatorEscalation(svc: EscalationService): void {
   _escalationService = svc;
-}
-export function setSimulatorDMSafety(svc: DMSafetyPhraseService): void {
-  _dmSafetyPhraseService = svc;
 }
 
 /**
@@ -44,13 +31,104 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const knowledgeBaseService = new KnowledgeBaseService(db);
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(rawDb);
   const semanticReranker = new DMKnowledgeRerankerService();
-  const hardFactResponseService = new HardFactResponseService();
 
   // Middleware: session auth (admin panel) OR API key auth (external)
   const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {
     if (req.session && req.session.user) return next();
     return apiKeyAuth(req, res, next);
   };
+
+  function normalizeTemplateText(text: string): string {
+    return text
+      .toLocaleLowerCase('tr-TR')
+      .replace(/ü/g, 'u')
+      .replace(/ö/g, 'o')
+      .replace(/ş/g, 's')
+      .replace(/ç/g, 'c')
+      .replace(/ğ/g, 'g')
+      .replace(/ı/g, 'i')
+      .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function isGenericInfoRequest(messageText: string): boolean {
+    const normalized = normalizeTemplateText(messageText);
+    if (!normalized) return false;
+
+    const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
+      || /\bbilgi\s+(al|ver)/.test(normalized);
+    if (!hasInfoIntent) return false;
+
+    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
+
+    return !hasSpecificAnchor;
+  }
+
+  function clipTemplateBlock(value: string, maxLines: number, maxChars: number): string {
+    const cleaned = value.replace(/\r/g, '').trim();
+    if (!cleaned) return '';
+
+    const lines = cleaned
+      .split('\n')
+      .map(line => line.trimEnd())
+      .filter(Boolean)
+      .slice(0, Math.max(1, maxLines));
+    let block = lines.join('\n');
+    if (block.length > maxChars) {
+      block = `${block.slice(0, maxChars - 3).trimEnd()}...`;
+    }
+    return block;
+  }
+
+  function buildGenericInfoTemplateFromKnowledge(): string | null {
+    try {
+      const rows = rawDb.prepare(`
+        SELECT category, key_name, value
+        FROM knowledge_base
+        WHERE is_active = 1 AND (
+          (category = 'pricing' AND (key_name = 'complete_massage_pricing' OR key_name LIKE '%massage%' OR key_name LIKE '%masaj%'))
+          OR (category = 'services' AND key_name IN ('therapist_info', 'complete_customer_bring_guide'))
+          OR (category = 'contact' AND key_name = 'phone')
+        )
+        ORDER BY updated_at DESC
+      `).all() as Array<{
+        category: string;
+        key_name: string;
+        value: string;
+      }>;
+
+      const massagePricing = rows.find(row => row.category === 'pricing' && row.key_name === 'complete_massage_pricing')
+        || rows.find(row => row.category === 'pricing');
+      const therapistInfo = rows.find(row => row.category === 'services' && row.key_name === 'therapist_info');
+      const bringInfo = rows.find(row => row.category === 'services' && row.key_name === 'complete_customer_bring_guide');
+      const phoneInfo = rows.find(row => row.category === 'contact' && row.key_name === 'phone');
+
+      if (!massagePricing && !therapistInfo && !bringInfo) {
+        return null;
+      }
+
+      const sections: string[] = ['Elbette, size hizlica temel bilgileri paylasayim:'];
+
+      if (massagePricing?.value) {
+        sections.push(clipTemplateBlock(massagePricing.value, 26, 2200));
+      }
+      if (therapistInfo?.value) {
+        sections.push(`Terapist bilgisi:\n${clipTemplateBlock(therapistInfo.value, 4, 500)}`);
+      }
+      if (bringInfo?.value) {
+        sections.push(`Yaninizda ne getirmelisiniz:\n${clipTemplateBlock(bringInfo.value, 10, 850)}`);
+      }
+      if (phoneInfo?.value) {
+        sections.push(`Detayli bilgi ve randevu: ${clipTemplateBlock(phoneInfo.value, 2, 140)}`);
+      }
+
+      return sections.join('\n\n');
+    } catch (error) {
+      console.error('[Simulator] Failed to build deterministic info template:', error);
+      return null;
+    }
+  }
 
   /**
    * POST /api/workflow-test/simulate-agent
@@ -119,17 +197,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const sexualIntentStartTime = Date.now();
       let sexualIntentResult;
       try {
-        const safetyResult = _dmSafetyPhraseService
-          ? await _dmSafetyPhraseService.evaluateMessage({
-              messageText: text,
-              channel: 'workflow_test',
-              senderId,
-              allowReviewAlerts: false,
-            })
-          : {
-              decision: await evaluateSexualIntent(text),
-            };
-        sexualIntentResult = safetyResult.decision;
+        sexualIntentResult = await evaluateSexualIntent(text);
         const sexualIntentLatency = Date.now() - sexualIntentStartTime;
         
         // If blocked or retry, stop here and return early
@@ -223,19 +291,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       // Always include 'contact' — phone/address are in system prompt and fallback
       const kbCategories: Set<string> = new Set(analysis.intentCategories);
       kbCategories.add('contact');
-      const pricingTopicSlugs = analysis.intentCategories.includes('pricing')
-        ? knowledgeBaseService.resolvePricingTopicSlugs({
-          messageText: text,
-          followUpHintTopic: analysis.followUpHint?.topicLabel || null,
-          activeTopic: analysis.activeTopicLabel,
-        })
-        : [];
-      const deterministicClarifier = buildDeterministicClarifierResponse({
-        messageText: text,
-        intentCategories: analysis.intentCategories,
-        responseMode: analysis.responseDirective.mode,
-        semanticSignals: analysis.matchedKeywords,
-      });
+      const categoriesParam = Array.from(kbCategories).join(',');
+      const API_KEY = process.env.N8N_API_KEY || '';
       let knowledgeContext = '';
       let knowledgeEntriesCount = 0;
       let selectedEvidence = '';
@@ -260,126 +317,99 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         rationale: null as string | null,
       };
       try {
-        const kData = knowledgeBaseService.getContext({
-          categories: kbCategories,
-          topicSlugsByCategory: pricingTopicSlugs.length > 0
-            ? { pricing: pricingTopicSlugs }
-            : undefined,
-        });
-        knowledgeContext = JSON.stringify(kData);
-        knowledgeEntriesCount = knowledgeBaseService.countContextEntries(kData);
+        const kRes = await fetch(
+          `http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
+          { headers: { 'Authorization': `Bearer ${API_KEY}` } }
+        );
+        if (kRes.ok) {
+          const kData = await kRes.json() as Record<string, unknown>;
+          knowledgeContext = JSON.stringify(kData);
+          for (const val of Object.values(kData)) {
+            if (Array.isArray(val)) knowledgeEntriesCount += val.length;
+            else knowledgeEntriesCount += 1;
+          }
+        }
       } catch { /* knowledge fetch failed, continue */ }
 
-      const pricingContextSkip = shouldSkipSemanticSupplementForPricing({
-        messageText: text,
-        intentCategories: analysis.intentCategories,
-        primaryCategories: kbCategories,
-        responseMode: analysis.responseDirective.mode,
-      });
-      const topicSelectionContextSkip = shouldSkipSemanticSupplementForTopicSelection({
-        intentCategories: analysis.intentCategories,
-        responseMode: analysis.responseDirective.mode,
-        semanticSignals: analysis.matchedKeywords,
-      });
-      const skipSemanticSupplement = pricingContextSkip || topicSelectionContextSkip;
+      try {
+        const semanticRetrieval = semanticKnowledgeService.findCandidates({
+          baseContextJson: knowledgeContext,
+          messageText: text,
+          followUpHint: analysis.followUpHint,
+          activeTopic: analysis.activeTopicLabel,
+          primaryCategories: kbCategories,
+          maxCandidates: 8,
+        });
 
-      const semanticSkipReason = pricingContextSkip
-        ? PRIMARY_PRICING_CONTEXT_SKIP_REASON
-        : TOPIC_SELECTION_CLARIFIER_SKIP_REASON;
+        semanticRetrievalTrace = semanticRetrieval.trace;
 
-      if (skipSemanticSupplement) {
+        const rerankResult = await semanticReranker.rerank({
+          messageText: text,
+          followUpHint: analysis.followUpHint,
+          activeTopic: analysis.activeTopicLabel,
+          requestedCategories: analysis.intentCategories,
+          candidates: semanticRetrieval.candidates,
+          maxSelections: 3,
+        });
+        semanticRerankTrace = rerankResult.trace;
+        selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
+
+        if (rerankResult.selectedCandidates.length > 0) {
+          const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
+            knowledgeContext,
+            rerankResult.selectedCandidates,
+          );
+          knowledgeContext = mergedKnowledge.knowledgeContext;
+          knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
+          for (const addedCategory of mergedKnowledge.addedCategories) {
+            kbCategories.add(addedCategory);
+          }
+        }
+      } catch (semanticRetrievalErr) {
+        console.error('[Simulator] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
         semanticRetrievalTrace = {
-          ...semanticRetrievalTrace,
-          skippedReason: semanticSkipReason,
+          enabled: true,
+          strategy: 'sparse_tfidf_chargram',
+          queryText: '',
+          candidateCount: 0,
+          selectedEntries: [],
+          latencyMs: 0,
+          refreshedIndex: false,
+          skippedReason: 'error',
         };
         semanticRerankTrace = {
-          ...semanticRerankTrace,
-          modelId: 'skipped',
-          skippedReason: semanticSkipReason,
+          enabled: true,
+          modelId: 'disabled',
+          candidateCount: 0,
+          selectedCount: 0,
+          selectedEntries: [],
+          latencyMs: 0,
+          skippedReason: 'error',
+          rationale: null,
         };
-      } else {
-        try {
-          const semanticRetrieval = semanticKnowledgeService.findCandidates({
-            baseContextJson: knowledgeContext,
-            messageText: text,
-            followUpHint: analysis.followUpHint,
-            activeTopic: analysis.activeTopicLabel,
-            primaryCategories: kbCategories,
-            maxCandidates: 8,
-          });
-
-          semanticRetrievalTrace = semanticRetrieval.trace;
-
-          const rerankResult = await semanticReranker.rerank({
-            messageText: text,
-            followUpHint: analysis.followUpHint,
-            activeTopic: analysis.activeTopicLabel,
-            requestedCategories: analysis.intentCategories,
-            candidates: semanticRetrieval.candidates,
-            maxSelections: 3,
-          });
-          semanticRerankTrace = rerankResult.trace;
-          selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
-
-          if (rerankResult.selectedCandidates.length > 0) {
-            const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
-              knowledgeContext,
-              rerankResult.selectedCandidates,
-            );
-            knowledgeContext = mergedKnowledge.knowledgeContext;
-            knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
-            for (const addedCategory of mergedKnowledge.addedCategories) {
-              kbCategories.add(addedCategory);
-            }
-          }
-        } catch (semanticRetrievalErr) {
-          console.error('[Simulator] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
-          semanticRetrievalTrace = {
-            enabled: true,
-            strategy: 'sparse_tfidf_chargram',
-            queryText: '',
-            candidateCount: 0,
-            selectedEntries: [],
-            latencyMs: 0,
-            refreshedIndex: false,
-            skippedReason: 'error',
-          };
-          semanticRerankTrace = {
-            enabled: true,
-            modelId: 'disabled',
-            candidateCount: 0,
-            selectedCount: 0,
-            selectedEntries: [],
-            latencyMs: 0,
-            skippedReason: 'error',
-            rationale: null,
-          };
-        }
       }
 
-      if (!skipSemanticSupplement) {
-        try {
-          const supportEntries = knowledgeBaseService.getAll().filter(entry =>
-            ['faq', 'hours', 'policies'].includes(entry.category),
-          );
-          const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
-          const augmentedKnowledge = knowledgeSelector.augmentContext({
-            baseContextJson: knowledgeContext,
-            messageText: text,
-            followUpHint: analysis.followUpHint,
-            primaryCategories: kbCategories,
-          });
+      try {
+        const supportEntries = knowledgeBaseService.getAll().filter(entry =>
+          ['faq', 'hours', 'policies'].includes(entry.category),
+        );
+        const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
+        const augmentedKnowledge = knowledgeSelector.augmentContext({
+          baseContextJson: knowledgeContext,
+          messageText: text,
+          followUpHint: analysis.followUpHint,
+          primaryCategories: kbCategories,
+        });
 
-          if (augmentedKnowledge.addedEntriesCount > 0) {
-            knowledgeContext = augmentedKnowledge.knowledgeContext;
-            knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
-            for (const addedCategory of augmentedKnowledge.addedCategories) {
-              kbCategories.add(addedCategory);
-            }
+        if (augmentedKnowledge.addedEntriesCount > 0) {
+          knowledgeContext = augmentedKnowledge.knowledgeContext;
+          knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
+          for (const addedCategory of augmentedKnowledge.addedCategories) {
+            kbCategories.add(addedCategory);
           }
-        } catch (knowledgeSelectionErr) {
-          console.error('[Simulator] Knowledge selection supplement failed:', knowledgeSelectionErr);
         }
+      } catch (knowledgeSelectionErr) {
+        console.error('[Simulator] Knowledge selection supplement failed:', knowledgeSelectionErr);
       }
 
       // Format KB from raw JSON to clean labeled text (anti-hallucination)
@@ -389,45 +419,54 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const pipelineConfig = pipelineConfigService.getConfig();
       const tierConfig = pipelineConfig.directResponse.tiers[analysis.modelTier];
       const systemPrompt = pipelineConfigService.buildDirectSystemPrompt(formattedKnowledge);
-      const skipPolicy = pipelineConfigService.shouldSkipPolicy(analysis.modelTier);
+      let skipPolicy = pipelineConfigService.shouldSkipPolicy(analysis.modelTier);
 
       const customerSummary = analysis.isNewCustomer
         ? 'YENI MUSTERI'
         : `Etkileşim: ${analysis.totalInteractions}`;
 
-      const deterministicResult = hardFactResponseService.tryGenerate({
-        messageText: text,
-        intentCategories: analysis.intentCategories,
-        knowledgeContextJson: knowledgeContext,
-        responseDirective: analysis.responseDirective,
-        hasFollowUpHint: !!analysis.followUpHint,
-      });
-      const deterministicResponseResult = deterministicResult || (deterministicClarifier
-        ? {
-            success: true as const,
-            response: deterministicClarifier.response,
-            modelId: deterministicClarifier.modelId,
-            latencyMs: 0,
-            tokensEstimated: 0,
-          }
-        : null);
-      const responseResult = deterministicResponseResult || await new DirectResponseService().generate({
-        customerMessage: text,
-        knowledgeContext: formattedKnowledge,
-        selectedEvidence,
-        conversationHistory: analysis.formattedHistory,
-        followUpHint: analysis.followUpHint,
-        responseDirective: analysis.responseDirective,
-        customerSummary,
-        isNewCustomer: analysis.isNewCustomer,
-        tierConfig,
-        systemPrompt,
-      });
+      const directService = new DirectResponseService();
+      const deterministicInfoResponse = isGenericInfoRequest(text)
+        ? buildGenericInfoTemplateFromKnowledge()
+        : null;
+      const usedDeterministicInfoTemplate = !!deterministicInfoResponse;
+      if (usedDeterministicInfoTemplate) {
+        skipPolicy = true;
+        console.log('[Simulator] Using deterministic info template response');
+      }
 
-      if (!responseResult.success || !responseResult.response) {
+      const directResult = deterministicInfoResponse
+        ? {
+            response: deterministicInfoResponse,
+            modelId: 'deterministic/info-template-v1',
+            latencyMs: 0,
+            tokensEstimated: Math.ceil(deterministicInfoResponse.length / 3),
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              costUsd: 0,
+            },
+            success: true,
+            error: undefined,
+          }
+        : await directService.generate({
+            customerMessage: text,
+            knowledgeContext: formattedKnowledge,
+            selectedEvidence,
+            conversationHistory: analysis.formattedHistory,
+            followUpHint: analysis.followUpHint,
+            responseDirective: analysis.responseDirective,
+            customerSummary,
+            isNewCustomer: analysis.isNewCustomer,
+            tierConfig,
+            systemPrompt,
+          });
+
+      if (!directResult.success || !directResult.response) {
         res.status(500).json({
           error: 'AI response generation failed',
-          details: responseResult.error,
+          details: directResult.error,
           analysis: {
             intentCategories: analysis.intentCategories,
             modelTier: analysis.modelTier,
@@ -438,12 +477,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         return;
       }
 
-      let finalResponse = responseResult.response;
+      let finalResponse = directResult.response;
       let policyResult = null;
-      const shouldSkipPolicy = skipPolicy || !!deterministicResponseResult;
 
       // ═══ STAGE 4: Policy Validation + Faithfulness Check (same as webhook) ═══
-      if (!shouldSkipPolicy) {
+      if (!skipPolicy) {
         const validation = await policyService.validate({
           customerMessage: text,
           agentResponse: finalResponse,
@@ -508,7 +546,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         intentCategories: analysis.intentCategories,
         matchedKeywords: analysis.matchedKeywords,
         modelTier: analysis.modelTier,
-        modelId: responseResult.modelId,
+        modelId: directResult.modelId,
         tierReason: analysis.tierReason,
         isNewCustomer: analysis.isNewCustomer,
         conversationHistory: {
@@ -530,13 +568,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         semanticRetrieval: semanticRetrievalTrace,
         semanticRerank: semanticRerankTrace,
         openclawDispatchStatus: 'skipped',
-        openclawSessionKey: 'simulator',
+        openclawSessionKey: usedDeterministicInfoTemplate ? 'deterministic-info-template' : 'simulator',
         agentPollDurationMs: 0,
         directResponse: {
           used: true,
-          latencyMs: responseResult.latencyMs,
-          modelId: responseResult.modelId,
-          tokensEstimated: responseResult.tokensEstimated,
+          latencyMs: directResult.latencyMs,
+          modelId: directResult.modelId,
+          tokensEstimated: directResult.tokensEstimated,
         },
         policyValidation: policyResult ? {
           status: (policyResult as any).fallback ? 'fallback' : (policyResult as any).correctionApplied ? 'corrected' : policyResult.valid ? 'pass' : 'fail',
@@ -549,7 +587,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         } : { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
         metaSendStatus: 'skipped',
         totalResponseTimeMs: responseTime,
-        tokensEstimated: responseResult.tokensEstimated + (policyResult?.tokensEstimated || 0),
+        tokensEstimated: directResult.tokensEstimated + (policyResult?.tokensEstimated || 0),
       };
 
       // Log outbound response with pipeline trace
@@ -558,7 +596,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       rawDb.prepare(`
         INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, pipeline_trace, model_tier, execution_id, created_at)
         VALUES (?, ?, 'outbound', ?, 'ai_response', ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, responseResult.modelId, responseResult.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
+      `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, directResult.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
 
       try {
         contextService.saveConversationState(senderId, text, finalResponse, analysis);
@@ -578,7 +616,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             messageText: finalResponse.substring(0, 200),
             responseTimeMs: responseTime,
             modelTier: analysis.modelTier,
-            modelUsed: responseResult.modelId,
+            modelUsed: directResult.modelId,
             pipelineTrace,
             pipelineError: null,
             createdAt: new Date().toISOString(),
@@ -614,7 +652,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           intentCategories: analysis.intentCategories,
           matchedKeywords: analysis.matchedKeywords,
           modelTier: analysis.modelTier,
-          modelId: responseResult.modelId,
+          modelId: directResult.modelId,
           tierReason: analysis.tierReason,
           isNewCustomer: analysis.isNewCustomer,
           conversationLength: analysis.conversationHistory.length,
@@ -631,15 +669,10 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             correctionApplied: true,
           } : {},
           ...(policyResult as any).fallback ? { fallback: true } : {},
-        } : {
-          skipped: true,
-          reason: deterministicResult
-            ? 'deterministic hard-fact response'
-            : `tier=${analysis.modelTier} skipPolicy=true`,
-        },
+        } : { skipped: true, reason: `tier=${analysis.modelTier} skipPolicy=true` },
         directResponse: {
-          latencyMs: responseResult.latencyMs,
-          tokensEstimated: responseResult.tokensEstimated,
+          latencyMs: directResult.latencyMs,
+          tokensEstimated: directResult.tokensEstimated,
         },
         responseTime,
       });

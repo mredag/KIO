@@ -19,6 +19,7 @@ interface BoundaryProbeContext {
   compact: string;
   tokenCount: number;
   hasBusinessAnchor: boolean;
+  hasPotentialSexualCue: boolean;
   shapeHint: 'short_vague_probe_candidate' | 'anchored_or_descriptive';
 }
 
@@ -26,13 +27,18 @@ const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const SEXUAL_BLOCK_REPLY = 'O dediginiz sey bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.';
+const SEXUAL_BLOCK_REPLY = 'O söylediğiniz şey bizde yoktur. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.';
 const SEXUAL_RETRY_REPLY = 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.';
 const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist)\b/u;
 const SHORT_PROBE_PATTERN = /\b(nasil|oluyor|olur|var|varmi|nedir|ne)\b/u;
 const PRICE_QUESTION_PATTERN = /\b(fiyat|ucret|price|ne\s*kadar|kac\s*(tl|lira))\b/u;
 const DURATION_PATTERN = /\b\d{1,3}\s*(dk|dak|daka|dakika|min|minute)\b/u;
+const LOCATION_QUESTION_PATTERN = /\b(nerede|neredesiniz|neresindesiniz|adres|konum|lokasyon|harita|yol\s*tarifi)\b/u;
+const CONTACT_QUESTION_PATTERN = /\b(telefon|numara|iletisim|ulasim|ulasabilir|whatsapp)\b/u;
+const BENIGN_INFO_REQUEST_PATTERN = /\b(bilgi|detay|yardim|yardım|yardimci|yardımcı|ogren|öğren|sorabilir|alabilir)\b/u;
+const BENIGN_GREETING_PATTERN = /\b(merhaba|selam|slm|kolay\s*gelsin|iyi\s*gunler|iyi\s*aksamlar|musait\s*misiniz)\b/u;
 const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
+const BOUNDARY_SUSPICIOUS_CUE_PATTERN = /\b(mutlu|extra|ekstra|ozel|muamele|sonunda)\b/u;
 
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -137,6 +143,13 @@ function buildBoundaryProbeContext(messageText: string): BoundaryProbeContext {
   const { spaced, compact } = normalizeEuphemismText(messageText);
   const tokenCount = spaced ? spaced.split(' ').length : 0;
   const hasBusinessAnchor = SAFE_BUSINESS_ANCHOR_PATTERN.test(spaced);
+  const hasPotentialSexualCue = BOUNDARY_SUSPICIOUS_CUE_PATTERN.test(spaced)
+    || compact.includes('mutluson')
+    || compact.includes('mutuson')
+    || compact.includes('happyending')
+    || compact.includes('extrahizmet')
+    || compact.includes('ekstrahizmet')
+    || compact.includes('ozelmuamele');
   const shapeHint = !hasBusinessAnchor && tokenCount > 0 && tokenCount <= 5 && SHORT_PROBE_PATTERN.test(spaced)
     ? 'short_vague_probe_candidate'
     : 'anchored_or_descriptive';
@@ -146,6 +159,7 @@ function buildBoundaryProbeContext(messageText: string): BoundaryProbeContext {
     compact,
     tokenCount,
     hasBusinessAnchor,
+    hasPotentialSexualCue,
     shapeHint,
   };
 }
@@ -172,6 +186,17 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
   const hasPriceQuestion = PRICE_QUESTION_PATTERN.test(spaced);
   const hasDurationToken = DURATION_PATTERN.test(spaced);
   const hasNumericToken = /\b\d{1,4}\b/.test(spaced);
+  const hasLocationQuestion = LOCATION_QUESTION_PATTERN.test(spaced);
+  const hasContactQuestion = CONTACT_QUESTION_PATTERN.test(spaced);
+  const hasBenignInfoRequest = BENIGN_INFO_REQUEST_PATTERN.test(spaced);
+  const hasBenignGreeting = BENIGN_GREETING_PATTERN.test(spaced);
+  const hasBoundarySuspiciousCue = BOUNDARY_SUSPICIOUS_CUE_PATTERN.test(spaced);
+  const tokenCount = spaced.split(' ').length;
+  const isShortNeutralProbe = !hasBusinessAnchor
+    && !hasBoundarySuspiciousCue
+    && tokenCount > 0
+    && tokenCount <= 4
+    && SHORT_PROBE_PATTERN.test(spaced);
 
   // Covers compact typo forms like "30daka ne kadar".
   const looksLikeDurationPriceQuestion = hasDurationToken && (hasPriceQuestion || hasNumericToken);
@@ -182,6 +207,44 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
       action: 'allow',
       confidence: 0,
       reason: 'Detected clear business pricing question with concrete duration/number anchor.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  // Allow clear location/contact asks so they are never treated as vague boundary probes.
+  if (hasLocationQuestion || hasContactQuestion) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected clear business contact/location inquiry.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  // Neutral opener/info requests should not be treated as suspicious.
+  if (hasBenignInfoRequest) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected benign general information inquiry.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  if (hasBenignGreeting) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected benign greeting/opening message.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  if (isShortNeutralProbe) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected short neutral inquiry without sexual cue.',
       modelUsed: 'heuristic-clear-business-guard',
     };
   }
@@ -436,6 +499,15 @@ async function evaluateBoundaryProbeIntent(messageText: string): Promise<SexualI
   const model = process.env.SEXUAL_INTENT_MODEL || DEFAULT_MODEL;
   const context = buildBoundaryProbeContext(messageText);
 
+  if (context.shapeHint === 'short_vague_probe_candidate' && !context.hasPotentialSexualCue) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Short vague inquiry without sexual cue; boundary review skipped.',
+      modelUsed: 'heuristic-boundary-neutral-short',
+    };
+  }
+
   if (!apiKey) {
     if (context.shapeHint === 'short_vague_probe_candidate') {
       return {
@@ -460,7 +532,9 @@ async function evaluateBoundaryProbeIntent(messageText: string): Promise<SexualI
     'Your job is to catch coded probing for prohibited sexual services even when the wording is vague, indirect, or newly phrased.',
     'A suspicious boundary probe is often short, vague, and asks how the treatment goes, what happens, whether there is something extra, whether there is special handling, or similar coded curiosity without naming a normal business detail.',
     'A normal business question usually names a concrete service or a concrete detail such as price, schedule, address, membership, class, package, duration, therapist, or reservation.',
-    'If a message is short, vague, and lacks a concrete business anchor, prefer the safer boundary.',
+    'Do not classify as retry_question or block_message based only on shortness or missing business anchors.',
+    'Use retry_question or block_message only when there is a plausible prohibited-service cue (explicit or euphemistic).',
+    'Neutral greetings or generic information requests should be allow.',
     'Return JSON only with fields: action, confidence, reason.',
     'action must be one of: allow, retry_question, block_message.',
     'Use block_message when the message is likely probing for a prohibited service.',
@@ -474,6 +548,7 @@ async function evaluateBoundaryProbeIntent(messageText: string): Promise<SexualI
     `Compact text: ${context.compact || '(empty)'}`,
     `Token count: ${context.tokenCount}`,
     `Concrete business anchor detected: ${context.hasBusinessAnchor ? 'yes' : 'no'}`,
+    `Potential sexual cue detected: ${context.hasPotentialSexualCue ? 'yes' : 'no'}`,
     `Question shape hint: ${context.shapeHint}`,
     'Decide the safest business-boundary response.',
   ].join('\n');

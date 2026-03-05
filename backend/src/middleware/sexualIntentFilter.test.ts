@@ -36,7 +36,7 @@ describe('sexualIntentFilter', () => {
 
   it('returns the business-safe block reply and retry guidance', () => {
     expect(getSexualIntentReply('block_message')).toBe(
-      'O dediginiz sey bizde yoktur. Biz sadece profesyonel spa ve spor hizmetleri sunuyoruz.',
+      'O söylediğiniz şey bizde yoktur. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.',
     );
     expect(getSexualIntentReply('retry_question')).toContain('profesyonel spa ve spor');
   });
@@ -331,6 +331,54 @@ describe('sexualIntentFilter', () => {
     expect(decision.action).toBe('allow');
     expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
     expect(decision.reason).toContain('business pricing question');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows clear location questions without boundary escalation', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent("📍İskenderun'un neresindesiniz?");
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('contact/location inquiry');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows benign general information openers without boundary escalation', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('bilgi alabilir miyim ?');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('general information inquiry');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows neutral greeting openers without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('merhaba');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('greeting/opening message');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows short neutral probes without sexual cues and skips model calls', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('nasil oluyor');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('short neutral inquiry');
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 

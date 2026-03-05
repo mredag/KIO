@@ -30,6 +30,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
   3. direct response path when `PipelineConfigService.shouldUseDirectResponse(tier)` is true
   4. OpenClaw hook fallback only if no response exists yet (including direct failure)
 - OpenClaw is skipped whenever trace marks `openclawDispatchStatus: "skipped"` with session markers like `deterministic`, `unknown-service-guard`, `deterministic-clarifier`, or `direct`.
+- Instagram outbound send now auto-chunks long text replies in `instagramWebhookRoutes.ts` (safe chunk size ~950 chars) before calling Meta send API, to avoid IG `code=100/subcode=2534038` length failures.
+- When a chunked Instagram send fails, pipeline trace now records chunk-level failure detail (`failedChunk`, `chunkCount`, HTTP `status`) in `metaSendError`.
 - OpenClaw DM dispatch sends `model: analysis.modelId`; it does not default to Jarvis `main` model. The Instagram hook mapping targets `agentId: "instagram"` in `openclaw.json`.
 - Runtime toggle source of truth is `GET /api/mc/dm-kontrol/pipeline-config` (not static docs). Current live snapshot on March 4, 2026: `directResponse.enabled=true`, `light=true`, `standard=true`, `advanced=false`.
 - Every DM execution has an `execution_id` like `EXE-xxxxxxxx`. Use `GET /api/mc/dm-kontrol/execution/:executionId` before changing prompts or logic.

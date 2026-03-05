@@ -34,7 +34,7 @@
 
 import type { FollowUpContextHint, ResponseDirective } from './InstagramContextService.js';
 
-const VALIDATION_MODEL = 'google/gemini-2.5-flash-lite';
+// VALIDATION_MODEL is now dynamically passed from PipelineConfigService
 
 /**
  * System prompt for the Policy Agent.
@@ -79,7 +79,32 @@ Aşağıdaki kurallara göre yanıtı kontrol et:
 11. SİSTEM BİLGİSİ SIZINTISI (YENİ): Yanıt "bilgi bankası", "bilgi bankasında", "veri tabanı", "sistem", "prompt" gibi iç sistem terimlerini içeriyor mu? Müşteri bu terimleri GÖRMEMELİ. Asistan sadece doğal, profesyonel Türkçe kullanmalı.
 
 YANITINI SADECE JSON OLARAK VER, başka hiçbir şey yazma:
-{"valid": true} veya {"valid": false, "violations": ["kural numarası ve kısa açıklama"], "reason": "tek cümle özet"}`;
+{"valid": boolean, "violations": ["kural numarası ve kısa açıklama"], "reason": "tek cümle özet"}`;
+
+const VALIDATION_SYSTEM_PROMPT_SIMPLE = (VALIDATION_SYSTEM_PROMPT && `Sen bir policy kalite kontrol ajanisin.
+
+Gorev:
+- MUSTERI_MESAJI, ASISTAN_YANITI, BILGI_BANKASI verilir.
+- Gereksiz katilik yapma; sadece gercek riskte FAIL ver.
+
+HARD FAIL (valid=false):
+1) Randevu/rezervasyon olusturma-onaylama iddiasi.
+2) BILGI_BANKASI disinda uydurma fiyat/saat/telefon/adres/hizmet detayi.
+3) Uygunsuz/cinsel/kaba/tehditkar icerik.
+4) Yapamayacagi islemleri yapabiliyor gibi iddia etme.
+5) Musteriye ic sistem terimi sizdirma (bilgi bankasi, veri tabani, prompt, sistem).
+
+SOFT (tek basina FAIL degil):
+- Stil, format, emoji, siralama farki.
+- Dogru fiyatlari farkli yazimla sunma.
+- Bilgi dogruysa "farkli cumle yapisi".
+
+Karar:
+- Acik hard ihlal yoksa valid=true ver.
+- Emin degilsen, uydurma kaniti yoksa valid=true ver.
+
+Sadece JSON don:
+{"valid": boolean, "violations": ["kisa ihlal"], "reason": "tek cumle"}`);
 
 export interface PolicyValidationResult {
   valid: boolean;
@@ -95,6 +120,7 @@ export interface PolicyValidationContext {
   customerMessage: string;
   agentResponse: string;
   knowledgeContext: string;
+  conversationHistory?: string;
   selectedEvidence?: string;
   followUpHint?: FollowUpContextHint | null;
   activeTopic?: string | null;
@@ -110,9 +136,48 @@ interface DeterministicGroundingResult {
 
 export class ResponsePolicyService {
   private apiKey: string;
+  private openAiKey: string;
 
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
+    this.openAiKey = process.env.OPENAI_API_KEY || '';
+  }
+
+  private async checkModerationAPI(text: string): Promise<{ valid: boolean, violations: string[] }> {
+    if (!this.openAiKey) {
+      console.warn('[PolicyAgent] No OPENAI_API_KEY — moderation pre-check skipped (fail-open to not block traffic)');
+      return { valid: true, violations: [] };
+    }
+    try {
+      const res = await fetch('https://api.openai.com/v1/moderations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openAiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'omni-moderation-latest',
+          input: text
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        console.warn('[PolicyAgent] Moderation API error (fail-open):', res.status);
+        // If 429 or 5xx, we should let Layer 2 (gpt-4.1-mini) handle safety
+        return { valid: true, violations: [] };
+      }
+      const data = await res.json() as any;
+      const result = data.results[0];
+      if (result.flagged) {
+        const flaggedCategories = Object.keys(result.categories).filter(c => result.categories[c]);
+        return { valid: false, violations: [`OpenAI Moderation Flagged: ${flaggedCategories.join(', ')}`] };
+      }
+      return { valid: true, violations: [] };
+    } catch (err: any) {
+      console.warn('[PolicyAgent] Moderation fetch error (fail-open):', err?.message);
+      // Let Layer 2 handle safety if network fails 
+      return { valid: true, violations: [] };
+    }
   }
 
   private getActiveTopic(context: PolicyValidationContext): string | null {
@@ -153,6 +218,143 @@ export class ResponsePolicyService {
     ];
   }
 
+  private buildCompactConversationHistoryLines(rawHistory?: string): string[] {
+    const trimmedHistory = rawHistory?.trim();
+    if (!trimmedHistory) {
+      return [];
+    }
+
+    const rawLines = trimmedHistory
+      .split('\n')
+      .map(line => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+
+    if (rawLines.length === 0) {
+      return [];
+    }
+
+    const maxLines = 4;
+    const maxChars = 600;
+    const maxLineChars = 180;
+    const compact: string[] = [];
+    let usedChars = 0;
+
+    for (let i = rawLines.length - 1; i >= 0; i--) {
+      if (compact.length >= maxLines) {
+        break;
+      }
+
+      const clippedLine = rawLines[i].length > maxLineChars
+        ? `${rawLines[i].slice(0, maxLineChars - 3)}...`
+        : rawLines[i];
+      const projectedChars = usedChars + clippedLine.length + (compact.length > 0 ? 1 : 0);
+
+      if (projectedChars > maxChars) {
+        break;
+      }
+
+      compact.unshift(clippedLine);
+      usedChars = projectedChars;
+    }
+
+    return compact;
+  }
+
+  private buildConversationHistorySection(rawHistory?: string): string[] {
+    const compactLines = this.buildCompactConversationHistoryLines(rawHistory);
+    if (compactLines.length === 0) {
+      return [];
+    }
+
+    return [
+      'KISA_KONUSMA_GECMISI (son satirlar):',
+      ...compactLines,
+    ];
+  }
+
+  private normalizePolicyText(rawText: string): string {
+    return (rawText || '')
+      .toLocaleLowerCase('tr-TR')
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .replace(/ı/g, 'i')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private hasPricingSignals(text: string): boolean {
+    if (!text) {
+      return false;
+    }
+
+    const normalized = this.normalizePolicyText(text);
+
+    return this.extractPriceValues(text).length > 0
+      || /\b(?:fiyat|ucret|price|tl|lira|ne kadar|kac|dakika|dk|seans|paket|kese|kopuk)\b/i.test(normalized);
+  }
+
+  private isGroundingOnlyRuleFailure(result: Pick<PolicyValidationResult, 'violations' | 'reason'>): boolean {
+    const violationText = this.normalizePolicyText([...(result.violations || []), result.reason || ''].join(' '));
+
+    const hasNonGroundingSignal = /\b(?:randevu|rezervasyon|yetenek|uygunsuz|dil|kisisel|rakip|papagan|sistem|sizinti)\b/i.test(violationText)
+      || /\b(?:1|3|4|5|6|7|9|10|11)\b/.test(violationText);
+    if (hasNonGroundingSignal) {
+      return false;
+    }
+
+    const hasGroundingSignal = /\b(?:2|8)\b/.test(violationText)
+      || /\b(?:uydurma|fiyat|tutarsiz|hallucinat|adres|saat|telefon)\b/i.test(violationText);
+    return hasGroundingSignal;
+  }
+
+  private shouldBypassRuleFailureWithDeterministic(
+    context: PolicyValidationContext,
+    ruleResult: PolicyValidationResult,
+    deterministicResult: DeterministicGroundingResult,
+  ): boolean {
+    if (ruleResult.valid || !deterministicResult.valid) {
+      return false;
+    }
+
+    if (!this.isGroundingOnlyRuleFailure(ruleResult)) {
+      return false;
+    }
+
+    return this.hasPricingSignals(context.customerMessage) || this.hasPricingSignals(context.agentResponse);
+  }
+
+  private isSoftOnlyRuleFailure(result: Pick<PolicyValidationResult, 'violations' | 'reason'>): boolean {
+    const violationText = this.normalizePolicyText([...(result.violations || []), result.reason || ''].join(' '));
+
+    const hasHardSignal = /\b(?:randevu|rezervasyon|yetenek|uygunsuz|dil|kisisel|rakip|sistem|sizinti|moderat)\b/i.test(violationText)
+      || /\b(?:1|3|4|5|6|7|11)\b/.test(violationText);
+    if (hasHardSignal) {
+      return false;
+    }
+
+    const hasGroundingSignal = /\b(?:uydurma|fiyat|tutarsiz|hallucinat|adres|saat|telefon)\b/i.test(violationText)
+      || /\b(?:2|8)\b/.test(violationText);
+    if (hasGroundingSignal) {
+      return false;
+    }
+
+    const hasSoftSignal = /\b(?:papagan|tekrar|uygunluk|alakasiz|sorulmayan|uzun|selamlama|ton)\b/i.test(violationText)
+      || /\b(?:9|10)\b/.test(violationText);
+    return hasSoftSignal;
+  }
+
+  private shouldBypassSoftRuleFailure(
+    ruleResult: PolicyValidationResult,
+    deterministicResult: DeterministicGroundingResult,
+  ): boolean {
+    if (ruleResult.valid || !deterministicResult.valid) {
+      return false;
+    }
+
+    return this.isSoftOnlyRuleFailure(ruleResult);
+  }
+
   private extractEvidenceTokens(rawText: string): string[] {
     const normalized = rawText
       .toLocaleLowerCase('tr-TR')
@@ -172,18 +374,20 @@ export class ResponsePolicyService {
     )];
   }
 
-  private buildNearbyEvidenceLines(context: Pick<PolicyValidationContext, 'customerMessage' | 'knowledgeContext' | 'followUpHint' | 'activeTopic'>): string[] {
+  private buildNearbyEvidenceLines(context: Pick<PolicyValidationContext, 'customerMessage' | 'knowledgeContext' | 'followUpHint' | 'activeTopic'> & { agentResponse?: string }): string[] {
     if (!context.knowledgeContext) {
       return [];
     }
 
     const querySource = [
       context.customerMessage,
+      context.agentResponse || '',
       context.followUpHint?.rewrittenQuestion || '',
       context.followUpHint?.topicLabel || '',
       context.activeTopic || '',
     ].join(' ');
     const queryTokens = this.extractEvidenceTokens(querySource);
+    const pricingContext = this.hasPricingSignals(querySource);
 
     if (queryTokens.length === 0) {
       return [];
@@ -197,17 +401,21 @@ export class ResponsePolicyService {
         const normalizedLine = this.extractEvidenceTokens(line);
         const overlap = queryTokens.filter(token => normalizedLine.some(lineToken => lineToken.includes(token) || token.includes(lineToken)));
         const hasNumericRange = /\b\d+\s*-\s*\d+\b/.test(line) ? 0.5 : 0;
+        const hasPriceToken = /\d[\d.,]*\s*(?:â‚º|TL|tl|lira)/.test(line);
+        const hasDurationToken = /\b\d+\s*(?:dk|dakika|saat)\b/i.test(line);
+        const pricingBoost = pricingContext && (hasPriceToken || hasDurationToken) ? 2 : 0;
 
         return {
           line,
           index,
-          score: overlap.length + hasNumericRange,
+          score: overlap.length + hasNumericRange + pricingBoost,
         };
       })
       .filter(item => item.score > 0)
       .sort((a, b) => (b.score - a.score) || (a.index - b.index));
 
-    return [...new Set(scoredLines.slice(0, 4).map(item => item.line))];
+    const maxEvidenceLines = pricingContext ? 10 : 4;
+    return [...new Set(scoredLines.slice(0, maxEvidenceLines).map(item => item.line))];
   }
 
   /**
@@ -217,21 +425,52 @@ export class ResponsePolicyService {
    * 2. Deterministic grounding for prices/times/phones (exact-match anti-hallucination)
    * 3. Selective faithfulness scoring (claim-level grounding) for non-price factual replies
    * 
-   * If rule check passes, faithfulness check runs. Both must pass.
+   * Rule stage is treated as a broad screen; deterministic grounding is the final blocker for numeric facts.
    */
-  async validate(context: PolicyValidationContext, attempt: number = 1): Promise<PolicyValidationResult> {
-    if (!this.apiKey) {
-      console.warn('[PolicyAgent] No OPENROUTER_API_KEY — skipping validation');
-      return { valid: true, violations: [], reason: 'skipped (no API key)', modelUsed: VALIDATION_MODEL, latencyMs: 0, tokensEstimated: 0, attempt };
+  async validate(
+    context: PolicyValidationContext,
+    validationModelOrAttempt: string | number = 'openai/gpt-4.1-mini',
+    attempt: number = 1,
+  ): Promise<PolicyValidationResult> {
+    const validationModel = typeof validationModelOrAttempt === 'string'
+      ? validationModelOrAttempt
+      : 'openai/gpt-4.1-mini';
+    if (typeof validationModelOrAttempt === 'number') {
+      attempt = validationModelOrAttempt;
     }
+    if (!this.apiKey) {
+      console.warn('[PolicyAgent] No OPENROUTER_API_KEY — failing validation');
+      return { valid: false, violations: ['Missing OPENROUTER_API_KEY (fail-closed)'], reason: 'skipped (no API key)', modelUsed: validationModel, latencyMs: 0, tokensEstimated: 0, attempt };
+    }
+
+    // Layer 1: Safety (Moderation API)
+    const modStart = Date.now();
+    const modResult = await this.checkModerationAPI(context.agentResponse);
+    if (!modResult.valid) {
+      const hasModerationTransportIssue = modResult.violations.some(v =>
+        v.includes('Moderation API error') || v.includes('Moderation error')
+      );
+      if (hasModerationTransportIssue) {
+        console.warn('[PolicyAgent] Moderation transport/rate-limit issue treated as fail-open in validate()');
+      } else {
+      return {
+        valid: false,
+        violations: modResult.violations,
+        reason: 'OpenAI Moderation blocked the response',
+        modelUsed: 'omni-moderation-latest',
+        latencyMs: Date.now() - modStart,
+        tokensEstimated: 0,
+        attempt,
+      };
+      }
+    }
+    const preCheckLatency = Date.now() - modStart;
 
     // Stage 1: Rule-based validation
-    const ruleResult = await this.validateRules(context, attempt);
-    if (!ruleResult.valid) {
-      return ruleResult;
-    }
+    const ruleResult = await this.validateRules(context, validationModel, attempt);
+    ruleResult.latencyMs += preCheckLatency;
 
-    // Stage 2: Deterministic grounding — exact numeric/phone checks
+    // Stage 2: Deterministic grounding (final arbiter for numeric facts)
     const deterministicResult = this.validateDeterministicGrounding(context);
     if (!deterministicResult.valid) {
       return {
@@ -245,15 +484,37 @@ export class ResponsePolicyService {
       };
     }
 
+    const bypassGroundingOnlyFalsePositive = this.shouldBypassRuleFailureWithDeterministic(
+      context,
+      ruleResult,
+      deterministicResult,
+    );
+    const bypassSoftStyleOnlyFailure = this.shouldBypassSoftRuleFailure(ruleResult, deterministicResult);
+
+    if (!ruleResult.valid && !bypassGroundingOnlyFalsePositive && !bypassSoftStyleOnlyFailure) {
+      return ruleResult;
+    }
+
+    if (!ruleResult.valid && (bypassGroundingOnlyFalsePositive || bypassSoftStyleOnlyFailure)) {
+      console.warn('[PolicyAgent] Rule-stage violation bypassed after deterministic pass', {
+        bypassGroundingOnlyFalsePositive,
+        bypassSoftStyleOnlyFailure,
+        violations: ruleResult.violations,
+      });
+    }
+
     // Stage 3: Selective faithfulness — skip price-heavy replies to avoid false positives
     if (!this.shouldRunFaithfulness(context)) {
       return {
         ...ruleResult,
+        valid: true,
+        violations: [],
+        reason: ruleResult.valid ? ruleResult.reason : 'policy pass after deterministic verification',
         latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs,
       };
     }
 
-    const faithResult = await this.validateFaithfulness(context, attempt);
+    const faithResult = await this.validateFaithfulness(context, validationModel, attempt);
     if (!faithResult.valid) {
       return {
         valid: false,
@@ -268,6 +529,9 @@ export class ResponsePolicyService {
 
     return {
       ...ruleResult,
+      valid: true,
+      violations: [],
+      reason: ruleResult.valid ? ruleResult.reason : 'policy pass after deterministic verification',
       latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs + faithResult.latencyMs,
       tokensEstimated: ruleResult.tokensEstimated + faithResult.tokensEstimated,
     };
@@ -276,23 +540,26 @@ export class ResponsePolicyService {
   /**
    * Stage 1: Rule-based validation (original 10 rules).
    */
-  private async validateRules(context: PolicyValidationContext, attempt: number): Promise<PolicyValidationResult> {
+  private async validateRules(context: PolicyValidationContext, validationModel: string, attempt: number): Promise<PolicyValidationResult> {
     if (!this.apiKey) {
-      console.warn('[PolicyAgent] No OPENROUTER_API_KEY — skipping validation');
-      return { valid: true, violations: [], reason: 'skipped (no API key)', modelUsed: VALIDATION_MODEL, latencyMs: 0, tokensEstimated: 0, attempt };
+      console.warn('[PolicyAgent] No OPENROUTER_API_KEY — failing rule validation');
+      return { valid: false, violations: ['Missing OPENROUTER_API_KEY (fail-closed)'], reason: 'skipped (no API key)', modelUsed: validationModel, latencyMs: 0, tokensEstimated: 0, attempt };
     }
 
     const startTime = Date.now();
+    const nearbyEvidenceLines = this.buildNearbyEvidenceLines(context);
+    const conversationHistorySection = this.buildConversationHistorySection(context.conversationHistory);
 
     const userPrompt = [
       `MUSTERI_MESAJI: ${context.customerMessage}`,
       ...this.buildTopicScopeLines(context),
+      ...conversationHistorySection,
       ...this.buildSelectedEvidenceLines(context.selectedEvidence),
       '',
       `ASISTAN_YANITI: ${context.agentResponse}`,
       '',
-      `BILGI_BANKASI: ${context.knowledgeContext || '(veri yok)'}`,
-    ].join('\n');
+      `BILGI_BANKASI: ${nearbyEvidenceLines.length > 0 ? nearbyEvidenceLines.join('\\n') : '(veri yok)'}`,
+    ].join('\\n');
 
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -304,11 +571,12 @@ export class ResponsePolicyService {
           'X-Title': 'Eform Policy Agent',
         },
         body: JSON.stringify({
-          model: VALIDATION_MODEL,
+          model: validationModel,
           messages: [
-            { role: 'system', content: VALIDATION_SYSTEM_PROMPT },
+            { role: 'system', content: VALIDATION_SYSTEM_PROMPT_SIMPLE },
             { role: 'user', content: userPrompt },
           ],
+          response_format: { type: 'json_object' },
           temperature: 0,
           max_tokens: 200,
         }),
@@ -320,36 +588,36 @@ export class ResponsePolicyService {
       if (!response.ok) {
         const errBody = await response.text();
         console.error('[PolicyAgent] OpenRouter error:', response.status, errBody);
-        return { valid: true, violations: [], reason: `API error ${response.status} (fail-open)`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated: 0, attempt };
+        return { valid: false, violations: [`API error ${response.status} (fail-closed)`], reason: `API error ${response.status}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
       }
 
       const data = await response.json() as any;
       const content = data?.choices?.[0]?.message?.content?.trim() || '';
 
       const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokensEstimated = estimateTokens(VALIDATION_SYSTEM_PROMPT + userPrompt) + estimateTokens(content);
+      const tokensEstimated = estimateTokens(VALIDATION_SYSTEM_PROMPT_SIMPLE + userPrompt) + estimateTokens(content);
 
       try {
-        const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const cleaned = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();
         const result = JSON.parse(cleaned);
 
         return {
           valid: result.valid === true,
           violations: Array.isArray(result.violations) ? result.violations : [],
           reason: result.reason || (result.valid ? 'passed' : 'failed'),
-          modelUsed: VALIDATION_MODEL,
+          modelUsed: validationModel,
           latencyMs,
           tokensEstimated,
           attempt,
         };
       } catch (parseErr) {
         console.error('[PolicyAgent] Failed to parse LLM response:', content);
-        return { valid: true, violations: [], reason: `parse error (fail-open): ${content.substring(0, 100)}`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated, attempt };
+        return { valid: false, violations: ['Parse error (fail-closed)'], reason: `parse error: ${content.substring(0, 100)}`, modelUsed: validationModel, latencyMs, tokensEstimated, attempt };
       }
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
       console.error('[PolicyAgent] Network error:', err?.message);
-      return { valid: true, violations: [], reason: `network error (fail-open): ${err?.message}`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated: 0, attempt };
+      return { valid: false, violations: ['Network error (fail-closed)'], reason: `network error: ${err?.message}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
     }
   }
 
@@ -474,8 +742,9 @@ export class ResponsePolicyService {
    * Industry standard approach (Noveum.ai faithfulness scorer, Google "Creator vs Critic").
    * Cost: ~same as rule validation (~$0.00004 per call).
    */
-  private async validateFaithfulness(context: PolicyValidationContext, attempt: number): Promise<PolicyValidationResult> {
+  private async validateFaithfulness(context: PolicyValidationContext, validationModel: string, attempt: number): Promise<PolicyValidationResult> {
     const startTime = Date.now();
+    const nearbyEvidenceLines = this.buildNearbyEvidenceLines(context);
 
     const faithfulnessPrompt = `Sen bir doğruluk kontrol ajanısın. Asistanın yanıtındaki HER olgusal iddiayı (factual claim) BILGI_BANKASI ile karşılaştır.
 
@@ -496,17 +765,15 @@ GÖREV:
 
 MUSTERI_MESAJI: ${context.customerMessage}
 
-${this.buildTopicScopeLines(context).join('\n')}
+${this.buildConversationHistorySection(context.conversationHistory).length > 0 ? `${this.buildConversationHistorySection(context.conversationHistory).join('\\n')}\\n\\n` : ''}${this.buildTopicScopeLines(context).join('\\n')}
 
 ASISTAN_YANITI: ${context.agentResponse}
 
 BILGI_BANKASI:
-${context.knowledgeContext || '(veri yok)'}
+${nearbyEvidenceLines.length > 0 ? nearbyEvidenceLines.join('\\n') : '(veri yok)'}
 
 YANITINI SADECE JSON OLARAK VER:
-{"faithful": true, "claims": []} 
-veya
-{"faithful": false, "claims": [{"claim": "iddia metni", "grounded": false, "reason": "neden uydurma"}], "summary": "tek cümle özet"}`;
+{"faithful": boolean, "claims": [{"claim": "iddia metni", "grounded": boolean, "reason": "neden uydurma"}], "summary": "tek cümle özet"}`;
 
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -518,10 +785,11 @@ veya
           'X-Title': 'Eform Faithfulness Check',
         },
         body: JSON.stringify({
-          model: VALIDATION_MODEL,
+          model: validationModel,
           messages: [
             { role: 'user', content: faithfulnessPrompt },
           ],
+          response_format: { type: 'json_object' },
           temperature: 0,
           max_tokens: 400,
         }),
@@ -532,7 +800,7 @@ veya
 
       if (!response.ok) {
         console.error('[PolicyAgent:Faithfulness] API error:', response.status);
-        return { valid: true, violations: [], reason: `faithfulness API error (fail-open)`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated: 0, attempt };
+        return { valid: false, violations: ['Faithfulness API error (fail-closed)'], reason: `faithfulness API error ${response.status}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
       }
 
       const data = await response.json() as any;
@@ -542,12 +810,12 @@ veya
       const tokensEstimated = estimateTokens(faithfulnessPrompt) + estimateTokens(content);
 
       try {
-        const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const cleaned = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();
         const result = JSON.parse(cleaned);
 
         if (result.faithful === true) {
           console.log('[PolicyAgent:Faithfulness] All claims grounded (%dms)', latencyMs);
-          return { valid: true, violations: [], reason: 'faithfulness: all claims grounded', modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated, attempt };
+          return { valid: true, violations: [], reason: 'faithfulness: all claims grounded', modelUsed: validationModel, latencyMs, tokensEstimated, attempt };
         }
 
         // Extract ungrounded claims as violations
@@ -562,19 +830,19 @@ veya
           valid: false,
           violations: ungroundedClaims.length > 0 ? ungroundedClaims : ['Faithfulness check failed: yanıtta doğrulanamayan bilgi var'],
           reason: result.summary || 'Yanıtta bilgi bankasında olmayan uydurma bilgi tespit edildi',
-          modelUsed: VALIDATION_MODEL,
+          modelUsed: validationModel,
           latencyMs,
           tokensEstimated,
           attempt,
         };
       } catch (parseErr) {
         console.error('[PolicyAgent:Faithfulness] Parse error:', content.substring(0, 200));
-        return { valid: true, violations: [], reason: `faithfulness parse error (fail-open)`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated, attempt };
+        return { valid: false, violations: ['Faithfulness parse error (fail-closed)'], reason: `faithfulness parse error: ${content.substring(0, 100)}`, modelUsed: validationModel, latencyMs, tokensEstimated, attempt };
       }
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
       console.error('[PolicyAgent:Faithfulness] Network error:', err?.message);
-      return { valid: true, violations: [], reason: `faithfulness network error (fail-open)`, modelUsed: VALIDATION_MODEL, latencyMs, tokensEstimated: 0, attempt };
+      return { valid: false, violations: ['Faithfulness network error (fail-closed)'], reason: `faithfulness network error: ${err?.message}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
     }
   }
 
@@ -591,6 +859,7 @@ veya
     context: Pick<PolicyValidationContext, 'selectedEvidence' | 'followUpHint' | 'activeTopic' | 'responseDirective'> = {},
   ): Promise<{ response: string | null; latencyMs: number; tokensEstimated: number }> {
     if (!this.apiKey) {
+      console.warn('[PolicyAgent] No OPENROUTER_API_KEY — failing correction');
       return { response: null, latencyMs: 0, tokensEstimated: 0 };
     }
 

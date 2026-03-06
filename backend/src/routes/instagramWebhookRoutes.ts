@@ -1185,21 +1185,28 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               console.log('[Instagram Webhook] OpenClaw response:', openclawResponse.status, ocBody);
 
               // Update trace — OpenClaw dispatch stage
-              trace.openclawDispatchStatus = openclawResponse.status === 202 ? 'success' : 'fail';
+              const ocStatusAccepted = openclawResponse.status >= 200 && openclawResponse.status < 300;
+              const ocBodyAccepted = (
+                ocBody.ok === true
+                || ocBody.status === 'accepted'
+                || ocBody.status === 'queued'
+                || typeof ocBody.runId === 'string'
+              );
+              const ocAccepted = ocStatusAccepted || ocBodyAccepted;
+              trace.openclawDispatchStatus = ocAccepted ? 'success' : 'fail';
               trace.openclawSessionKey = fullSessionKey;
 
-              if (openclawResponse.status !== 202) {
-                console.error('[Instagram Webhook] OpenClaw rejected:', ocBody);
+              if (!ocAccepted) {
+                console.error('[Instagram Webhook] OpenClaw rejected:', { status: openclawResponse.status, body: ocBody });
                 pipelineError = {
                   stage: 'openclaw_dispatch_fail',
-                  message: JSON.stringify(ocBody),
+                  message: JSON.stringify({ status: openclawResponse.status, body: ocBody }),
                   timestamp: new Date().toISOString(),
                   partialTrace: { ...trace },
                 };
                 storePipelineTraceAndPushSSE(senderId, trace, pipelineError, analysis.modelTier, 'outbound', messageText, null, analysis.modelId);
                 return;
               }
-
               // Poll for agent response from session JSONL (uses dynamic config)
               console.log('[Instagram Webhook] Polling for instagram agent response...');
               const pollStartTime = Date.now();

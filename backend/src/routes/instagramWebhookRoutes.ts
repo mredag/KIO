@@ -14,18 +14,12 @@ import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalSer
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
-import { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
-let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
 export function setEscalationService(svc: EscalationService): void {
   _escalationService = svc;
-}
-
-export function setDMSafetyPhraseService(svc: DMSafetyPhraseService): void {
-  _dmSafetyPhraseService = svc;
 }
 
 export interface PipelineTrace {
@@ -160,7 +154,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const DEDUP_WINDOW_MS = 60_000; // ignore duplicate within 60s
   const SEXUAL_BLOCK_MESSAGE = 'Bu konuda yardımcı olamam. Lütfen uygun bir dille yazın.';
   const SEXUAL_RETRY_MESSAGE = 'Tekrar eder misiniz? Anlayamadım...';
-  const INSTAGRAM_MAX_MESSAGE_CHARS = 900;
+  const INSTAGRAM_MAX_MESSAGE_CHARS = 950;
 
   /**
    * Fetch Instagram user profile (name) via Graph API and upsert into instagram_customers.
@@ -218,17 +212,11 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     const normalized = normalizeTemplateText(messageText);
     if (!normalized) return false;
 
-    const greetingOnly = /^(merhaba|selam|selamlar|iyi gunler|iyi aksamlar|hey|hi)(\s+(merhaba|selam))?$/.test(normalized);
-    if (greetingOnly) return true;
-
-    const isVeryShort = normalized.split(' ').filter(Boolean).length <= 4;
-    const vagueIntent = /\b(bilgi|detay|yardim|yardimci|bakabilir|ogrenebilir|anlatir misin|ne var)\b/.test(normalized);
-    const hasInfoIntent = /\bbilgi\s+(al|ver|alabilir|alabilir miyim)\b/.test(normalized)
-      || /\b(bilgi|detay)\b/.test(normalized)
-      || (isVeryShort && vagueIntent);
+    const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
+      || /\bbilgi\s+(al|ver)/.test(normalized);
     if (!hasInfoIntent) return false;
 
-    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|spa|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|paket|adres|telefon|konum|saat|acik|kapali|randevu|kampanya)\b/.test(normalized);
+    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
 
     return !hasSpecificAnchor;
   }
@@ -251,24 +239,47 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
   function buildGenericInfoTemplateFromKnowledge(): string | null {
     try {
-      const phoneInfo = db.prepare(`
-        SELECT value
+      const rows = db.prepare(`
+        SELECT category, key_name, value
         FROM knowledge_base
-        WHERE is_active = 1 AND category = 'contact' AND key_name = 'phone'
+        WHERE is_active = 1 AND (
+          (category = 'pricing' AND (key_name = 'complete_massage_pricing' OR key_name LIKE '%massage%' OR key_name LIKE '%masaj%'))
+          OR (category = 'services' AND key_name IN ('therapist_info', 'complete_customer_bring_guide'))
+          OR (category = 'contact' AND key_name = 'phone')
+        )
         ORDER BY updated_at DESC
-        LIMIT 1
-      `).get() as { value?: string } | undefined;
+      `).all() as Array<{
+        category: string;
+        key_name: string;
+        value: string;
+      }>;
 
-      const phoneLine = phoneInfo?.value
-        ? `İsterseniz randevu/fiyat için hemen telefon da paylaşabilirim: ${clipTemplateBlock(phoneInfo.value, 1, 80)}`
-        : 'İsterseniz fiyat, paket, seans süresi veya uygun saat bilgisini hemen net paylaşayım.';
+      const massagePricing = rows.find(row => row.category === 'pricing' && row.key_name === 'complete_massage_pricing')
+        || rows.find(row => row.category === 'pricing');
+      const therapistInfo = rows.find(row => row.category === 'services' && row.key_name === 'therapist_info');
+      const bringInfo = rows.find(row => row.category === 'services' && row.key_name === 'complete_customer_bring_guide');
+      const phoneInfo = rows.find(row => row.category === 'contact' && row.key_name === 'phone');
 
-      return [
-        'Memnuniyetle yardımcı olurum 🙌',
-        'Size en doğru bilgiyi vermem için hangi konuda bilgi istediğinizi yazar mısınız?',
-        'Örn: fiyat, üyelik, masaj türleri, seans süresi veya randevu saatleri.',
-        phoneLine,
-      ].join('\n');
+      if (!massagePricing && !therapistInfo && !bringInfo) {
+        return null;
+      }
+
+      const sections: string[] = ['Elbette, size hızlıca temel bilgileri paylaşayım 👇'];
+
+      if (massagePricing?.value) {
+        sections.push(clipTemplateBlock(massagePricing.value, 26, 2200));
+      }
+      if (therapistInfo?.value) {
+        sections.push(`👩 Terapist Bilgisi:\n${clipTemplateBlock(therapistInfo.value, 4, 500)}`);
+      }
+      if (bringInfo?.value) {
+        sections.push(`🧳 Yanınızda Ne Getirmelisiniz?\n${clipTemplateBlock(bringInfo.value, 10, 850)}`);
+      }
+      if (phoneInfo?.value) {
+        sections.push(`📞 Detaylı bilgi ve randevu: ${clipTemplateBlock(phoneInfo.value, 2, 140)}`);
+      }
+
+      return sections.join('\n\n');
     } catch (error) {
       console.error('[Instagram Webhook] Failed to build deterministic info template:', error);
       return null;
@@ -377,26 +388,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
       await new Promise(r => setTimeout(r, pollInterval));
     }
     return null;
-  }
-
-  function enforceInstagramMessageLimit(message: string, maxChars = INSTAGRAM_MAX_MESSAGE_CHARS): string {
-    const normalized = message.replace(/\r/g, '').replace(/\s+$/g, '').trim();
-    if (!normalized) return '';
-    if (normalized.length <= maxChars) return normalized;
-
-    const safeSlice = normalized.slice(0, maxChars - 1);
-    const sentenceCut = Math.max(
-      safeSlice.lastIndexOf('. '),
-      safeSlice.lastIndexOf('! '),
-      safeSlice.lastIndexOf('? '),
-      safeSlice.lastIndexOf('\n'),
-    );
-    const wordCut = safeSlice.lastIndexOf(' ');
-    const cutIndex = sentenceCut >= Math.floor(maxChars * 0.6)
-      ? sentenceCut + 1
-      : (wordCut >= Math.floor(maxChars * 0.5) ? wordCut : safeSlice.length);
-
-    return `${safeSlice.slice(0, cutIndex).trimEnd()}…`;
   }
 
   function chunkInstagramMessage(message: string, maxChars = INSTAGRAM_MAX_MESSAGE_CHARS): string[] {
@@ -1336,12 +1327,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 timestamp: new Date().toISOString(),
                 partialTrace: { ...trace },
               };
-            }
-
-            const originalResponseLength = finalResponse.length;
-            finalResponse = enforceInstagramMessageLimit(finalResponse);
-            if (finalResponse.length < originalResponseLength) {
-              console.warn('[Instagram Webhook] Response truncated for Instagram limit: %d → %d', originalResponseLength, finalResponse.length);
             }
 
             // Send the (validated) response via Meta Graph API

@@ -178,3 +178,9 @@ Body: {
 - Personel kişisel bilgilerini ASLA paylaşma
 - Sadece meşru hizmetleri tartış
 - Müşteri verilerini koruma altında tut
+
+## Stability Guardrail (2026-03-06)
+
+- This workspace must not introduce autonomous or scheduled behavior.
+- Do not enable cron-driven automation or background prompt/template rewrites without explicit owner approval in the same request.
+- Keep changes manual and task-scoped only.

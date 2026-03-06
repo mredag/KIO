@@ -22,6 +22,11 @@ export function setEscalationService(svc: EscalationService): void {
   _escalationService = svc;
 }
 
+// Compatibility hook: currently no-op, kept for index wiring stability.
+export function setDMSafetyPhraseService(_svc: unknown): void {
+  // no-op
+}
+
 export interface PipelineTrace {
   // Sexual intent filter (pre-processing safety check)
   sexualIntent?: {

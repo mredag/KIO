@@ -20,6 +20,11 @@ export function setSimulatorEscalation(svc: EscalationService): void {
   _escalationService = svc;
 }
 
+// Compatibility hook: currently no-op, kept for index wiring stability.
+export function setSimulatorDMSafety(_svc: unknown): void {
+  // no-op
+}
+
 /**
  * Workflow Test Routes — Instagram DM Agent Simulator
  * Runs the real OpenClaw pipeline (intent detection, model routing, knowledge fetch, AI call)

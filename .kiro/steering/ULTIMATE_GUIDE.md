@@ -363,7 +363,7 @@ app.use('/api/mc', createMissionControlRoutes(db));
 ## OpenRouter Multi-Model Routing
 
 **Provider:** OpenRouter (openrouter.ai)
-**Primary Model:** Kimi K2 (`moonshotai/kimi-k2`) — cost-effective, good Turkish
+**Primary Model:** GPT-4.1 (`openai/gpt-4.1`) — commander/default routing
 **API Key env:** `OPENROUTER_API_KEY` in `backend/.env`
 **OpenClaw config:** `openclaw-config/openclaw.json` → `~/.openclaw/openclaw.json`
 
@@ -397,7 +397,7 @@ const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     'X-Title': 'SPA Workflow Test'
   },
   body: JSON.stringify({
-    model: 'moonshotai/kimi-k2',
+    model: 'openai/gpt-4.1',
     messages: [...],
     provider: { ignore: ['openai'], allow_fallbacks: true }
   })
@@ -413,7 +413,7 @@ const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 
 ### OpenClaw + OpenRouter Integration Guide
 Official docs: https://openrouter.ai/docs/guides/guides/openclaw-integration
-- Model format: `openrouter/<author>/<slug>` (e.g. `openrouter/moonshotai/kimi-k2`)
+- Model format: `openrouter/<author>/<slug>` (e.g. `openrouter/openai/gpt-4.1`)
 - Config: set `OPENROUTER_API_KEY` in `env` section of `openclaw.json`
 - Models list: empty `{}` objects are fine, `alias` is optional for `/model` command
 
@@ -456,7 +456,7 @@ Meta Webhook POST → KIO /webhook/instagram
 ### Model Tier Routing (InstagramContextService)
 | Tier | Model | Trigger |
 |------|-------|---------|
-| light | `google/gemini-2.5-flash-lite` | Greetings only, single-category hours/contact |
+| light | `openai/gpt-4.1-mini` | Greetings only, single-category hours/contact |
 | standard | `openai/gpt-4o-mini` | Multi-category queries (default) — upgraded 2026-03-02 for better Turkish quality |
 | advanced | `openai/gpt-4o-mini` | Complaints, long messages (200+ chars) |
 
@@ -578,7 +578,7 @@ CREATE INDEX idx_instagram_execution_id ON instagram_interactions(execution_id);
 Current tier config:
 | Tier | Direct | Model | Skip Policy | Typical Latency |
 |------|--------|-------|-------------|-----------------|
-| light | ✅ enabled | gemini-2.5-flash-lite | ✅ yes | ~1-2s |
+| light | ✅ enabled | gpt-4.1-mini | ✅ yes | ~1-3s |
 | standard | ✅ enabled | gpt-4o-mini | ❌ no | ~3-8s |
 | advanced | ❌ disabled | gpt-4o-mini | ❌ no | falls through to OpenClaw |
 
@@ -741,7 +741,7 @@ WhatsApp Message → OpenClaw Baileys Channel
 ```
 
 ### WhatsApp Agent Config (openclaw.json)
-- Agent: `whatsapp` with workspace `~/.openclaw/workspace-whatsapp`, model `openrouter/moonshotai/kimi-k2`
+- Agent: `whatsapp` with workspace `~/.openclaw/workspace-whatsapp`, model `openrouter/openai/gpt-4o-mini`
 - Channel: WhatsApp via Baileys (`dmPolicy: "open"`, `groupPolicy: "disabled"`, `sendReadReceipts: true`)
 - Binding: `{ agentId: "whatsapp", match: { channel: "whatsapp" } }`
 - Lifecycle hook: `whatsapp-lifecycle` → `http://localhost:3001/webhook/openclaw/whatsapp`

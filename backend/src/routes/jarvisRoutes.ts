@@ -492,7 +492,7 @@ Kullanıcı KOD DEĞİŞİKLİĞİ istiyorsa (yeni özellik, bug fix, UI değiş
   "constraints": ["Kısıt 1", "Kısıt 2"],
   "deliverables": ["Çıktı 1", "Çıktı 2"],
   "verificationSteps": ["Dosyayı oku ve değişikliği doğrula", "Tarayıcıda kontrol et"],
-  "suggestedModel": "moonshotai/kimi-k2",
+  "suggestedModel": "openai/gpt-4.1",
   "suggestedRole": "developer"
 }
 \`\`\`
@@ -529,8 +529,8 @@ Eğer kullanıcı ajan oluşturma, pano yönetimi, görev delegasyonu veya mesaj
 - Pano route: /admin/mc/comms (frontend/src/pages/admin/mc/MCCommsPage.tsx)
 
 Model seçenekleri:
-- moonshotai/kimi-k2: Genel görevler, iyi Türkçe
-- deepseek/deepseek-chat: Kod ağırlıklı görevler (daha ucuz)
+- openai/gpt-4.1: Komutanlık, planlama, araştırma, genel görevler
+- openai-codex/gpt-5.3-codex: Kod değişikliği, debugging, çok dosyalı geliştirme
 - openai/gpt-4o-mini: Basit/hızlı görevler`;
 
 // ============================================================
@@ -1139,14 +1139,14 @@ router.post('/sessions/:id/messages', async (req: Request, res: Response) => {
 // ============================================================
 
 const MODEL_MAP: Record<string, string> = {
-  developer: 'deepseek/deepseek-chat',
-  researcher: 'moonshotai/kimi-k2',
-  analyst: 'moonshotai/kimi-k2',
-  general: 'moonshotai/kimi-k2',
+  developer: 'openai-codex/gpt-5.3-codex',
+  researcher: 'openai/gpt-4.1',
+  analyst: 'openai/gpt-4.1',
+  general: 'openai/gpt-4.1',
   simple: 'openai/gpt-4o-mini',
 };
 
-const FALLBACK_MODEL = 'moonshotai/kimi-k2';
+const FALLBACK_MODEL = 'openai/gpt-4.1';
 
 function selectModel(suggestedModel?: string, suggestedRole?: string): string {
   if (suggestedModel && typeof suggestedModel === 'string') {

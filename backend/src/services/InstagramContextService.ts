@@ -68,7 +68,7 @@ export interface ContextualIntentResult extends IntentResult {
 
 export const MODEL_CONFIG = {
   light: {
-    modelId: 'google/gemini-2.5-flash-lite',
+    modelId: 'openai/gpt-4.1-mini',
     patterns: ['merhaba', 'selam', 'hey', 'iyi gunler', 'hosca kal',
                'tesekkur', 'sagol', 'tamam', 'ok', 'evet', 'hayir'],
     singleCategoryMatch: ['hours', 'contact', 'services', 'pricing', 'faq'] as string[],

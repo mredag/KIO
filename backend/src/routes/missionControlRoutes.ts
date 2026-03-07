@@ -408,7 +408,7 @@ router.post('/agents/sync', (_req: Request, res: Response) => {
       const agentId = ocAgent.id;
       const mcAgentId = resolveMissionControlAgentId(agentId);
       const name = ocAgent.identity?.name || ocAgent.name || agentId;
-      const model = (ocAgent.model || config.agents?.defaults?.model?.primary || 'moonshotai/kimi-k2')
+      const model = (ocAgent.model || config.agents?.defaults?.model?.primary || 'openai/gpt-4.1')
         .replace(/^openrouter\//, '');
 
       let role = 'agent';
@@ -476,7 +476,7 @@ router.post('/agents', (req: Request, res: Response) => {
     }
 
     const agentId = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-    const fullModel = model || 'moonshotai/kimi-k2';
+    const fullModel = model || 'openai/gpt-4.1';
 
     db.prepare(`INSERT INTO mc_agents (id, name, role, objective, model, provider, status, channel_scope, capabilities, guardrails) VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?)`).run(
       agentId, name, role, objective || null, fullModel, provider || 'openrouter',
@@ -832,7 +832,7 @@ router.post('/runs', (req: Request, res: Response) => {
     const db = getDb();
     const { job_id, agent_id, model } = req.body;
     const id = generateId();
-    db.prepare(`INSERT INTO mc_runs (id, job_id, agent_id, status, model) VALUES (?, ?, ?, 'running', ?)`).run(id, job_id, agent_id, model || 'moonshotai/kimi-k2');
+    db.prepare(`INSERT INTO mc_runs (id, job_id, agent_id, status, model) VALUES (?, ?, ?, 'running', ?)`).run(id, job_id, agent_id, model || 'openai/gpt-4.1');
     db.prepare(`UPDATE mc_jobs SET status = 'running', started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(job_id);
     emitEvent('run', id, 'started', `Run started for job ${job_id}`, undefined, 'running', { agent_id, model });
     res.status(201).json({ id, status: 'running' });
@@ -1299,7 +1299,7 @@ router.post('/webhook/openclaw', (req: Request, res: Response) => {
         jobId, prompt.substring(0, 100), source || 'webhook', JSON.stringify({ runId, sessionKey, prompt })
       );
       const runDbId = generateId();
-      db.prepare(`INSERT INTO mc_runs (id, job_id, agent_id, status, model, metadata) VALUES (?, ?, 'instagram-dm', 'running', 'moonshotai/kimi-k2', ?)`).run(
+      db.prepare(`INSERT INTO mc_runs (id, job_id, agent_id, status, model, metadata) VALUES (?, ?, 'instagram-dm', 'running', 'openai/gpt-4o-mini', ?)`).run(
         runDbId, jobId, JSON.stringify({ openclaw_run_id: runId, sessionKey })
       );
       emitEvent('job', jobId, 'openclaw_start', `OpenClaw run started: ${prompt.substring(0, 60)}`, undefined, 'running');

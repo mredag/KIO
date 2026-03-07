@@ -51,16 +51,16 @@ const DEFAULT_CONFIG: WhatsAppPipelineConfig = {
   directResponse: {
     enabled: true,
     tiers: {
-      light: { enabled: true, modelId: 'google/gemini-2.5-flash-lite' },
-      standard: { enabled: true, modelId: 'moonshotai/kimi-k2' },
+      light: { enabled: true, modelId: 'openai/gpt-4.1-mini' },
+      standard: { enabled: true, modelId: 'openai/gpt-4o-mini' },
       advanced: { enabled: false, modelId: 'openai/gpt-4o-mini' },
     },
   },
   policy: {
     enabled: true,
     maxRetries: 2,
-    validationModel: 'google/gemini-2.5-flash-lite',
-    correctionModel: 'moonshotai/kimi-k2',
+    validationModel: 'openai/gpt-4.1-mini',
+    correctionModel: 'openai/gpt-4o-mini',
     timeoutMs: 15000,
     appointmentClaimRule: true,
   },

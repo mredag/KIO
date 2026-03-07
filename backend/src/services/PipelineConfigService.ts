@@ -61,7 +61,7 @@ const DEFAULT_CONFIG: PipelineConfig = {
     tiers: {
       light: {
         enabled: true,
-        modelId: 'google/gemini-2.5-flash-lite',
+        modelId: 'openai/gpt-4.1-mini',
         maxTokens: 400,
         temperature: 0.2,
         skipPolicyValidation: false,
@@ -90,7 +90,7 @@ const DEFAULT_CONFIG: PipelineConfig = {
   policy: {
     enabled: true,
     maxRetries: 2,
-    validationModel: 'google/gemini-2.5-flash-lite',
+    validationModel: 'openai/gpt-4.1-mini',
     correctionModel: 'same_as_tier',
     timeoutMs: 15000,
   },

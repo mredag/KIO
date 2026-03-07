@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS mc_agents (
   name TEXT NOT NULL,
   role TEXT NOT NULL,
   objective TEXT,
-  model TEXT DEFAULT 'moonshotai/kimi-k2',
+  model TEXT DEFAULT 'openai/gpt-4.1',
   provider TEXT DEFAULT 'openrouter',
   status TEXT CHECK(status IN ('active', 'idle', 'error', 'disabled')) DEFAULT 'idle',
   channel_scope TEXT, -- JSON array: ["instagram", "whatsapp", "admin"]

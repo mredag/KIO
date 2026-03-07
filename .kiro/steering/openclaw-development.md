@@ -85,8 +85,8 @@ Config files in `openclaw-config/` are the source of truth. They get copied to `
 ### Model Tier Routing
 | Tier | Model | Trigger |
 |------|-------|---------|
-| light | `google/gemini-2.5-flash-lite` | Greetings only (no keyword match), or single-category `hours`/`contact` |
-| standard | `moonshotai/kimi-k2` | Multi-category queries (default) |
+| light | `openai/gpt-4.1-mini` | Greetings only (no keyword match), or single-category `hours`/`contact` |
+| standard | `openai/gpt-4o-mini` | Multi-category queries (default) |
 | advanced | `openai/gpt-4o-mini` | Complaint patterns (`sikayet`, `memnun degil`...) or long messages (200+ chars) |
 
 The tier's `modelId` is passed to OpenClaw `/hooks/instagram` as the `model` param, overriding the default in `openclaw.json`.

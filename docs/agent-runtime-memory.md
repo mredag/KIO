@@ -10,7 +10,7 @@ Use this as the short, current-state reference before changing code, debugging D
 5. Compare the docs with the real code/config before editing.
 
 ## Current Live Agent Set
-- `main` = Jarvis commander (`openai-codex/gpt-5.3-codex` on Pi)
+- `main` = Jarvis commander (`openrouter/openai/gpt-4.1` on Pi)
 - `forge` = primary coding agent (`openai-codex/gpt-5.3-codex`)
 - `instagram` = Instagram channel agent (`openrouter/openai/gpt-4o-mini`)
 - `whatsapp` = WhatsApp channel agent (`openrouter/openai/gpt-4o-mini`)
@@ -110,7 +110,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Forge should stay pinned to `openai-codex/gpt-5.3-codex`.
 - Non-main agents do not use direct SQLite access. Use the KIO HTTP API.
 - For `/api/integrations/*`, use `Authorization: Bearer <N8N_API_KEY>`.
-- On the Pi, `main` now runs on `openai-codex/gpt-5.3-codex` via OpenAI Codex OAuth. Channel agents `instagram` and `whatsapp` continue on `openrouter/openai/gpt-4o-mini`.
+- On the Pi, `main` now runs on `openrouter/openai/gpt-4.1`. `forge` stays on `openai-codex/gpt-5.3-codex`, and channel agents `instagram` / `whatsapp` continue on `openrouter/openai/gpt-4o-mini`.
 - OpenClaw image handling on the Pi uses the global `agents.defaults.imageModel` route, currently `openrouter/openai/gpt-4o-mini`.
 - The live OpenClaw fallback path no longer uses DeepSeek; default spawned subagents now fall back to `openrouter/openai/gpt-4.1`.
 - After changing `openclaw-config`, verify the live result from the admin panel in `Ajanlar > Protocol`.

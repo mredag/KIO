@@ -298,7 +298,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
     // status CHECK allows: active, idle, error, disabled
     db.prepare(`
       INSERT OR IGNORE INTO mc_agents (id, name, role, model, status, channel_scope, created_at, updated_at)
-      VALUES ('whatsapp-dm', 'WhatsApp DM Asistan', 'responder', 'moonshotai/kimi-k2', 'idle', '["whatsapp"]', datetime('now'), datetime('now'))
+      VALUES ('whatsapp-dm', 'WhatsApp DM Asistan', 'responder', 'openai/gpt-4o-mini', 'idle', '["whatsapp"]', datetime('now'), datetime('now'))
     `).run();
 
     // 6. Seed mc_policies with wa_pipeline_config
@@ -306,16 +306,16 @@ export function initializeDatabase(dbPath: string): Database.Database {
       directResponse: {
         enabled: true,
         tiers: {
-          light: { enabled: true, modelId: 'google/gemini-2.5-flash-lite' },
-          standard: { enabled: true, modelId: 'moonshotai/kimi-k2' },
+          light: { enabled: true, modelId: 'openai/gpt-4.1-mini' },
+          standard: { enabled: true, modelId: 'openai/gpt-4o-mini' },
           advanced: { enabled: false, modelId: 'openai/gpt-4o-mini' }
         }
       },
       policy: {
         enabled: true,
         maxRetries: 2,
-        validationModel: 'google/gemini-2.5-flash-lite',
-        correctionModel: 'moonshotai/kimi-k2',
+        validationModel: 'openai/gpt-4.1-mini',
+        correctionModel: 'openai/gpt-4o-mini',
         timeoutMs: 15000,
         appointmentClaimRule: true
       },

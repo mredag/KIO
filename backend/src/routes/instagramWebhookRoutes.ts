@@ -13,6 +13,7 @@ import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
@@ -272,7 +273,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
       const sections: string[] = ['Elbette, size hızlıca temel bilgileri paylaşayım 👇'];
 
       if (massagePricing?.value) {
-        sections.push(clipTemplateBlock(massagePricing.value, 26, 2200));
+        sections.push(clipTemplateBlock(formatMassagePricingTemplate(massagePricing.value), 26, 2200));
       }
       if (therapistInfo?.value) {
         sections.push(`👩 Terapist Bilgisi:\n${clipTemplateBlock(therapistInfo.value, 4, 500)}`);
@@ -1564,3 +1565,4 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
   return router;
 }
+

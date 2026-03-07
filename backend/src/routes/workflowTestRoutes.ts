@@ -12,6 +12,7 @@ import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../serv
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
@@ -118,7 +119,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const sections: string[] = ['Elbette, size hizlica temel bilgileri paylasayim:'];
 
       if (massagePricing?.value) {
-        sections.push(clipTemplateBlock(massagePricing.value, 26, 2200));
+        sections.push(clipTemplateBlock(formatMassagePricingTemplate(massagePricing.value), 26, 2200));
       }
       if (therapistInfo?.value) {
         sections.push(`Terapist bilgisi:\n${clipTemplateBlock(therapistInfo.value, 4, 500)}`);
@@ -756,3 +757,4 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
   return router;
 }
+

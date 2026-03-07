@@ -4,16 +4,17 @@ Use this as the short, current-state reference before changing code, debugging D
 
 ## Read Order
 1. Read this file first for the current operating state.
-2. Read `openclaw-kio-integration-runbook.md` before changing OpenClaw behavior.
-3. Read `CONTEXT7-OPENCLAW-GUIDE.md` when you need current OpenClaw docs from Context7.
-4. Read `openclaw-websocket-client.md`, `openclaw-hooks-configuration.md`, and `openclaw-agent-workspaces.md` for protocol and workspace details.
-5. Read `openclaw-config/workspace/PROJECT_MAP.md` for codebase navigation before multi-file work.
+2. Read `openclaw-config/workspace/PROJECT_MAP.md` for codebase navigation before multi-file work.
+3. Read `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` before live KB edits.
+4. On Pi, treat `~/.openclaw/workspace/*.md` and `~/.openclaw/workspaces/forge/*.md` as the live agent instruction source.
+5. Compare the docs with the real code/config before editing.
 
 ## Current Live Agent Set
-- `main` = Jarvis commander
-- `forge` = primary coding agent
-- `instagram-dm` = Instagram channel agent
-- `whatsapp-dm` = WhatsApp channel agent
+- `main` = Jarvis commander (`openai-codex/gpt-5.3-codex` on Pi)
+- `forge` = primary coding agent (`openai-codex/gpt-5.3-codex`)
+- `instagram` = Instagram channel agent (`openrouter/openai/gpt-4o-mini`)
+- `whatsapp` = WhatsApp channel agent (`openrouter/openai/gpt-4o-mini`)
+- Mission Control mirrors the channel agents as `instagram-dm` and `whatsapp-dm`.
 
 Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate product decision.
 
@@ -69,8 +70,13 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 
 ## Knowledge Base Rules
 - `knowledge_base.id` must be non-null and durable.
-- Startup backfills legacy null IDs, then normalizes topic slugs.
-- KB updates must go through the admin or integration CRUD routes, not direct SQL edits.
+- The current KB schema is `id`, `category`, `key_name`, `value`, `description`, `is_active`, `version`, `created_at`, `updated_at`.
+- The current KB schema does not expose `topic_slug`.
+- Live KB data is the `knowledge_base` table shown in `/admin/knowledge-base`.
+- Live KB work must follow `scan -> preview -> approval -> apply -> verify -> final report`.
+- Integration KB routes currently expose `GET /api/integrations/knowledge/entries`, `GET /api/integrations/knowledge/context`, and `PUT /api/integrations/knowledge/entries/:id`.
+- `/api/integrations/*` uses `Authorization: Bearer <N8N_API_KEY>`; create/delete currently require the admin API.
+- KB updates must go through the admin or integration routes, not direct SQL edits.
 - Policy grounding depends on the KB slice loaded into the current execution.
 
 ## Where To Look First
@@ -102,7 +108,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 ## Agent Rules
 - Jarvis orchestrates. It should delegate real code changes to Forge.
 - Forge should stay pinned to `openai-codex/gpt-5.3-codex`.
-- Non-main agents do not use direct SQLite access. Use the KIO HTTP API with `X-API-Key`.
+- Non-main agents do not use direct SQLite access. Use the KIO HTTP API.
+- For `/api/integrations/*`, use `Authorization: Bearer <N8N_API_KEY>`.
 - On the Pi, `main` now runs on `openai-codex/gpt-5.3-codex` via OpenAI Codex OAuth. Channel agents `instagram` and `whatsapp` continue on `openrouter/openai/gpt-4o-mini`.
 - After changing `openclaw-config`, verify the live result from the admin panel in `Ajanlar > Protocol`.
 

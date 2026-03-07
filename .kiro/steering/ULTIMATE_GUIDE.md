@@ -15,8 +15,8 @@ Dev Machine (Windows, Node 18 via fnm)
 │   ├── /webhook/whatsapp     — Meta webhook (legacy, replaced by OpenClaw Baileys)
 │   └── /webhook/instagram    — Meta webhook → OpenClaw (USE_OPENCLAW=true) or n8n
 ├── OpenClaw (port 18789) — AI agent gateway (Instagram + WhatsApp + Jarvis)
-│   ├── Instagram hook        — Kimi K2 via OpenRouter, multi-model routing
-│   └── WhatsApp agent        — Baileys/WhatsApp Web channel, dedicated workspace, Kimi K2
+│   ├── Instagram hook        — GPT-4o-mini via OpenRouter, multi-model routing
+│   └── WhatsApp agent        — Baileys/WhatsApp Web channel, dedicated workspace, GPT-4o-mini
 ├── n8n (Pi only, port 5678) — Workflow automation (legacy, disabled)
 │   └── WhatsApp workflow     — Replaced by OpenClaw WhatsApp agent
 └── Frontend (served by backend in prod)
@@ -109,7 +109,7 @@ Backend is `"type": "module"` (ESM). TypeScript compiles `.ts` → `.js` but doe
 | Jarvis subagent tries sqlite3 directly | Subagent has no DB access | `buildSystemContext()` pre-injects last 20 DMs + pipeline health; subagents must use HTTP API |
 | DM forgets user after 40s | Inbound messages not stored in DB | Fixed: webhook now INSERTs inbound to instagram_interactions before AI processing |
 | Policy flags phone as hallucination | contact KB category not fetched | Fixed: contact category ALWAYS included in KB fetch (phone/address always visible to policy agent) |
-| MC integration FK constraint failed | agent_id='instagram' not in mc_agents | Fixed: use agent_id='instagram-dm' (matches mc_agents row) |
+| MC integration points at raw OpenClaw agent id | OpenClaw ids differ from MC ids | Normalize through `resolveMissionControlAgentId()` (`instagram` -> `instagram-dm`, `whatsapp` -> `whatsapp-dm`) |
 | WhatsApp session not connecting | QR code expired or Baileys auth issue | Re-scan QR code in OpenClaw, check `openclaw.json` channel config |
 | WhatsApp messages not processed | Agent not bound to channel | Check `agents.bindings` in `openclaw.json` for `channel: "whatsapp"` match |
 | WhatsApp ignore list not working | Phone format mismatch | Normalize phone: strip spaces/dashes, ensure `90` prefix (not `+90` or `0`) |
@@ -146,14 +146,15 @@ node dist/index.js   # from backend/
 **Engine:** SQLite with WAL mode, `better-sqlite3`
 **Path:** `backend/data/kiosk.db` (dev), `~/kio-new/data/kiosk.db` (Pi)
 **Schema:** `backend/src/database/schema.sql`
-**Seed:** `backend/src/database/seed-knowledge.ts` (idempotent, 61 Turkish entries — migrated 2026-02-23)
+**Seed:** `backend/src/database/seed-knowledge.ts` (bootstrap/default data source - not for routine live KB edits)
 **Migrations:** Ad-hoc `ALTER TABLE` in `init.ts` (no formal framework)
-**KB Migration Script:** `backend/scripts/migrate-kb.mjs` (replaces all KB entries, creates backup first)
+**KB Migration Script:** `backend/scripts/migrate-kb.mjs` (bulk migration tool - not for one-off live KB edits)
+**Live KB Rule:** `/admin/knowledge-base` shows live `knowledge_base` data. For live KB changes use the admin API or the preview-first integration flow in `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md`. Do not bulk-reseed live KB data to change one row.
 
 ### Key Tables
 | Table | Purpose |
 |-------|---------|
-| `knowledge_base` | AI context (7 categories, 33+ entries) |
+| `knowledge_base` | Live AI/admin KB facts (7 categories; count varies by environment) |
 | `ai_system_prompts` | Dynamic AI prompts for n8n |
 | `coupon_tokens/wallets/redemptions` | Coupon loyalty system |
 | `instagram_interactions` | DM log with intent/sentiment + `model_used`, `tokens_estimated` columns |
@@ -957,13 +958,10 @@ sudo systemctl restart n8n
 
 ### Direct DB Editing (Pi)
 ```powershell
-# Use SQL files — PowerShell escaping is problematic
-fsWrite("temp_query.sql", "SELECT * FROM knowledge_base;")
-scp temp_query.sql eform-kio@192.168.1.8:/tmp/
-ssh eform-kio@192.168.1.8 "sqlite3 ~/kio-new/data/kiosk.db < /tmp/temp_query.sql"
-ssh eform-kio@192.168.1.8 "pm2 restart kio-backend"  # Required after changes
+# Emergency / forensic use only
+# Routine live KB edits must go through the admin or integration API preview flow
+# Do NOT use seed-knowledge.ts, migrate-kb.mjs, or bulk reseeds to change one live KB row
 ```
-
 ---
 
 ## Documentation Policy
@@ -973,5 +971,5 @@ ssh eform-kio@192.168.1.8 "pm2 restart kio-backend"  # Required after changes
 
 ---
 
-**Last Updated:** 2026-03-02
-**Status:** ✅ Full system deployed to Pi 5 (192.168.1.8) with OpenClaw gateway + backend + cloudflared + kiosk display. Node 22, PM2 managed, Instagram DM Intelligence (context service, model routing, Turkish char normalization, context-aware follow-ups, MC integration), Direct Response Pipeline (light+standard tiers bypass OpenClaw, ~5-7s total, standard tier upgraded to GPT-4o-mini for better Turkish quality), Pipeline Config Service (dynamic config in mc_policies, runtime-editable via API), Policy Agent (ResponsePolicyService — 11-rule validation including system term prevention + faithfulness scoring + direct OpenRouter correction, fallback creates Workshop jobs), Execution ID Tracking (unique EXE-* IDs for debugging bad responses, full pipeline trace via API), PriceFormatterService (mobile-optimized price formatting from KB data with category-specific templates), Meta Graph API connected via graph.instagram.com (IGAA token valid, v25.0), DM Kontrol Merkezi (live feed with execution IDs, pipeline health, errors, model routing, test mode toggle, policy badges per message), DM Simulator (`/api/workflow-test/simulate-agent` — full pipeline without Meta/OpenClaw, results in DM Kontrol feed), Mission Control UI (glassmorphism dark theme, 10 active MC pages — cleaned up from 17), Jarvis Data Bridge working (JSONL polling with heartbeat filter, DM quality review, planning chat, task execution, `buildSystemContext` injects last 20 DMs + pipeline health), AutoPilot autonomous agent engine (4 triggers, cron scanner, AgentDispatchService), Real-Time Activity Feed, Agent Lifecycle Orchestrator, Enhanced Dashboard with comparison metrics, KB migrated to 61 entries with Turkish diacritics, anti-hallucination architecture (formatted KB, faithfulness scoring, "SADECE BİLGİ BANKASINI KULLAN" framing, system term prevention), full backend build via tsconfig.build.json, heartbeat target set to "none". UI cleanup (2026-02-26): removed Approvals, Comms, Documents, Gateways, Skills, Tags, AI Prompts, Blocked/Suspicious Users from sidebar (backend routes preserved). Closed-Loop DM Quality System (2026-02-27): EscalationService + TelegramNotificationService + Telegram webhook — routes policy violations/audit findings/DM failures to analyst agent or Telegram admin with inline approve/reject buttons + 🌐 Panel URL fallback. TelegramCallbackPoller auto-reconciles with OpenClaw (30s check, defers when gateway is up, resumes when down). Jarvis subagent fix: AGENTS.md updated to enforce HTTP API access (no direct SQLite), buildSystemContext enriched with recent DMs + health stats. OpenClaw AGENTS.md: added `/esc` text commands for escalation handling via Telegram chat. WhatsApp OpenClaw Integration (2026-03-02): WhatsApp agent via Baileys channel (no Meta Cloud API), dedicated workspace at `openclaw-config/workspace-whatsapp/`, WhatsAppContextService (intent detection, model routing, coupon/appointment detection), WhatsAppPipelineConfigService (dynamic config in mc_policies as `wa_pipeline_config`), 12 WhatsApp API endpoints (ignore list CRUD, interaction logging, policy validation, appointment requests, stats, conversation history), lifecycle webhook at `/webhook/openclaw/whatsapp`, DM Kontrol unified feed across Instagram + WhatsApp with channel filter, buildSystemContext WhatsApp data injection + phone number auto-detection, nightly audit per-channel config.
+**Last Updated:** 2026-03-07
+**Status:** ✅ Full system deployed to Pi 5 (192.168.1.8) with OpenClaw gateway + backend + cloudflared + kiosk display. Node 22, PM2 managed, Instagram DM Intelligence (context service, model routing, Turkish char normalization, context-aware follow-ups, MC integration), Direct Response Pipeline (light+standard tiers bypass OpenClaw, ~5-7s total, standard tier on GPT-4o-mini for better Turkish quality), Pipeline Config Service (dynamic config in mc_policies, runtime-editable via API), Policy Agent (ResponsePolicyService — 11-rule validation including system term prevention + faithfulness scoring + direct OpenRouter correction, fallback creates Workshop jobs), Execution ID Tracking (unique EXE-* IDs for debugging bad responses, full pipeline trace via API), PriceFormatterService (mobile-optimized price formatting from KB data with category-specific templates), Meta Graph API connected via graph.instagram.com (IGAA token valid, v25.0), DM Kontrol Merkezi (live feed with execution IDs, pipeline health, errors, model routing, test mode toggle, policy badges per message), DM Simulator (`/api/workflow-test/simulate-agent` — full pipeline without Meta/OpenClaw, results in DM Kontrol feed), Mission Control UI (glassmorphism dark theme, 10 active MC pages — cleaned up from 17), Jarvis Data Bridge working (JSONL polling with heartbeat filter, DM quality review, planning chat, task execution, `buildSystemContext` injects last 20 DMs + pipeline health), AutoPilot autonomous agent engine (4 triggers, cron scanner, AgentDispatchService), Real-Time Activity Feed, Agent Lifecycle Orchestrator, Enhanced Dashboard with comparison metrics, live KB managed in `knowledge_base` with preview-first change protocol for agent edits, anti-hallucination architecture (formatted KB, faithfulness scoring, "SADECE BİLGİ BANKASINI KULLAN" framing, system term prevention), full backend build via tsconfig.build.json, heartbeat target set to "none". UI cleanup (2026-02-26): removed Approvals, Comms, Documents, Gateways, Skills, Tags, AI Prompts, Blocked/Suspicious Users from sidebar (backend routes preserved). Closed-Loop DM Quality System (2026-02-27): EscalationService + TelegramNotificationService + Telegram webhook — routes policy violations/audit findings/DM failures to analyst agent or Telegram admin with inline approve/reject buttons + 🌐 Panel URL fallback. TelegramCallbackPoller auto-reconciles with OpenClaw (30s check, defers when gateway is up, resumes when down). Jarvis subagent fix: AGENTS.md updated to enforce HTTP API access (no direct SQLite), buildSystemContext enriched with recent DMs + health stats. OpenClaw AGENTS.md: added `/esc` text commands for escalation handling via Telegram chat. WhatsApp OpenClaw Integration (2026-03-02): WhatsApp agent via Baileys channel (no Meta Cloud API), dedicated workspace at `openclaw-config/workspace-whatsapp/`, WhatsAppContextService (intent detection, model routing, coupon/appointment detection), WhatsAppPipelineConfigService (dynamic config in mc_policies as `wa_pipeline_config`), 12 WhatsApp API endpoints (ignore list CRUD, interaction logging, policy validation, appointment requests, stats, conversation history), lifecycle webhook at `/webhook/openclaw/whatsapp`, DM Kontrol unified feed across Instagram + WhatsApp with channel filter, buildSystemContext WhatsApp data injection + phone number auto-detection, nightly audit per-channel config.

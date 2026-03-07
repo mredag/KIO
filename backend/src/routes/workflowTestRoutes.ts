@@ -11,6 +11,8 @@ import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalSer
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
+import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
 
@@ -434,24 +436,35 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const deterministicInfoResponse = isGenericInfoRequest(text)
         ? buildGenericInfoTemplateFromKnowledge()
         : null;
-      const usedDeterministicInfoTemplate = !!deterministicInfoResponse;
-      if (usedDeterministicInfoTemplate) {
+      const deterministicClarifier = deterministicInfoResponse
+        ? null
+        : buildDeterministicClarifierResponse({
+            messageText: text,
+            intentCategories: analysis.intentCategories,
+            responseMode: analysis.responseDirective.mode,
+            semanticSignals: analysis.matchedKeywords,
+          });
+      const deterministicResponse = deterministicInfoResponse || deterministicClarifier?.response || null;
+      const deterministicModelId = deterministicInfoResponse
+        ? 'deterministic/info-template-v1'
+        : deterministicClarifier?.modelId || null;
+      const deterministicSessionKey = deterministicInfoResponse
+        ? 'deterministic-info-template'
+        : deterministicClarifier
+          ? 'deterministic-clarifier'
+          : 'simulator';
+      if (deterministicResponse) {
         skipPolicy = true;
-        console.log('[Simulator] Using deterministic info template response');
+        console.log('[Simulator] Using deterministic response path (%s)', deterministicModelId);
       }
 
-      const directResult = deterministicInfoResponse
+      const directResult = deterministicResponse && deterministicModelId
         ? {
-            response: deterministicInfoResponse,
-            modelId: 'deterministic/info-template-v1',
+            response: deterministicResponse,
+            modelId: deterministicModelId,
             latencyMs: 0,
-            tokensEstimated: Math.ceil(deterministicInfoResponse.length / 3),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-              totalTokens: 0,
-              costUsd: 0,
-            },
+            tokensEstimated: estimateTokens(deterministicResponse),
+            usage: ZERO_USAGE_METRICS,
             success: true,
             error: undefined,
           }
@@ -573,7 +586,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         semanticRetrieval: semanticRetrievalTrace,
         semanticRerank: semanticRerankTrace,
         openclawDispatchStatus: 'skipped',
-        openclawSessionKey: usedDeterministicInfoTemplate ? 'deterministic-info-template' : 'simulator',
+        openclawSessionKey: deterministicSessionKey,
         agentPollDurationMs: 0,
         directResponse: {
           used: true,
@@ -601,7 +614,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       rawDb.prepare(`
         INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, pipeline_trace, model_tier, execution_id, created_at)
         VALUES (?, ?, 'outbound', ?, 'ai_response', ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, directResult.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
+      `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, pipelineTrace.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
 
       try {
         contextService.saveConversationState(senderId, text, finalResponse, analysis);

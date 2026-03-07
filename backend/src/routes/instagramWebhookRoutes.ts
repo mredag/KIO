@@ -12,6 +12,8 @@ import { DirectResponseService } from '../services/DirectResponseService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
+import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { estimateTokens } from '../services/UsageMetrics.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
@@ -157,8 +159,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   // Track recently processed message IDs to avoid duplicate AI responses.
   const recentMessageIds = new Map<string, number>(); // mid → timestamp
   const DEDUP_WINDOW_MS = 60_000; // ignore duplicate within 60s
-  const SEXUAL_BLOCK_MESSAGE = 'Bu konuda yardımcı olamam. Lütfen uygun bir dille yazın.';
-  const SEXUAL_RETRY_MESSAGE = 'Tekrar eder misiniz? Anlayamadım...';
   const INSTAGRAM_MAX_MESSAGE_CHARS = 950;
 
   /**
@@ -1074,12 +1074,37 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   used: true,
                   latencyMs: 0,
                   modelId: 'deterministic/info-template-v1',
-                  tokensEstimated: Math.ceil(deterministicInfoResponse.length / 3),
+                  tokensEstimated: estimateTokens(deterministicInfoResponse),
                 };
                 trace.openclawDispatchStatus = 'skipped' as any;
                 trace.openclawSessionKey = 'deterministic-info-template';
                 trace.agentPollDurationMs = 0;
                 trace.modelId = 'deterministic/info-template-v1';
+                skipPolicy = true;
+              }
+            }
+
+            if (!agentResponse) {
+              const deterministicClarifier = buildDeterministicClarifierResponse({
+                messageText,
+                intentCategories: analysis.intentCategories,
+                responseMode: analysis.responseDirective.mode,
+                semanticSignals: analysis.matchedKeywords,
+              });
+
+              if (deterministicClarifier) {
+                console.log('[Instagram Webhook] Using deterministic clarifier response (%s)', deterministicClarifier.modelId);
+                agentResponse = deterministicClarifier.response;
+                trace.directResponse = {
+                  used: true,
+                  latencyMs: 0,
+                  modelId: deterministicClarifier.modelId,
+                  tokensEstimated: estimateTokens(deterministicClarifier.response),
+                };
+                trace.openclawDispatchStatus = 'skipped' as any;
+                trace.openclawSessionKey = 'deterministic-clarifier';
+                trace.agentPollDurationMs = 0;
+                trace.modelId = deterministicClarifier.modelId;
                 skipPolicy = true;
               }
             }
@@ -1374,13 +1399,14 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
 
             // Compute tokens and finalize trace
-            const estimateTokens = (text: string) => Math.ceil(text.length / 3);
             const directTokens = trace.directResponse?.tokensEstimated || 0;
-            const outputTokens = estimateTokens(finalResponse);
-            // If direct response was used, tokens are already counted in directTokens
-            // If OpenClaw was used, estimate from the enriched message
-            const inputTokens = trace.directResponse?.used ? 0 : estimateTokens(messageText + knowledgeContext);
-            trace.tokensEstimated = inputTokens + outputTokens + policyTotalTokens + directTokens;
+            if (trace.directResponse?.used) {
+              trace.tokensEstimated = directTokens + policyTotalTokens;
+            } else {
+              const outputTokens = estimateTokens(finalResponse);
+              const inputTokens = estimateTokens(messageText + knowledgeContext);
+              trace.tokensEstimated = inputTokens + outputTokens + policyTotalTokens;
+            }
             trace.totalResponseTimeMs = Date.now() - startTime;
 
             // Log the interaction

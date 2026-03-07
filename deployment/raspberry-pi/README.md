@@ -1,167 +1,114 @@
 # Raspberry Pi Deployment
 
-Complete deployment solution for Raspberry Pi kiosk systems.
-
-Current production note:
+Current production layout:
 - Live system: `~/kio-new`
-- Rollback system: `~/spa-kiosk`
-- Standard maintenance command: `~/kio-new/deployment/raspberry-pi/update-pi.sh`
+- Rollback checkout: `~/spa-kiosk` (do not use for normal updates)
+- Backend PM2 process: `kio-backend`
+- OpenClaw PM2 process: `kio-openclaw`
+- Standard maintenance command: `cd ~/kio-new/deployment/raspberry-pi && ./update-pi.sh`
 
-## 🚀 Quick Start
+## Fresh Install
 
-### One-Command Setup (Recommended)
-
-For a fresh Raspberry Pi 5 with Raspberry Pi OS:
+1. Clone the repo into `~/kio-new`.
+2. Run the one-command installer:
 
 ```bash
-cd ~/spa-kiosk/deployment/raspberry-pi
+cd ~/kio-new/deployment/raspberry-pi
 chmod +x setup-raspberry-pi.sh
 ./setup-raspberry-pi.sh
 ```
 
-This will automatically:
-- ✅ Set static IP to 192.168.1.16
-- ✅ Install Node.js 20, PM2, Chromium
-- ✅ Configure kiosk mode with auto-start
-- ✅ Deploy the application
-- ✅ Set up watchdog service
-- ✅ Configure automatic backups
+3. Reboot the Pi:
 
-After installation, reboot and the kiosk starts automatically!
-
----
-
-## 📚 Documentation
-
-### Setup Guides
-- **[RASPBERRY_PI.md](RASPBERRY_PI.md)** - Complete deployment guide (manual + automated)
-- **[PI_SETUP_GUIDE.md](PI_SETUP_GUIDE.md)** - Detailed setup instructions and troubleshooting
-- **[PI_INSTALLATION_CHECKLIST.md](PI_INSTALLATION_CHECKLIST.md)** - Step-by-step verification checklist
-
-### Scripts
-
-#### Setup & Deployment
-- **setup-raspberry-pi.sh** - Automated one-command installer
-- **deploy-pi.sh** - Manual deployment script
-- **update-pi.sh** - Update application to latest version
-
-#### Kiosk Management
-- **start-kiosk.sh** - Start kiosk in fullscreen mode
-- **start-backend-pm2.sh** - Start backend with PM2
-- **watchdog-kiosk.sh** - Monitor and restart kiosk if crashed
-
-#### Maintenance
-- **backup-database.sh** - Backup database manually
-- **sync-openclaw-runtime.sh** - Sync tracked OpenClaw workspace/transform files into `~/.openclaw/`
-
-#### Configuration
-- **ecosystem.config.js** - PM2 configuration
-- **kiosk-autostart.desktop** - Auto-start configuration
-
----
-
-## 📋 File Overview
-
-```
-raspberry-pi/
-├── README.md                          # This file
-├── RASPBERRY_PI.md                    # Complete deployment guide
-├── PI_SETUP_GUIDE.md                  # Detailed setup & troubleshooting
-├── PI_INSTALLATION_CHECKLIST.md       # Installation checklist
-│
-├── setup-raspberry-pi.sh              # 🚀 One-command installer
-├── update-pi.sh                       # Update script
-├── deploy-pi.sh                       # Manual deployment
-│
-├── start-kiosk.sh                     # Start kiosk display
-├── start-backend-pm2.sh               # Start backend with PM2
-├── watchdog-kiosk.sh                  # Watchdog service
-├── backup-database.sh                 # Database backup
-│
-├── ecosystem.config.js                # PM2 config
-└── kiosk-autostart.desktop            # Auto-start config
-```
-
----
-
-## 🎯 Common Tasks
-
-### Initial Setup
 ```bash
-./setup-raspberry-pi.sh
 sudo reboot
 ```
 
-### Update Application
+Notes:
+- The installer assumes Raspberry Pi OS with sudo access.
+- It installs Node.js 22, PM2, Chromium, the kiosk watchdog, and the backend build.
+- If this Pi also runs OpenClaw, keep `~/.openclaw/openclaw.json` machine-local and sync tracked workspace files with `./sync-openclaw-runtime.sh --restart`.
+
+## Standard Maintenance
+
+Use this for normal production updates:
+
 ```bash
 cd ~/kio-new/deployment/raspberry-pi
 ./update-pi.sh
 ```
 
-### Sync OpenClaw Runtime
+What it does:
+- backs up `data/kiosk.db`
+- `git pull --ff-only origin master`
+- `npm ci --no-audit --no-fund`
+- builds backend with `tsconfig.build.json`
+- copies SQL files into `backend/dist/database/`
+- builds frontend and copies it into `backend/public/`
+- restarts `kio-backend`
+- syncs tracked OpenClaw runtime files and restarts `kio-openclaw`
+- checks `http://localhost:3001/api/kiosk/health`
+
+## OpenClaw Runtime Sync
+
+Tracked workspace and transform files live in `openclaw-config/` and sync to `~/.openclaw/`.
+
 ```bash
-./sync-openclaw-runtime.sh --dry-run
-./sync-openclaw-runtime.sh --restart
+cd ~/kio-new
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --dry-run
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart
 ```
 
-### Manual Backup
+Rules:
+- `openclaw-config/openclaw.json` stays ignored and machine-local.
+- Do not overwrite `~/.openclaw/openclaw.json` from git.
+
+## Backups and Restore
+
+Create a manual backup:
+
 ```bash
+cd ~/kio-new/deployment/raspberry-pi
 ./backup-database.sh
 ```
 
-### Check Status
+Restore a backup:
+
+```bash
+cd ~/kio-new/deployment/raspberry-pi
+./restore-backup.sh
+```
+
+## Status and Logs
+
 ```bash
 pm2 status
 pm2 logs kio-backend
 pm2 logs kio-openclaw
+sudo journalctl -u kiosk-watchdog -f
+curl http://localhost:3001/api/kiosk/health
 ```
 
-### Restart Services
-```bash
-pm2 restart kio-backend
-pm2 restart kio-openclaw
-pkill chromium  # Kiosk will auto-restart
-```
+## Key Files
 
----
+- `setup-raspberry-pi.sh`: fresh install bootstrap
+- `update-pi.sh`: standard live update
+- `sync-openclaw-runtime.sh`: sync tracked OpenClaw files to runtime
+- `backup-database.sh`: manual DB backup
+- `restore-backup.sh`: interactive DB restore
+- `test-kiosk-setup.sh`: post-install verification
+- `start-backend-pm2.sh`: backend PM2 bootstrap helper
+- `watchdog-kiosk.sh`: kiosk/backend watchdog
 
-## 🔧 Configuration
+## Hard Rules
 
-### Static IP
-Default: **192.168.1.16**
+- Do not use `pm2 delete all` in normal maintenance.
+- Do not edit live KB through seed or migration scripts.
+- Do not treat `~/spa-kiosk` as the active deployment.
+- Do not copy `node_modules` between machines.
 
-To change, edit `/etc/dhcpcd.conf` after installation.
+## Related Docs
 
-### Ports
-- Frontend: **3000** (served by backend)
-- Backend: **3001**
-
-### Auto-Start
-- Backend: PM2 (starts on boot)
-- Kiosk: Desktop autostart (starts after login)
-
----
-
-## 📞 Support
-
-### Quick Reference
-- **IP Address:** 192.168.1.16
-- **Admin Panel:** http://192.168.1.16:3001/admin
-- **Kiosk URL:** http://localhost:3000
-
-### Troubleshooting
-See [PI_SETUP_GUIDE.md](PI_SETUP_GUIDE.md) for detailed troubleshooting steps.
-
-### Logs
-```bash
-pm2 logs kiosk-backend              # Backend logs
-sudo journalctl -u kiosk-watchdog   # Watchdog logs
-```
-
----
-
-## 🔗 Related Documentation
-
-- [Main README](../../README.md)
-- [Windows Deployment](../WINDOWS.md)
-- [Deployment Overview](../README.md)
+- [RASPBERRY_PI.md](RASPBERRY_PI.md)
+- [PI_SETUP_GUIDE.md](PI_SETUP_GUIDE.md)
+- [PI_INSTALLATION_CHECKLIST.md](PI_INSTALLATION_CHECKLIST.md)

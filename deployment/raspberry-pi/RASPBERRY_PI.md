@@ -1,324 +1,157 @@
 # Raspberry Pi Deployment Guide
 
-Complete guide for deploying the SPA Digital Kiosk on Raspberry Pi OS.
+This is the current production runbook for the Pi at `192.168.1.8`.
 
-Current production note:
-- Live system is `~/kio-new`
-- `~/spa-kiosk` is rollback only
-- Standard live update command is `~/kio-new/deployment/raspberry-pi/update-pi.sh`
+## Overview
 
-## 🚀 Quick Start (Recommended)
+- Live app directory: `~/kio-new`
+- Rollback checkout: `~/spa-kiosk`
+- Backend PM2 process: `kio-backend`
+- OpenClaw PM2 process: `kio-openclaw`
+- Backend health URL: `http://localhost:3001/api/kiosk/health`
+- Admin URL: `http://192.168.1.8:3001/admin`
 
-**For fresh Raspberry Pi 5 with Raspberry Pi OS:**
+`~/spa-kiosk` is rollback-only. Normal maintenance happens in `~/kio-new`.
 
-```bash
-cd ~/spa-kiosk/deployment/raspberry-pi
-chmod +x setup-raspberry-pi.sh
-./setup-raspberry-pi.sh
-```
-
-This automated script handles everything:
-- ✅ Set static IP to 192.168.1.16
-- ✅ Install Node.js 20, PM2, Chromium
-- ✅ Configure kiosk mode with auto-start
-- ✅ Deploy the application
-- ✅ Set up watchdog service
-- ✅ Configure automatic backups
-
-**After installation:** Reboot and the kiosk starts automatically!
-
-**For detailed instructions:** See [PI_SETUP_GUIDE.md](PI_SETUP_GUIDE.md)
-
-**For verification:** Use [PI_INSTALLATION_CHECKLIST.md](PI_INSTALLATION_CHECKLIST.md)
-
----
-
-## Prerequisites
-
-- **Raspberry Pi 3B+ or newer** (Pi 5 recommended, 4GB+ RAM)
-- **Raspberry Pi OS** (64-bit recommended)
-- **Fresh installation** (or backup existing data)
-- **Network connection** (Ethernet recommended)
-
----
-
-## Management
-
-### PM2 Commands
-
-```bash
-pm2 status                    # Check backend status
-pm2 logs kio-backend          # View backend logs
-pm2 logs kio-openclaw         # View OpenClaw logs
-pm2 restart kio-backend       # Restart backend
-pm2 restart kio-openclaw      # Restart OpenClaw
-```
-
-### Kiosk Control
-
-```bash
-pkill chromium                # Restart kiosk (auto-restarts via watchdog)
-~/start-kiosk.sh              # Manual kiosk start
-```
-
-### Updates
+## Standard Update Procedure
 
 ```bash
 cd ~/kio-new/deployment/raspberry-pi
-./update-pi.sh                # Update to latest version
+./update-pi.sh
 ```
 
-### Backups
+Expected behavior:
+- database snapshot written to `~/kio-new/data/backups/`
+- repo fast-forwards from `origin/master`
+- root workspace dependencies installed via `npm ci --no-audit --no-fund`
+- backend rebuilt with `npx tsc -p tsconfig.build.json`
+- SQL files copied to `backend/dist/database/`
+- frontend rebuilt with Vite and copied to `backend/public/`
+- `kio-backend` restarted via PM2
+- tracked OpenClaw files synced into `~/.openclaw/`
+- `kio-openclaw` restarted
+- health check retried until backend is healthy
+
+## Fresh Install Procedure
+
+Run this only for a new Pi or a rebuilt OS image.
 
 ```bash
-cd ~/spa-kiosk/deployment/raspberry-pi
-./backup-database.sh          # Manual backup
-crontab -l                    # View scheduled backups (daily 2 AM)
-```
-
----
-
-## Configuration
-
-### Backend Environment
-
-Edit `~/spa-kiosk/backend/.env`:
-
-```env
-PORT=3001
-NODE_ENV=production
-DATABASE_PATH=../data/kiosk.db
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=your-secure-password
-```
-
-After changes: `pm2 restart kiosk-backend`
-
-### Static IP
-
-Default: **192.168.1.16**
-
-To change:
-```bash
-sudo nano /etc/dhcpcd.conf
-# Edit IP address
+cd ~/kio-new/deployment/raspberry-pi
+chmod +x setup-raspberry-pi.sh
+./setup-raspberry-pi.sh
 sudo reboot
 ```
 
-### Kiosk Display
+Installer responsibilities:
+- install Node.js 22
+- install PM2 and kiosk dependencies
+- configure Chromium kiosk autostart
+- build backend and frontend from the current checkout
+- start `kio-backend`
+- install watchdog and backup cron
 
-Edit `~/start-kiosk.sh` to customize Chromium flags.
+## OpenClaw Runtime
 
----
+Tracked source files:
+- `openclaw-config/workspace/`
+- `openclaw-config/workspace-whatsapp/`
+- `openclaw-config/workspaces/`
+- `openclaw-config/transforms/`
+
+Runtime destination:
+- `~/.openclaw/`
+
+Sync command:
+
+```bash
+cd ~/kio-new
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --dry-run
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart
+```
+
+Machine-local file:
+- `~/.openclaw/openclaw.json`
+
+Do not put machine-local secrets into git.
+
+## Verification
+
+```bash
+pm2 status
+pm2 logs kio-backend --lines 100
+pm2 logs kio-openclaw --lines 100
+curl http://localhost:3001/api/kiosk/health
+ss -tlnp | grep 18789
+```
+
+Good state:
+- `kio-backend` online
+- `kio-openclaw` online
+- backend health returns `{"status":"ok"}`
+- gateway listens on `127.0.0.1:18789`
+
+## Backups and Restore
+
+Create backup:
+
+```bash
+cd ~/kio-new/deployment/raspberry-pi
+./backup-database.sh
+```
+
+Restore backup:
+
+```bash
+cd ~/kio-new/deployment/raspberry-pi
+./restore-backup.sh
+```
+
+Backups are stored under `~/kio-new/data/backups/`.
 
 ## Troubleshooting
 
-### Backend Not Starting
+Backend not starting:
 
 ```bash
-pm2 logs kiosk-backend                    # Check logs
-sudo netstat -tulpn | grep 3001           # Check port
-pm2 restart kiosk-backend                 # Restart
+pm2 logs kio-backend --lines 100
+cd ~/kio-new/backend
+npx tsc -p tsconfig.build.json
+cp src/database/*.sql dist/database/
 ```
 
-### Kiosk Not Displaying
+OpenClaw runtime drift:
 
 ```bash
-ps aux | grep chromium                    # Check if running
-curl http://localhost:3001/api/kiosk/health  # Check backend
-~/start-kiosk.sh                          # Manual start
+cd ~/kio-new
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --dry-run
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart
 ```
 
-### Database Issues
+Chromium not visible:
 
 ```bash
-pm2 stop kiosk-backend
-rm ~/spa-kiosk/data/kiosk.db-wal
-rm ~/spa-kiosk/data/kiosk.db-shm
-pm2 restart kiosk-backend
+pkill chromium || pkill chromium-browser
+~/start-kiosk.sh
 ```
 
-### Network Issues
+Native module issue after Node upgrade:
 
 ```bash
-ip addr show                              # Check IP
-ping 192.168.1.1                          # Test router
-sudo systemctl restart dhcpcd             # Restart network
+cd ~/kio-new
+npm rebuild bcrypt
 ```
 
-### Screen Blanking
+## Hard Rules
 
-```bash
-xset s off
-xset -dpms
-xset s noblank
-```
+- Do not run blanket `pm2 stop all` or `pm2 delete all` during normal operations.
+- Do not use KB seed or migration scripts for live content edits.
+- Do not copy `node_modules` from another machine.
+- Do not switch back to `~/spa-kiosk` without explicit rollback intent and a backup plan.
 
----
+## Rollback Note
 
-## Performance Optimization
-
-### Monitor Resources
-
-```bash
-htop                          # CPU/Memory
-df -h                         # Disk usage
-vcgencmd measure_temp         # Temperature
-```
-
-### Optimizations (Applied by Setup Script)
-
-- ✅ GPU memory: 256MB
-- ✅ Swap: 2GB
-- ✅ Disabled: Bluetooth, Avahi
-- ✅ Fast boot enabled
-- ✅ Screen blanking disabled
-
-### Additional Tweaks
-
-```bash
-# CPU governor to performance
-echo "performance" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-
-# Disable more services
-sudo systemctl disable cups
-```
-
----
-
-## Security
-
-### Change Passwords
-
-```bash
-passwd                                    # Change pi user password
-nano ~/spa-kiosk/backend/.env             # Change admin password
-pm2 restart kiosk-backend
-```
-
-### Firewall
-
-```bash
-sudo apt-get install ufw
-sudo ufw allow 22/tcp                     # SSH
-sudo ufw allow 3001/tcp                   # Backend
-sudo ufw enable
-```
-
-### SSH Security
-
-```bash
-sudo nano /etc/ssh/sshd_config
-# Set: PasswordAuthentication no
-sudo systemctl restart ssh
-```
-
----
-
-## System Services
-
-### Watchdog Service
-
-Monitors and restarts kiosk if crashed:
-
-```bash
-sudo systemctl status kiosk-watchdog      # Check status
-sudo journalctl -u kiosk-watchdog -f      # View logs
-sudo systemctl restart kiosk-watchdog     # Restart
-```
-
-### Automatic Backups
-
-Daily at 2 AM:
-
-```bash
-crontab -l                                # View schedule
-~/spa-kiosk/deployment/raspberry-pi/backup-database.sh  # Manual backup
-ls -lh ~/spa-kiosk/data/backups/          # View backups
-```
-
----
-
-## Hardware Recommendations
-
-### Raspberry Pi 5
-- **RAM**: 4GB minimum, 8GB recommended
-- **Storage**: 32GB SD card minimum, 64GB+ recommended
-- **Power**: Official 27W USB-C power supply
-- **Cooling**: Active cooling for 24/7 operation
-
-### Display
-- **Resolution**: 1920x1080 recommended
-- **Connection**: HDMI
-- **Touch**: Optional USB touch overlay
-
-### Network
-- **Ethernet**: Recommended for stability
-- **WiFi**: Supported but Ethernet preferred
-
----
-
-## Maintenance Schedule
-
-### Daily (Automatic)
-- Database backup (2 AM)
-- Watchdog monitoring
-
-### Weekly
-```bash
-pm2 logs kiosk-backend --lines 100        # Check logs
-df -h                                     # Check disk space
-vcgencmd measure_temp                     # Check temperature
-```
-
-### Monthly
-```bash
-sudo apt-get update && sudo apt-get upgrade  # Update system
-./update-pi.sh                            # Update application
-ls -lh ~/spa-kiosk/data/backups/          # Review backups
-```
-
----
-
-## Uninstall
-
-```bash
-pm2 stop kiosk-backend
-pm2 delete kiosk-backend
-pm2 save
-pm2 unstartup systemd
-rm ~/.config/autostart/kiosk.desktop
-crontab -e  # Remove backup cron job
-cd ~ && rm -rf spa-kiosk
-```
-
----
-
-## Access Points
-
-- **Kiosk Display**: http://localhost:3000 (auto-starts)
-- **Admin Panel**: http://192.168.1.16:3001/admin (from network)
-- **Backend API**: http://192.168.1.16:3001/api
-
----
-
-## Support
-
-### Documentation
-- [PI_SETUP_GUIDE.md](PI_SETUP_GUIDE.md) - Detailed setup & troubleshooting
-- [PI_INSTALLATION_CHECKLIST.md](PI_INSTALLATION_CHECKLIST.md) - Verification checklist
-- [Main README](../../README.md) - Project overview
-
-### Logs
-```bash
-pm2 logs kiosk-backend                    # Backend logs
-sudo journalctl -u kiosk-watchdog         # Watchdog logs
-tail -f ~/spa-kiosk/logs/backend.log      # Application logs
-```
-
-### System Info
-```bash
-uname -a                                  # System info
-cat /proc/cpuinfo                         # CPU info
-vcgencmd get_mem arm && vcgencmd get_mem gpu  # Memory info
-```
+There is no single safe rollback command anymore. Use one of these instead:
+- restore the database with `restore-backup.sh`
+- deploy a known-good git commit into `~/kio-new`
+- fall back to `~/spa-kiosk` only as a manual recovery operation after reviewing service impact

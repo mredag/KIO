@@ -13,7 +13,7 @@
 # - Configure system optimizations
 ################################################################################
 
-set -e  # Exit on error
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -23,12 +23,15 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-STATIC_IP="192.168.1.16"
-ROUTER_IP="192.168.1.1"
-APP_USER="pi"
-APP_DIR="/home/pi/spa-kiosk"
-KIOSK_URL="http://localhost:3000"
-NODE_VERSION="20"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATIC_IP="${STATIC_IP:-192.168.1.16}"
+ROUTER_IP="${ROUTER_IP:-192.168.1.1}"
+APP_USER="${APP_USER:-$(id -un)}"
+APP_HOME="${APP_HOME:-$HOME}"
+APP_DIR="${APP_DIR:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+KIOSK_URL="${KIOSK_URL:-http://localhost:3001}"
+NODE_VERSION="${NODE_VERSION:-22}"
+BACKEND_PM2_NAME="${BACKEND_PM2_NAME:-kio-backend}"
 
 ################################################################################
 # Helper Functions
@@ -52,7 +55,7 @@ log_error() {
 
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        log_error "Please run this script as the pi user, not as root"
+        log_error "Please run this script as a regular user with sudo access, not as root"
         exit 1
     fi
 }
@@ -119,11 +122,16 @@ install_nodejs() {
 
 install_system_dependencies() {
     log_info "Installing system dependencies..."
-    
+
+    local chromium_package="chromium-browser"
+    if ! apt-cache show chromium-browser >/dev/null 2>&1; then
+        chromium_package="chromium"
+    fi
+
     sudo apt-get install -y \
         git \
         sqlite3 \
-        chromium-browser \
+        "$chromium_package" \
         unclutter \
         xdotool \
         x11-xserver-utils \
@@ -137,12 +145,12 @@ install_system_dependencies() {
 
 install_pm2() {
     log_info "Installing PM2 process manager..."
-    
+
     sudo npm install -g pm2
-    
+
     # Configure PM2 to start on boot
-    pm2 startup systemd -u $APP_USER --hp /home/$APP_USER
-    sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $APP_USER --hp /home/$APP_USER
+    pm2 startup systemd -u "$APP_USER" --hp "$APP_HOME"
+    sudo env "PATH=$PATH:/usr/bin" pm2 startup systemd -u "$APP_USER" --hp "$APP_HOME"
     
     log_success "PM2 installed and configured"
 }
@@ -155,14 +163,14 @@ configure_kiosk_autostart() {
     log_info "Configuring kiosk autostart..."
     
     # Create autostart directory
-    mkdir -p /home/$APP_USER/.config/autostart
+    mkdir -p "$APP_HOME/.config/autostart"
     
     # Create kiosk autostart file
-    cat > /home/$APP_USER/.config/autostart/kiosk.desktop <<EOF
+    cat > "$APP_HOME/.config/autostart/kiosk.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Kiosk
-Exec=/home/$APP_USER/start-kiosk.sh
+Exec=$APP_HOME/start-kiosk.sh
 X-GNOME-Autostart-enabled=true
 EOF
     
@@ -172,7 +180,7 @@ EOF
 create_kiosk_startup_script() {
     log_info "Creating kiosk startup script..."
     
-    cat > /home/$APP_USER/start-kiosk.sh <<'EOF'
+    cat > "$APP_HOME/start-kiosk.sh" <<'EOF'
 #!/bin/bash
 
 # Wait for network
@@ -195,8 +203,14 @@ while ! curl -s http://localhost:3001/api/kiosk/health > /dev/null; do
     sleep 2
 done
 
+CHROMIUM_BIN="$(command -v chromium-browser || command -v chromium || true)"
+if [ -z "$CHROMIUM_BIN" ]; then
+    echo "Chromium binary not found"
+    exit 1
+fi
+
 # Start Chromium in kiosk mode
-chromium-browser \
+"$CHROMIUM_BIN" \
     --kiosk \
     --noerrdialogs \
     --disable-infobars \
@@ -216,25 +230,34 @@ chromium-browser \
     http://localhost:3001
 EOF
     
-    chmod +x /home/$APP_USER/start-kiosk.sh
+    chmod +x "$APP_HOME/start-kiosk.sh"
     
     log_success "Kiosk startup script created"
 }
 
 configure_boot_config() {
     log_info "Configuring boot settings..."
-    
+
+    local boot_cmdline="/boot/cmdline.txt"
+    local boot_config="/boot/config.txt"
+    if [ -f /boot/firmware/cmdline.txt ]; then
+        boot_cmdline="/boot/firmware/cmdline.txt"
+    fi
+    if [ -f /boot/firmware/config.txt ]; then
+        boot_config="/boot/firmware/config.txt"
+    fi
+
     # Disable splash screen and enable fast boot
-    sudo sed -i 's/console=tty1/console=tty3 loglevel=3 quiet splash vt.global_cursor_default=0/' /boot/cmdline.txt
+    sudo sed -i 's/console=tty1/console=tty3 loglevel=3 quiet splash vt.global_cursor_default=0/' "$boot_cmdline"
     
     # GPU memory allocation
-    if ! grep -q "gpu_mem=" /boot/config.txt; then
-        echo "gpu_mem=256" | sudo tee -a /boot/config.txt
+    if ! grep -q "gpu_mem=" "$boot_config"; then
+        echo "gpu_mem=256" | sudo tee -a "$boot_config"
     fi
     
     # Disable screen blanking in boot config
-    if ! grep -q "hdmi_blanking=1" /boot/config.txt; then
-        echo "hdmi_blanking=1" | sudo tee -a /boot/config.txt
+    if ! grep -q "hdmi_blanking=1" "$boot_config"; then
+        echo "hdmi_blanking=1" | sudo tee -a "$boot_config"
     fi
     
     log_success "Boot configuration updated"
@@ -264,29 +287,34 @@ EOF
 
 clone_or_update_repo() {
     log_info "Setting up application..."
-    
-    if [ -d "$APP_DIR" ]; then
-        log_info "Application directory exists, pulling latest changes..."
-        cd $APP_DIR
-        git pull
-    else
-        log_info "Cloning application repository..."
-        # Replace with your actual repository URL
-        log_warning "Please clone your repository manually to $APP_DIR"
-        log_warning "Or update this script with your repository URL"
-        mkdir -p $APP_DIR
+
+    if [ ! -d "$APP_DIR/.git" ]; then
+        log_error "Git repository not found at $APP_DIR"
+        log_error "Clone the repo first, or set APP_DIR to the checked-out repository."
+        exit 1
     fi
-    
-    cd $APP_DIR
+
+    cd "$APP_DIR"
+    if git remote get-url origin >/dev/null 2>&1; then
+        git pull --ff-only origin master || log_warning "git pull failed; continuing with the existing checkout"
+    else
+        log_warning "No git origin configured; using existing checkout as-is"
+    fi
+}
+
+install_workspace_dependencies() {
+    log_info "Installing workspace dependencies..."
+
+    cd "$APP_DIR"
+    npm ci --no-audit --no-fund
+
+    log_success "Workspace dependencies installed"
 }
 
 setup_backend() {
     log_info "Setting up backend..."
     
-    cd $APP_DIR/backend
-    
-    # Install dependencies
-    npm install
+    cd "$APP_DIR/backend"
     
     # Create .env file with production settings
     if [ ! -f .env ]; then
@@ -296,7 +324,7 @@ PORT=3001
 NODE_ENV=production
 
 # Database
-DATABASE_PATH=./data/kiosk.db
+DATABASE_PATH=../data/kiosk.db
 
 # Session
 SESSION_SECRET=$(openssl rand -base64 32)
@@ -317,13 +345,11 @@ EOF
     
     # Create data directory
     mkdir -p ../data/backups
-    
-    # Remove test files to avoid build errors
-    find src -name "*.test.ts" -type f -delete
-    find src -type d -name "e2e" -exec rm -rf {} + 2>/dev/null || true
-    
+
     # Build backend
-    npm run build
+    npx tsc -p tsconfig.build.json
+    mkdir -p dist/database
+    cp src/database/*.sql dist/database/
     
     log_success "Backend setup complete"
 }
@@ -331,10 +357,7 @@ EOF
 setup_frontend() {
     log_info "Setting up frontend..."
     
-    cd $APP_DIR/frontend
-    
-    # Install dependencies
-    npm install
+    cd "$APP_DIR/frontend"
     
     # Build frontend (skip TypeScript check, use vite directly)
     npx vite build
@@ -349,19 +372,16 @@ setup_frontend() {
 configure_pm2() {
     log_info "Configuring PM2..."
     
-    cd $APP_DIR
-    
-    # Stop existing processes
-    pm2 delete all || true
-    
-    # Start backend with PM2
-    cd backend
-    pm2 start npm --name "kiosk-backend" -- run start
+    cd "$APP_DIR/backend"
+
+    pm2 stop "$BACKEND_PM2_NAME" 2>/dev/null || true
+    pm2 delete "$BACKEND_PM2_NAME" 2>/dev/null || true
+    pm2 start npm --name "$BACKEND_PM2_NAME" -- start
     
     # Save PM2 configuration
     pm2 save
     
-    log_success "PM2 configured and backend started"
+    log_success "PM2 configured and ${BACKEND_PM2_NAME} started"
 }
 
 ################################################################################
@@ -393,8 +413,8 @@ setup_watchdog() {
     log_info "Setting up watchdog service..."
     
     # Copy watchdog script
-    cp $APP_DIR/deployment/raspberry-pi/watchdog-kiosk.sh /home/$APP_USER/watchdog-kiosk.sh
-    chmod +x /home/$APP_USER/watchdog-kiosk.sh
+    cp "$APP_DIR/deployment/raspberry-pi/watchdog-kiosk.sh" "$APP_HOME/watchdog-kiosk.sh"
+    chmod +x "$APP_HOME/watchdog-kiosk.sh"
     
     # Create systemd service
     sudo tee /etc/systemd/system/kiosk-watchdog.service > /dev/null <<EOF
@@ -405,7 +425,7 @@ After=network.target
 [Service]
 Type=simple
 User=$APP_USER
-ExecStart=/home/$APP_USER/watchdog-kiosk.sh
+ExecStart=$APP_HOME/watchdog-kiosk.sh
 Restart=always
 RestartSec=60
 
@@ -426,9 +446,11 @@ EOF
 
 setup_backup_cron() {
     log_info "Setting up automatic backups..."
-    
+
+    local cron_line="0 2 * * * $APP_DIR/deployment/raspberry-pi/backup-database.sh"
+
     # Add cron job for daily backups at 2 AM
-    (crontab -l 2>/dev/null; echo "0 2 * * * $APP_DIR/deployment/raspberry-pi/backup-database.sh") | crontab -
+    (crontab -l 2>/dev/null | grep -Fv "$APP_DIR/deployment/raspberry-pi/backup-database.sh"; echo "$cron_line") | crontab -
     
     log_success "Automatic backups configured"
 }
@@ -515,6 +537,7 @@ main() {
     
     # Application deployment
     clone_or_update_repo
+    install_workspace_dependencies
     setup_backend
     setup_frontend
     configure_pm2
@@ -539,8 +562,8 @@ main() {
     echo ""
     log_info "Useful commands:"
     echo "  - Check backend status: pm2 status"
-    echo "  - View backend logs: pm2 logs kiosk-backend"
-    echo "  - Restart backend: pm2 restart kiosk-backend"
+    echo "  - View backend logs: pm2 logs kio-backend"
+    echo "  - Restart backend: pm2 restart kio-backend"
     echo "  - Access admin panel: http://${STATIC_IP}:3001/admin"
     echo ""
     log_warning "Please reboot now: sudo reboot"

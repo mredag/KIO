@@ -1,21 +1,30 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Start backend with PM2 process manager
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+set -euo pipefail
 
-# Stop existing process if running
-pm2 stop kiosk-backend 2>/dev/null || true
-pm2 delete kiosk-backend 2>/dev/null || true
+APP_DIR="${APP_DIR:-/home/$USER/kio-new}"
+BACKEND_PM2_NAME="${BACKEND_PM2_NAME:-kio-backend}"
+BACKEND_DIR="${APP_DIR}/backend"
 
-# Start backend
-cd "$PROJECT_ROOT/backend"
-pm2 start npm --name "kiosk-backend" -- start
+if [[ ! -d "${BACKEND_DIR}" ]]; then
+  echo "Backend directory not found: ${BACKEND_DIR}" >&2
+  exit 1
+fi
 
-echo "✅ Backend started with PM2"
-echo ""
-echo "Management commands:"
-echo "  pm2 status              - Check status"
-echo "  pm2 logs kiosk-backend  - View logs"
-echo "  pm2 restart kiosk-backend - Restart"
-echo "  pm2 stop kiosk-backend  - Stop"
+pm2 stop "${BACKEND_PM2_NAME}" 2>/dev/null || true
+pm2 delete "${BACKEND_PM2_NAME}" 2>/dev/null || true
+
+cd "${BACKEND_DIR}"
+pm2 start npm --name "${BACKEND_PM2_NAME}" -- start
+
+cat <<EOF
+Backend started with PM2
+
+Management commands:
+  pm2 status
+  pm2 logs ${BACKEND_PM2_NAME}
+  pm2 restart ${BACKEND_PM2_NAME}
+  pm2 stop ${BACKEND_PM2_NAME}
+EOF

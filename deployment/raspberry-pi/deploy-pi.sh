@@ -1,13 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ################################################################################
 # Raspberry Pi Deployment Script
-# Deploys the application to Raspberry Pi
+# Bootstraps or refreshes the live kio-new deployment.
 ################################################################################
 
-set -e
+set -euo pipefail
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -19,74 +18,37 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-APP_DIR="/home/$USER/spa-kiosk"
+APP_DIR="${APP_DIR:-/home/$USER/kio-new}"
+BACKEND_ENV="${APP_DIR}/backend/.env"
+UPDATER="${APP_DIR}/deployment/raspberry-pi/update-pi.sh"
 
-log_info "Starting deployment..."
+log_info "Starting deployment in ${APP_DIR}"
 
-# Create backup before deployment
-if [ -f "$APP_DIR/backend/data/kiosk.db" ]; then
-    log_info "Creating pre-deployment backup..."
-    bash "$APP_DIR/deployment/raspberry-pi/backup-before-deploy.sh" || log_warning "Backup failed, continuing anyway..."
+if [[ ! -d "${APP_DIR}" ]]; then
+  log_error "Application directory not found: ${APP_DIR}"
+  exit 1
 fi
 
-# Navigate to app directory
-cd $APP_DIR
-
-# Install dependencies
-log_info "Installing dependencies..."
-cd backend && npm install
-cd ../frontend && npm install
-cd ..
-
-# Build backend
-log_info "Building backend..."
-cd backend
-
-# Remove test files to avoid build errors
-find src -name "*.test.ts" -type f -delete 2>/dev/null || true
-find src -type d -name "e2e" -exec rm -rf {} + 2>/dev/null || true
-
-# Create production .env if doesn't exist
-if [ ! -f .env ]; then
-    log_info "Creating production .env..."
-    cat > .env <<EOF
+if [[ ! -f "${BACKEND_ENV}" ]]; then
+  log_info "Creating backend/.env"
+  cat > "${BACKEND_ENV}" <<EOF
 PORT=3001
 NODE_ENV=production
-DATABASE_PATH=./data/kiosk.db
+DATABASE_PATH=../data/kiosk.db
 SESSION_SECRET=$(openssl rand -base64 32)
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin123
 MAX_VIDEO_SIZE=52428800
 MAX_IMAGE_SIZE=5242880
 EOF
-else
-    # Ensure NODE_ENV is production
-    sed -i 's/NODE_ENV=development/NODE_ENV=production/' .env
+  log_warning "Change ADMIN_PASSWORD in ${BACKEND_ENV} after deployment"
 fi
 
-# Create data directory
-mkdir -p ../data/backups
+if [[ ! -x "${UPDATER}" ]]; then
+  chmod +x "${UPDATER}"
+fi
 
-# Build
-npm run build
+log_info "Running standard updater..."
+"${UPDATER}"
 
-# Build frontend
-log_info "Building frontend..."
-cd ../frontend
-npx vite build
-
-# Copy to backend public
-log_info "Copying frontend to backend..."
-rm -rf ../backend/public
-cp -r dist ../backend/public
-
-# Start with PM2
-log_info "Starting backend with PM2..."
-cd ../backend
-pm2 delete kiosk-backend 2>/dev/null || true
-pm2 start npm --name kiosk-backend -- run start
-pm2 save
-
-log_success "Deployment complete!"
-log_info "Backend running on port 3001"
-log_info "Access: http://localhost:3001"
+log_success "Deployment complete"

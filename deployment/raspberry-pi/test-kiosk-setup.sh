@@ -81,15 +81,15 @@ echo ""
 
 # Test 5: Application directory
 log_test "Checking application directory..."
-if [ -d "$HOME/spa-kiosk" ]; then
+if [ -d "$HOME/kio-new" ]; then
     log_pass "Application directory exists"
 else
-    log_fail "Application directory not found at $HOME/spa-kiosk"
+    log_fail "Application directory not found at $HOME/kio-new"
 fi
 
 # Test 6: Backend build
 log_test "Checking backend build..."
-if [ -d "$HOME/spa-kiosk/backend/dist" ]; then
+if [ -d "$HOME/kio-new/backend/dist" ]; then
     log_pass "Backend built (dist folder exists)"
 else
     log_fail "Backend not built (dist folder missing)"
@@ -97,7 +97,7 @@ fi
 
 # Test 7: Frontend build
 log_test "Checking frontend build..."
-if [ -d "$HOME/spa-kiosk/backend/public" ]; then
+if [ -d "$HOME/kio-new/backend/public" ]; then
     log_pass "Frontend built (public folder exists)"
 else
     log_fail "Frontend not built (public folder missing)"
@@ -105,8 +105,8 @@ fi
 
 # Test 8: Database
 log_test "Checking database..."
-if [ -f "$HOME/spa-kiosk/data/kiosk.db" ]; then
-    SIZE=$(du -h "$HOME/spa-kiosk/data/kiosk.db" | cut -f1)
+if [ -f "$HOME/kio-new/data/kiosk.db" ]; then
+    SIZE=$(du -h "$HOME/kio-new/data/kiosk.db" | cut -f1)
     log_pass "Database exists ($SIZE)"
 else
     log_warn "Database not found (will be created on first run)"
@@ -114,9 +114,9 @@ fi
 
 # Test 9: Backend .env
 log_test "Checking backend configuration..."
-if [ -f "$HOME/spa-kiosk/backend/.env" ]; then
-    NODE_ENV=$(grep NODE_ENV "$HOME/spa-kiosk/backend/.env" | cut -d= -f2)
-    PORT=$(grep PORT "$HOME/spa-kiosk/backend/.env" | cut -d= -f2)
+if [ -f "$HOME/kio-new/backend/.env" ]; then
+    NODE_ENV=$(grep NODE_ENV "$HOME/kio-new/backend/.env" | cut -d= -f2)
+    PORT=$(grep PORT "$HOME/kio-new/backend/.env" | cut -d= -f2)
     
     if [ "$NODE_ENV" = "production" ]; then
         log_pass "NODE_ENV=production ✓"
@@ -144,8 +144,8 @@ echo ""
 
 # Test 10: PM2 process
 log_test "Checking PM2 backend process..."
-if pm2 list | grep -q "kiosk-backend"; then
-    STATUS=$(pm2 jlist | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+if pm2 list | grep -q "kio-backend"; then
+    STATUS=$(pm2 jlist | node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync(0, "utf8")); const app = data.find((entry) => entry.name === "kio-backend"); process.stdout.write(app?.pm2_env?.status || "unknown");')
     if [ "$STATUS" = "online" ]; then
         log_pass "Backend process running (status: online)"
     else
@@ -155,7 +155,20 @@ else
     log_fail "Backend process not found in PM2"
 fi
 
-# Test 11: PM2 startup
+# Test 11: OpenClaw process
+log_test "Checking PM2 OpenClaw process..."
+if pm2 list | grep -q "kio-openclaw"; then
+    OPENCLAW_STATUS=$(pm2 jlist | node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync(0, "utf8")); const app = data.find((entry) => entry.name === "kio-openclaw"); process.stdout.write(app?.pm2_env?.status || "unknown");')
+    if [ "$OPENCLAW_STATUS" = "online" ]; then
+        log_pass "OpenClaw process running (status: online)"
+    else
+        log_warn "OpenClaw process found but status is $OPENCLAW_STATUS"
+    fi
+else
+    log_warn "OpenClaw process not found in PM2"
+fi
+
+# Test 12: PM2 startup
 log_test "Checking PM2 startup configuration..."
 if pm2 startup | grep -q "already"; then
     log_pass "PM2 startup configured"
@@ -163,7 +176,7 @@ else
     log_warn "PM2 startup may not be configured"
 fi
 
-# Test 12: PM2 save
+# Test 13: PM2 save
 log_test "Checking PM2 saved processes..."
 if [ -f "$HOME/.pm2/dump.pm2" ]; then
     log_pass "PM2 processes saved"
@@ -180,7 +193,7 @@ echo ""
 echo "=== Backend API Tests ==="
 echo ""
 
-# Test 13: Backend health
+# Test 14: Backend health
 log_test "Testing backend health endpoint..."
 HEALTH=$(curl -s http://localhost:3001/api/kiosk/health 2>&1)
 if echo "$HEALTH" | grep -q "ok"; then
@@ -189,7 +202,7 @@ else
     log_fail "Backend health check failed: $HEALTH"
 fi
 
-# Test 14: Backend menu endpoint
+# Test 15: Backend menu endpoint
 log_test "Testing backend menu endpoint..."
 MENU=$(curl -s http://localhost:3001/api/kiosk/menu 2>&1)
 if echo "$MENU" | grep -q "featured\|regular"; then
@@ -198,7 +211,7 @@ else
     log_warn "Backend menu endpoint returned unexpected data"
 fi
 
-# Test 15: Frontend served
+# Test 16: Frontend served
 log_test "Testing frontend serving..."
 FRONTEND=$(curl -s -I http://localhost:3001 2>&1 | head -1)
 if echo "$FRONTEND" | grep -q "200"; then
@@ -216,7 +229,7 @@ echo ""
 echo "=== Kiosk Configuration Tests ==="
 echo ""
 
-# Test 16: Kiosk startup script
+# Test 17: Kiosk startup script
 log_test "Checking kiosk startup script..."
 if [ -f "$HOME/start-kiosk.sh" ]; then
     if [ -x "$HOME/start-kiosk.sh" ]; then
@@ -235,7 +248,7 @@ else
     log_fail "Kiosk startup script not found"
 fi
 
-# Test 17: Autostart configuration
+# Test 18: Autostart configuration
 log_test "Checking autostart configuration..."
 if [ -f "$HOME/.config/autostart/kiosk.desktop" ]; then
     log_pass "Autostart desktop file exists"
@@ -249,7 +262,7 @@ else
     log_fail "Autostart desktop file not found"
 fi
 
-# Test 18: Screen blanking disabled
+# Test 19: Screen blanking disabled
 log_test "Checking screen blanking configuration..."
 if [ -f "/etc/X11/xorg.conf.d/10-monitor.conf" ]; then
     log_pass "Screen blanking configuration exists"
@@ -266,7 +279,7 @@ echo ""
 echo "=== Network Tests ==="
 echo ""
 
-# Test 19: Static IP
+# Test 20: Static IP
 log_test "Checking static IP configuration..."
 if grep -q "static ip_address" /etc/dhcpcd.conf 2>/dev/null; then
     STATIC_IP=$(grep "static ip_address" /etc/dhcpcd.conf | head -1 | awk '{print $3}')
@@ -275,7 +288,7 @@ else
     log_warn "Static IP may not be configured (using DHCP)"
 fi
 
-# Test 20: Current IP
+# Test 21: Current IP
 log_test "Checking current IP address..."
 CURRENT_IP=$(hostname -I | awk '{print $1}')
 log_pass "Current IP: $CURRENT_IP"
@@ -289,7 +302,7 @@ echo ""
 echo "=== Optional Features Tests ==="
 echo ""
 
-# Test 21: Watchdog service
+# Test 22: Watchdog service
 log_test "Checking watchdog service..."
 if systemctl is-active --quiet kiosk-watchdog 2>/dev/null; then
     log_pass "Watchdog service running"
@@ -299,7 +312,7 @@ else
     log_warn "Watchdog service not configured"
 fi
 
-# Test 22: Backup cron job
+# Test 23: Backup cron job
 log_test "Checking backup cron job..."
 if crontab -l 2>/dev/null | grep -q "backup-database.sh"; then
     log_pass "Backup cron job configured"
@@ -307,10 +320,10 @@ else
     log_warn "Backup cron job not configured"
 fi
 
-# Test 23: Backup directory
+# Test 24: Backup directory
 log_test "Checking backup directory..."
-if [ -d "$HOME/spa-kiosk/data/backups" ]; then
-    BACKUP_COUNT=$(ls -1 "$HOME/spa-kiosk/data/backups" 2>/dev/null | wc -l)
+if [ -d "$HOME/kio-new/data/backups" ]; then
+    BACKUP_COUNT=$(ls -1 "$HOME/kio-new/data/backups" 2>/dev/null | wc -l)
     log_pass "Backup directory exists ($BACKUP_COUNT backups)"
 else
     log_warn "Backup directory not found"
@@ -325,17 +338,17 @@ echo ""
 echo "=== Performance Tests ==="
 echo ""
 
-# Test 24: Memory usage
+# Test 25: Memory usage
 log_test "Checking memory usage..."
 MEMORY=$(free -h | grep Mem | awk '{print $3 "/" $2}')
 log_pass "Memory usage: $MEMORY"
 
-# Test 25: Disk usage
+# Test 26: Disk usage
 log_test "Checking disk usage..."
 DISK=$(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 " used)"}')
 log_pass "Disk usage: $DISK"
 
-# Test 26: CPU temperature
+# Test 27: CPU temperature
 log_test "Checking CPU temperature..."
 if command -v vcgencmd &> /dev/null; then
     TEMP=$(vcgencmd measure_temp 2>/dev/null | cut -d= -f2)
@@ -371,6 +384,6 @@ else
     echo "Common fixes:"
     echo "  - Run setup script: ./setup-raspberry-pi.sh"
     echo "  - Rebuild application: ./deploy-pi.sh"
-    echo "  - Check PM2 logs: pm2 logs kiosk-backend"
+    echo "  - Check PM2 logs: pm2 logs kio-backend"
     exit 1
 fi

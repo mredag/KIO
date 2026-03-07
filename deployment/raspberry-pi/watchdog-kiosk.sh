@@ -1,36 +1,34 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Watchdog script for SPA Digital Kiosk
-# Monitors backend and Chromium, restarts if crashed
-# Add to crontab: */5 * * * * /path/to/watchdog-kiosk.sh
+# Watchdog script for the Raspberry Pi kiosk
+# Monitors backend and Chromium, restarts if they crash.
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_FILE="$PROJECT_ROOT/logs/watchdog.log"
+set -euo pipefail
 
-# Create log directory
-mkdir -p "$PROJECT_ROOT/logs"
+APP_DIR="${APP_DIR:-/home/$USER/kio-new}"
+BACKEND_PM2_NAME="${BACKEND_PM2_NAME:-kio-backend}"
+LOG_FILE="${APP_DIR}/logs/watchdog.log"
+START_BACKEND_SCRIPT="${APP_DIR}/deployment/raspberry-pi/start-backend-pm2.sh"
+START_KIOSK_SCRIPT="${HOME}/start-kiosk.sh"
 
-# Log function
+mkdir -p "$(dirname "${LOG_FILE}")"
+
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${LOG_FILE}"
 }
 
-# Check backend
-if ! pm2 list | grep -q "kiosk-backend.*online"; then
-    log "Backend not running, restarting..."
-    cd "$PROJECT_ROOT/deployment"
-    ./start-backend-pm2.sh >> "$LOG_FILE" 2>&1
-    log "Backend restarted"
+if ! pm2 list | grep -q "${BACKEND_PM2_NAME}.*online"; then
+  log "Backend not running, restarting ${BACKEND_PM2_NAME}..."
+  "${START_BACKEND_SCRIPT}" >> "${LOG_FILE}" 2>&1
+  log "Backend restarted"
 fi
 
-# Check Chromium
-if ! pgrep -x "chromium-browser" > /dev/null; then
-    log "Chromium not running, restarting..."
-    export DISPLAY=:0
-    cd "$PROJECT_ROOT/deployment"
-    ./start-kiosk.sh >> "$LOG_FILE" 2>&1 &
-    log "Chromium restarted"
+if ! pgrep -x "chromium-browser" >/dev/null && ! pgrep -x "chromium" >/dev/null; then
+  log "Chromium not running, restarting..."
+  export DISPLAY=:0
+  "${START_KIOSK_SCRIPT}" >> "${LOG_FILE}" 2>&1 &
+  log "Chromium restarted"
 fi
 
-# Keep last 500 lines of log
-tail -n 500 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE"
+# Keep last 500 lines.
+tail -n 500 "${LOG_FILE}" > "${LOG_FILE}.tmp" 2>/dev/null && mv "${LOG_FILE}.tmp" "${LOG_FILE}"

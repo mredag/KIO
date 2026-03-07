@@ -4,116 +4,83 @@ inclusion: manual
 
 # Raspberry Pi Deployment
 
-**Pi:** 192.168.1.8 | **User:** eform-kio | **Node:** 22.x | **OS:** Debian 13 (trixie) aarch64
-**New system:** `~/kio-new/` | **Old system (rollback):** `~/spa-kiosk/`
-**SSH:** `ssh eform-kio@192.168.1.8` (default key `~/.ssh/id_ed25519`)
+**Pi:** `192.168.1.8`
+**User:** `eform-kio`
+**Node:** `22.22.0`
+**Live app:** `~/kio-new`
+**Rollback checkout:** `~/spa-kiosk`
 
-## Running Services
+## Live Services
 
-| Service | Manager | Port | Status |
-|---------|---------|------|--------|
-| kio-backend | PM2 | 3001 | online |
-| kio-openclaw | PM2 (bash wrapper) | 18789 | online |
-| cloudflared | systemd | — | enabled |
-| Chromium kiosk | autostart | — | enabled |
-| n8n | systemd | 5678 | disabled |
+| Service | Manager | Port | Expected state |
+| --- | --- | --- | --- |
+| `kio-backend` | PM2 | `3001` | `online` |
+| `kio-openclaw` | PM2 | `18789` | `online` |
+| `cloudflared` | systemd | n/a | `enabled` |
+| Chromium kiosk | autostart | n/a | starts after login |
 
-## Deploy Updates
+## Standard Update
 
-Recommended standard maintenance command:
 ```bash
 cd ~/kio-new/deployment/raspberry-pi
 ./update-pi.sh
 ```
 
-What it does:
-- `git pull --ff-only origin master`
-- `npm ci --no-audit --no-fund`
-- backend build via `tsconfig.build.json`
-- copies `*.sql` into `backend/dist/database/`
-- frontend build + copy to `backend/public/`
+This is the only normal live-update path.
+
+It:
+- backs up `data/kiosk.db`
+- fast-forwards git from `origin/master`
+- runs `npm ci --no-audit --no-fund`
+- rebuilds backend with `tsconfig.build.json`
+- copies SQL assets into `backend/dist/database/`
+- rebuilds frontend and refreshes `backend/public/`
 - restarts `kio-backend`
-- runs `sync-openclaw-runtime.sh --restart`
-- checks `http://localhost:3001/api/kiosk/health`
+- syncs tracked OpenClaw runtime files
+- restarts `kio-openclaw`
+- verifies backend health
 
-Manual equivalent:
+## OpenClaw Runtime Sync
+
 ```bash
-# SSH into Pi
-ssh eform-kio@192.168.1.8
-
-# Pull latest code
-cd ~/kio-new && git pull
-
-# Sync tracked OpenClaw workspace/transform files
+cd ~/kio-new
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --dry-run
 ./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart
-
-# Build backend
-cd backend && npx tsc -p tsconfig.build.json
-cp src/database/*.sql dist/database/
-
-# Build frontend
-cd ../frontend && npx vite build
-
-# Restart services
-pm2 restart kio-backend
-pm2 restart kio-openclaw  # only if openclaw config changed
 ```
 
-## Critical Rules
+Rules:
+- tracked source is `openclaw-config/`
+- runtime destination is `~/.openclaw/`
+- `~/.openclaw/openclaw.json` is machine-local and not tracked
 
-1. Use `tsconfig.build.json` for backend builds (NOT `tsconfig.json`)
-2. Copy ALL `*.sql` files to `dist/database/` after build (schema.sql + agent-comms-schema.sql + mission-control-schema.sql)
-3. Set `NODE_ENV=production` in `.env`
-4. Never copy `node_modules` — always `npm install` on Pi
-5. Frontend served by backend on port 3001 in production (not separate server)
-6. After Node version upgrade: `npm rebuild bcrypt` (native module)
-7. OpenClaw requires Node >= 22.12 — Pi has 22.22.0 via NodeSource
-8. PM2 starts OpenClaw via bash wrapper `~/start-openclaw.sh` (direct binary doesn't spawn gateway)
-
-## OpenClaw Config (Pi-specific)
-
-Config at `~/.openclaw/openclaw.json` — uses Linux paths and local secrets. Keep it machine-local.
-Workspace at `~/.openclaw/workspace/` — all agent files (AGENTS.md, SOUL.md, TOOLS.md, etc.)
-Tracked workspace/transform files should be synced with `deployment/raspberry-pi/sync-openclaw-runtime.sh`.
-
-To update OpenClaw config from dev machine:
-```powershell
-scp openclaw-config/openclaw.json eform-kio@192.168.1.8:~/.openclaw/openclaw.json
-# IMPORTANT: edit the file to replace Windows paths with Linux paths
-ssh eform-kio@192.168.1.8 "cd ~/kio-new && ./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart"
-```
-
-## Cloudflared Split-Brain Warning
-
-Only ONE machine should run cloudflared with the same tunnel ID. If both dev and Pi run it, Meta webhooks randomly split between machines. Stop cloudflared on dev when Pi handles production.
-
-## Verification
+## Manual Verification
 
 ```bash
-pm2 list                                    # Both processes online
-curl http://localhost:3001/api/kiosk/health  # {"status":"ok"}
-ss -tlnp | grep 18789                       # OpenClaw gateway listening
-sudo systemctl status cloudflared            # active (running)
+pm2 status
+curl http://localhost:3001/api/kiosk/health
+pm2 logs kio-backend --lines 100
+pm2 logs kio-openclaw --lines 100
+ss -tlnp | grep 18789
 ```
 
-## Rollback to Old System
+## Hard Rules
 
-```bash
-pm2 stop all && pm2 delete all
-sudo systemctl enable --now pm2-eform-kio.service n8n.service cloudflared.service
-mv ~/.config/autostart/kiosk.desktop.disabled ~/.config/autostart/kiosk.desktop
-sudo reboot
-```
+1. Use `tsconfig.build.json` for backend production builds.
+2. Copy all SQL files into `backend/dist/database/` after backend build.
+3. Use `npm ci --no-audit --no-fund` on the Pi, not ad hoc per-workspace installs.
+4. Do not copy `node_modules` from another machine.
+5. Do not use blanket `pm2 stop all` or `pm2 delete all` during normal operations.
+6. Do not use KB seed or migration scripts for live KB edits.
+7. `~/spa-kiosk` is rollback only.
 
-## Common Errors
+## Recovery Notes
 
-| Error | Fix |
-|-------|-----|
-| `MODULE_NOT_FOUND bcrypt` | `npm rebuild bcrypt` (Node version mismatch) |
-| `ENOENT agent-comms-schema.sql` | `cp src/database/*.sql dist/database/` |
-| `Jarvis migration failed: require is not defined` | Harmless — `.cjs` migration already ran |
-| OpenClaw port not listening | Check `pm2 logs kio-openclaw`, restart with `pm2 restart kio-openclaw` |
-| EROFS read-only filesystem | OOM caused kernel panic — reboot Pi, check `free -h` |
-| Cloudflared tunnel conflict | Stop cloudflared on dev machine |
+Preferred recovery order:
+1. inspect logs
+2. restore DB from `~/kio-new/data/backups/` if data is the issue
+3. redeploy a known-good commit into `~/kio-new`
+4. use `~/spa-kiosk` only as a manual rollback decision
 
-**Last Updated:** 2026-02-28
+## Cloudflared Warning
+
+Only one machine should run the production tunnel for the same tunnel ID. Do not let both the dev machine and Pi serve the same webhook tunnel at the same time.

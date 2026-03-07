@@ -33,6 +33,7 @@
  */
 
 import type { FollowUpContextHint, ResponseDirective } from './InstagramContextService.js';
+import { extractUsageMetrics } from './UsageMetrics.js';
 
 // VALIDATION_MODEL is now dynamically passed from PipelineConfigService
 
@@ -591,11 +592,21 @@ export class ResponsePolicyService {
         return { valid: false, violations: [`API error ${response.status} (fail-closed)`], reason: `API error ${response.status}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
       }
 
-      const data = await response.json() as any;
-      const content = data?.choices?.[0]?.message?.content?.trim() || '';
-
-      const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokensEstimated = estimateTokens(VALIDATION_SYSTEM_PROMPT_SIMPLE + userPrompt) + estimateTokens(content);
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
+      const content = data.choices?.[0]?.message?.content?.trim() || '';
+      const tokensEstimated = extractUsageMetrics(
+        data,
+        VALIDATION_SYSTEM_PROMPT_SIMPLE + userPrompt,
+        content,
+      ).totalTokens;
 
       try {
         const cleaned = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();
@@ -803,11 +814,17 @@ YANITINI SADECE JSON OLARAK VER:
         return { valid: false, violations: ['Faithfulness API error (fail-closed)'], reason: `faithfulness API error ${response.status}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
       }
 
-      const data = await response.json() as any;
-      const content = data?.choices?.[0]?.message?.content?.trim() || '';
-
-      const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokensEstimated = estimateTokens(faithfulnessPrompt) + estimateTokens(content);
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
+      const content = data.choices?.[0]?.message?.content?.trim() || '';
+      const tokensEstimated = extractUsageMetrics(data, faithfulnessPrompt, content).totalTokens;
 
       try {
         const cleaned = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();
@@ -955,11 +972,17 @@ Kurallara uygun yeni bir yanıt yaz.`;
         return { response: null, latencyMs, tokensEstimated: 0 };
       }
 
-      const data = await response.json() as any;
-      const content = data?.choices?.[0]?.message?.content?.trim() || '';
-
-      const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokensEstimated = estimateTokens(systemPrompt + userPrompt) + estimateTokens(content);
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
+      const content = data.choices?.[0]?.message?.content?.trim() || '';
+      const tokensEstimated = extractUsageMetrics(data, systemPrompt + userPrompt, content).totalTokens;
 
       console.log('[PolicyAgent] Direct correction generated in %dms (%d chars)', latencyMs, content.length);
       return { response: content || null, latencyMs, tokensEstimated };

@@ -21,6 +21,7 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { ActivitySSEManager } from './ActivitySSEManager.js';
 import { EscalationService } from './EscalationService.js';
+import { extractUsageMetrics } from './UsageMetrics.js';
 
 // ── Types ──
 
@@ -414,13 +415,21 @@ YANITINI SADECE JSON OLARAK VER:
         return this.buildSkippedResult(response, latencyMs, 'API error');
       }
 
-      const data = await apiResponse.json() as any;
-      const content = data?.choices?.[0]?.message?.content?.trim() || '';
+      const data = await apiResponse.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
+      const content = data.choices?.[0]?.message?.content?.trim() || '';
 
-      // Estimate cost
-      const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokens = estimateTokens(prompt) + estimateTokens(content);
-      this.currentRun!.totalCost += tokens * 0.00000004; // rough estimate
+      const usage = extractUsageMetrics(data, prompt, content);
+      this.currentRun!.totalCost += usage.costUsd > 0
+        ? usage.costUsd
+        : usage.totalTokens * 0.00000004;
 
       // Parse LLM response
       const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();

@@ -14,12 +14,14 @@
 import type { DirectResponseTierConfig } from './PipelineConfigService.js';
 import type { FollowUpContextHint } from './InstagramContextService.js';
 import type { ResponseDirective } from './InstagramContextService.js';
+import { extractUsageMetrics, type UsageMetrics } from './UsageMetrics.js';
 
 export interface DirectResponseResult {
   response: string | null;
   modelId: string;
   latencyMs: number;
   tokensEstimated: number;
+  usage?: UsageMetrics;
   success: boolean;
   error?: string;
 }
@@ -172,11 +174,18 @@ export class DirectResponseService {
         };
       }
 
-      const data = await response.json() as any;
-      const content = data?.choices?.[0]?.message?.content?.trim() || '';
-
-      const estimateTokens = (text: string) => Math.ceil(text.length / 3);
-      const tokensEstimated = estimateTokens(enhancedSystemPrompt + userPrompt) + estimateTokens(content);
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
+      const content = data.choices?.[0]?.message?.content?.trim() || '';
+      const usage = extractUsageMetrics(data, enhancedSystemPrompt + userPrompt, content);
+      const tokensEstimated = usage.totalTokens;
 
       console.log('[DirectResponse] Generated in %dms via %s (%d chars)',
         latencyMs, tierConfig.modelId, content.length);
@@ -186,15 +195,17 @@ export class DirectResponseService {
         modelId: tierConfig.modelId,
         latencyMs,
         tokensEstimated,
+        usage,
         success: !!content,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       const latencyMs = Date.now() - startTime;
-      console.error('[DirectResponse] Network error:', err?.message);
+      const errorMessage = err instanceof Error ? err.message : 'Network error';
+      console.error('[DirectResponse] Network error:', errorMessage);
       return {
         response: null, modelId: tierConfig.modelId,
         latencyMs, tokensEstimated: 0, success: false,
-        error: err?.message || 'Network error',
+        error: errorMessage,
       };
     }
   }

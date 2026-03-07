@@ -1,6 +1,13 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import { KnowledgeBaseService } from '../services/KnowledgeBaseService.js';
+import {
+  KnowledgeBaseService,
+  type KnowledgeEntryInput,
+} from '../services/KnowledgeBaseService.js';
+import {
+  KnowledgeBaseChangeSetError,
+  KnowledgeBaseChangeSetService,
+} from '../services/KnowledgeBaseChangeSetService.js';
 import { ServiceControlService } from '../services/ServiceControlService.js';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
@@ -56,7 +63,7 @@ const validateServiceName = [
 /**
  * Handle validation errors
  */
-const handleValidationErrors = (req: Request, res: Response, next: Function) => {
+const handleValidationErrors = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     res.status(400).json({ 
@@ -75,10 +82,25 @@ const handleValidationErrors = (req: Request, res: Response, next: Function) => 
 export function createIntegrationRoutes(db: DatabaseService): Router {
   const router = Router();
   const knowledgeBaseService = new KnowledgeBaseService(db);
+  const knowledgeBaseChangeSetService = new KnowledgeBaseChangeSetService(db);
   const serviceControlService = new ServiceControlService(db);
 
   // All routes require API key authentication
   router.use(apiKeyAuth);
+
+  const handleKnowledgeChangeSetError = (res: Response, error: unknown, fallbackMessage: string) => {
+    if (error instanceof KnowledgeBaseChangeSetError) {
+      res.status(error.status).json({
+        error: error.message,
+        code: error.code,
+        details: error.details ?? null,
+      });
+      return;
+    }
+
+    console.error(fallbackMessage, error);
+    res.status(500).json({ error: fallbackMessage });
+  };
 
   /**
    * GET /api/integrations/knowledge/context
@@ -165,6 +187,125 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
   });
 
   /**
+   * POST /api/integrations/knowledge/change-sets/preview
+   * Preview KB changes without mutating live data
+   */
+  router.post('/knowledge/change-sets/preview', (req: Request, res: Response) => {
+    try {
+      const changeSet = knowledgeBaseChangeSetService.preview({
+        requestedBy: typeof req.body?.requestedBy === 'string' ? req.body.requestedBy : req.body?.requested_by,
+        reason: typeof req.body?.reason === 'string' ? req.body.reason : null,
+        summaryText: typeof req.body?.summaryText === 'string' ? req.body.summaryText : req.body?.summary_text,
+        operations: Array.isArray(req.body?.operations) ? req.body.operations : [],
+      });
+
+      db.createLog({
+        level: 'info',
+        message: 'Knowledge base change set previewed via API',
+        details: {
+          changeSetId: changeSet.id,
+          operationCount: changeSet.preview.summary.totalOperations,
+          requestedBy: changeSet.requestedBy,
+        },
+      });
+
+      res.status(201).json(changeSet);
+    } catch (error) {
+      handleKnowledgeChangeSetError(
+        res,
+        error,
+        'Failed to preview knowledge base change set'
+      );
+    }
+  });
+
+  /**
+   * GET /api/integrations/knowledge/change-sets/:id
+   * Fetch a KB change set preview/apply/rollback record
+   */
+  router.get('/knowledge/change-sets/:id', (req: Request, res: Response) => {
+    try {
+      const changeSet = knowledgeBaseChangeSetService.getChangeSet(req.params.id);
+      if (!changeSet) {
+        res.status(404).json({ error: 'Knowledge base change set not found', code: 'CHANGE_SET_NOT_FOUND' });
+        return;
+      }
+
+      res.json(changeSet);
+    } catch (error) {
+      handleKnowledgeChangeSetError(
+        res,
+        error,
+        'Failed to fetch knowledge base change set'
+      );
+    }
+  });
+
+  /**
+   * POST /api/integrations/knowledge/change-sets/:id/apply
+   * Apply a previously previewed KB change set
+   */
+  router.post('/knowledge/change-sets/:id/apply', (req: Request, res: Response) => {
+    try {
+      const changeSet = knowledgeBaseChangeSetService.apply(
+        req.params.id,
+        typeof req.body?.appliedBy === 'string' ? req.body.appliedBy : req.body?.applied_by
+      );
+
+      db.createLog({
+        level: 'info',
+        message: 'Knowledge base change set applied via API',
+        details: {
+          changeSetId: changeSet.id,
+          requestedBy: changeSet.requestedBy,
+          appliedBy: changeSet.applyResult?.appliedBy ?? null,
+          appliedCount: changeSet.applyResult?.summary.appliedCount ?? 0,
+        },
+      });
+
+      res.json(changeSet);
+    } catch (error) {
+      handleKnowledgeChangeSetError(
+        res,
+        error,
+        'Failed to apply knowledge base change set'
+      );
+    }
+  });
+
+  /**
+   * POST /api/integrations/knowledge/change-sets/:id/rollback
+   * Roll back a previously applied KB change set
+   */
+  router.post('/knowledge/change-sets/:id/rollback', (req: Request, res: Response) => {
+    try {
+      const changeSet = knowledgeBaseChangeSetService.rollback(
+        req.params.id,
+        typeof req.body?.rolledBackBy === 'string' ? req.body.rolledBackBy : req.body?.rolled_back_by
+      );
+
+      db.createLog({
+        level: 'warn',
+        message: 'Knowledge base change set rolled back via API',
+        details: {
+          changeSetId: changeSet.id,
+          requestedBy: changeSet.requestedBy,
+          rolledBackBy: changeSet.rollbackResult?.rolledBackBy ?? null,
+          restoredCount: changeSet.rollbackResult?.summary.restoredCount ?? 0,
+        },
+      });
+
+      res.json(changeSet);
+    } catch (error) {
+      handleKnowledgeChangeSetError(
+        res,
+        error,
+        'Failed to roll back knowledge base change set'
+      );
+    }
+  });
+
+  /**
    * PUT /api/integrations/knowledge/entries/:id
    * Update a knowledge base entry (for agents like Forge)
    */
@@ -177,7 +318,7 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
         return;
       }
 
-      const updates: any = {};
+      const updates: Partial<KnowledgeEntryInput> = {};
       if (req.body.value !== undefined) updates.value = req.body.value;
       if (req.body.description !== undefined) updates.description = req.body.description;
       if (req.body.category !== undefined) updates.category = req.body.category;

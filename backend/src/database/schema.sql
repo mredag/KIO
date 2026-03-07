@@ -255,6 +255,39 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_category ON knowledge_base(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_active ON knowledge_base(is_active);
 
+CREATE TABLE IF NOT EXISTS knowledge_base_change_sets (
+  id TEXT PRIMARY KEY,
+  requested_by TEXT,
+  reason TEXT,
+  summary_text TEXT,
+  status TEXT NOT NULL CHECK(status IN ('previewed', 'applied', 'rolled_back')),
+  preview_payload TEXT NOT NULL,
+  apply_payload TEXT,
+  rollback_payload TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  applied_at TEXT,
+  rolled_back_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_change_sets_status ON knowledge_base_change_sets(status);
+CREATE INDEX IF NOT EXISTS idx_kb_change_sets_created ON knowledge_base_change_sets(created_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_base_history (
+  id TEXT PRIMARY KEY,
+  change_set_id TEXT NOT NULL,
+  operation_index INTEGER NOT NULL,
+  operation_type TEXT NOT NULL CHECK(operation_type IN ('create', 'update', 'delete', 'rollback')),
+  entry_id TEXT,
+  before_state TEXT,
+  after_state TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (change_set_id) REFERENCES knowledge_base_change_sets(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_history_change_set ON knowledge_base_history(change_set_id);
+CREATE INDEX IF NOT EXISTS idx_kb_history_entry ON knowledge_base_history(entry_id);
+
 -- AI system prompts table for dynamic workflow configuration
 CREATE TABLE IF NOT EXISTS ai_system_prompts (
   id TEXT PRIMARY KEY,

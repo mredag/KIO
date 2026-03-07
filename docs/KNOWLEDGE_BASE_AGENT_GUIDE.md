@@ -44,8 +44,12 @@ Important:
 - The current integration API in code supports:
   - `GET /api/integrations/knowledge/entries`
   - `GET /api/integrations/knowledge/context`
+  - `POST /api/integrations/knowledge/change-sets/preview`
+  - `GET /api/integrations/knowledge/change-sets/:id`
+  - `POST /api/integrations/knowledge/change-sets/:id/apply`
+  - `POST /api/integrations/knowledge/change-sets/:id/rollback`
   - `PUT /api/integrations/knowledge/entries/:id`
-- Create and delete are currently available through the admin API, not the API-key integration API
+- Direct create/delete routes still live in the admin API, but agents can now create, update, and delete safely through integration change sets
 
 ## Protocol V1: Preview-First KB Changes
 
@@ -111,7 +115,9 @@ KB Preview
 - Before description: `...`
 - After description: `...`
 - Why: `...`
-- API: `PUT /api/integrations/knowledge/entries/<id>`
+- API:
+  - `POST /api/integrations/knowledge/change-sets/preview`
+  - `POST /api/integrations/knowledge/change-sets/<changeSetId>/apply`
 
 Approval
 - No write has happened yet.
@@ -186,12 +192,16 @@ Allowed:
 - Use `Authorization: Bearer <N8N_API_KEY>` for `/api/integrations/knowledge/*`
 - `GET /api/integrations/knowledge/entries`
 - `GET /api/integrations/knowledge/context`
+- `POST /api/integrations/knowledge/change-sets/preview`
+- `GET /api/integrations/knowledge/change-sets/:id`
+- `POST /api/integrations/knowledge/change-sets/:id/apply`
+- `POST /api/integrations/knowledge/change-sets/:id/rollback`
 - `PUT /api/integrations/knowledge/entries/:id`
 
 Meaning:
 
-- Update-only flows can be fully executed
-- Create/delete flows can be scanned and previewed, but may require admin session auth or a future preview/apply API
+- Update, create, delete, and rollback flows can all be executed through the change-set API
+- Legacy direct `PUT` still exists, but agents should prefer change sets for all live KB edits
 
 ### If the agent has admin session access
 
@@ -204,53 +214,29 @@ Allowed:
 
 Even with admin access, the same preview-first protocol still applies.
 
-## Recommended Future Backend Design
+## Implemented Backend Change-Set Layer
 
-The current system can enforce the protocol socially through agent instructions. The stronger design
-is to enforce it in the backend.
+The current backend now stores preview/apply/rollback artifacts for KB edits.
 
-### Proposed Objects
+Current objects:
 
-Add change-set based KB editing:
-
-- `knowledge_change_sets`
-- `knowledge_change_set_items`
+- `knowledge_base_change_sets`
 - `knowledge_base_history`
 
-Suggested fields:
-
-- change set id
-- requester
-- environment
-- original request text
-- status: `planned | approved | applied | rolled_back | rejected`
-- created_at
-- approved_at
-- applied_at
-- per-row before snapshot
-- per-row after snapshot
-- verification result
-
-### Proposed Endpoints
-
-- `POST /api/integrations/knowledge/change-sets/preview`
-- `GET /api/integrations/knowledge/change-sets/:id`
-- `POST /api/integrations/knowledge/change-sets/:id/apply`
-- `POST /api/integrations/knowledge/change-sets/:id/rollback`
-
-Behavior:
+Current behavior:
 
 - `preview` reads current KB, computes exact operations, stores the plan, performs no writes
 - `apply` executes the stored plan in a transaction
 - `rollback` restores the stored `before` snapshot
+- `apply` fails with a stale-preview error if the live KB changed after preview
+- `history` stores before/after snapshots for each applied operation
 
-### Why This Is Better
+Still worth adding later:
 
-- The preview becomes a real backend artifact, not just chat text
-- Apply can be transaction-safe
-- Rollback becomes reliable
-- The system can prove exactly what changed
-- Future UI can show a diff before approval
+- admin UI diff and approval screen
+- explicit change-set expiry windows
+- environment targeting metadata
+- richer approval/rejection statuses
 
 ## KIO-Specific Decision Policy
 

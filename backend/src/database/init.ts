@@ -130,6 +130,24 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.log('Automation management tables created successfully');
   }
 
+  const kbSafetyTables = [
+    'knowledge_base_change_sets',
+    'knowledge_base_history',
+  ];
+
+  const missingKbSafetyTables = kbSafetyTables.filter(table => !tableNames.includes(table));
+
+  if (missingKbSafetyTables.length > 0) {
+    console.log(`Creating missing KB safety tables: ${missingKbSafetyTables.join(', ')}`);
+    for (const statement of statements) {
+      if (statement.includes('knowledge_base_change_sets') ||
+          statement.includes('knowledge_base_history')) {
+        db.exec(statement);
+      }
+    }
+    console.log('KB safety tables created successfully');
+  }
+
   // Check if unified_interactions view exists
   const views = db.prepare("SELECT name FROM sqlite_master WHERE type='view'").all() as Array<{ name: string }>;
   const viewNames = views.map(v => v.name);

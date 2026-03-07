@@ -74,8 +74,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - The current KB schema does not expose `topic_slug`.
 - Live KB data is the `knowledge_base` table shown in `/admin/knowledge-base`.
 - Live KB work must follow `scan -> preview -> approval -> apply -> verify -> final report`.
-- Integration KB routes currently expose `GET /api/integrations/knowledge/entries`, `GET /api/integrations/knowledge/context`, and `PUT /api/integrations/knowledge/entries/:id`.
-- `/api/integrations/*` uses `Authorization: Bearer <N8N_API_KEY>`; create/delete currently require the admin API.
+- Integration KB routes expose `GET /api/integrations/knowledge/entries`, `GET /api/integrations/knowledge/context`, `POST /api/integrations/knowledge/change-sets/preview`, `GET /api/integrations/knowledge/change-sets/:id`, `POST /api/integrations/knowledge/change-sets/:id/apply`, `POST /api/integrations/knowledge/change-sets/:id/rollback`, and legacy `PUT /api/integrations/knowledge/entries/:id`.
+- `/api/integrations/*` uses `Authorization: Bearer <N8N_API_KEY>`; agents should use change sets for live KB edits instead of the legacy direct `PUT`.
 - KB updates must go through the admin or integration routes, not direct SQL edits.
 - Policy grounding depends on the KB slice loaded into the current execution.
 

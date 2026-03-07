@@ -567,7 +567,7 @@ function ProtocolTab({
     name: '',
     role: '',
     objective: '',
-    model: 'moonshotai/kimi-k2',
+    model: 'openai/gpt-4.1',
     provider: 'openrouter',
   });
   const [showCreate, setShowCreate] = useState(false);
@@ -663,7 +663,7 @@ function ProtocolTab({
     setCreateError(null);
     createAgent.mutate(trimmed, {
       onSuccess: (data: any) => {
-        setCreateForm({ name: '', role: '', objective: '', model: 'moonshotai/kimi-k2', provider: 'openrouter' });
+        setCreateForm({ name: '', role: '', objective: '', model: 'openai/gpt-4.1', provider: 'openrouter' });
         setShowCreate(false);
         // Auto-select the newly created agent
         if (data?.id) {

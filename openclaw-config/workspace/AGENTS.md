@@ -142,10 +142,10 @@ Or via `sessions_spawn` tool: include `"model": "openai-codex/gpt-5.3-codex"` in
 
 **Ã¢Å¡Â Ã¯Â¸Â Sub-agent veri eriÃ…Å¸imi:** Sub-agent'lara gÃƒÂ¶rev verirken MUTLAKA Ã…Å¸unu belirt:
 - API base URL: `http://localhost:3001`
-- `/api/integrations/*` auth: `Authorization: Bearer <N8N_API_KEY>`
+- `/api/integrations/*` auth: `Authorization: Bearer <KIO_API_KEY>`
 - `/api/mc/*` is the local backend/admin surface in the current codebase
 - SQLite/veritabanÃ„Â±na doÃ„Å¸rudan eriÃ…Å¸im YOK Ã¢â‚¬â€ sadece HTTP API kullan
-- Ãƒâ€“rnek: `curl -H "Authorization: Bearer <N8N_API_KEY>" http://localhost:3001/api/integrations/knowledge/entries`
+- Ãƒâ€“rnek: `curl -H "Authorization: Bearer <KIO_API_KEY>" http://localhost:3001/api/integrations/knowledge/entries`
 
 **Knowledge Base Updates (Fiyat Guncelleme):**
 Read `KNOWLEDGE_BASE.md` in this workspace before making KB changes.
@@ -154,7 +154,7 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 2. Include in task: "First scan live KB via GET /api/integrations/knowledge/entries, then produce a preview with exact row IDs, before/after values, and planned API calls."
 3. Include in task: "Do not write before preview and approval."
 4. Include in task: "Never use seed-knowledge.ts, migrate-kb.mjs, sqlite3, or bulk reseed tools for live KB edits."
-5. Include the base URL and `Authorization: Bearer <N8N_API_KEY>` in the task description.
+5. Include the base URL and `Authorization: Bearer <KIO_API_KEY>` in the task description.
 6. Use `POST /api/integrations/knowledge/change-sets/preview` to create the preview artifact for any live KB edit.
 7. After approval, use `POST /api/integrations/knowledge/change-sets/<id>/apply`. If the owner requests undo, use `POST /api/integrations/knowledge/change-sets/<id>/rollback`.
 8. After apply, refetch the change set, changed row(s), and affected context, then report exactly what changed.
@@ -215,7 +215,7 @@ When you see a Turkish phone number pattern (e.g., `5XX XXX XX XX`, `0 5XX XXX X
 When you see this note, DO NOT make additional API calls for the same data. Use the pre-injected context directly.
 
 ## KIO API (ZORUNLU Ã¢â‚¬â€ VeritabanÃ„Â±na DoÃ„Å¸rudan EriÃ…Å¸im YOK)
-Base: `http://localhost:3001` | Auth depends on route: `/api/integrations/*` => `Authorization: Bearer <N8N_API_KEY>`; `/api/mc/*` => local backend/admin surface
+Base: `http://localhost:3001` | Auth depends on route: `/api/integrations/*` => `Authorization: Bearer <KIO_API_KEY>`; `/api/mc/*` => local backend/admin surface
 
 **Ã¢Å¡Â Ã¯Â¸Â KRÃ„Â°TÃ„Â°K:** SQLite veritabanÃ„Â±na doÃ„Å¸rudan eriÃ…Å¸im YOKTUR. `sqlite3`, `PSSQLite`, Python sqlite3 modÃƒÂ¼lÃƒÂ¼ veya benzeri araÃƒÂ§lar KULLANMA. TÃƒÂ¼m veri eriÃ…Å¸imi aÃ…Å¸aÃ„Å¸Ã„Â±daki HTTP API ÃƒÂ¼zerinden yapÃ„Â±lmalÃ„Â±dÃ„Â±r. Sub-agent'lar da dahil Ã¢â‚¬â€ her zaman `curl` veya `fetch` ile API ÃƒÂ§aÃ„Å¸Ã„Â±r.
 
@@ -223,9 +223,9 @@ Base: `http://localhost:3001` | Auth depends on route: `/api/integrations/*` => 
 
 ```bash
 # Ãƒâ€“rnek API ÃƒÂ§aÃ„Å¸rÃ„Â±sÃ„Â±
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" http://localhost:3001/api/integrations/knowledge/entries
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" http://localhost:3001/api/mc/dm-kontrol/health
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" "http://localhost:3001/api/mc/dm-kontrol/feed?limit=20"
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" http://localhost:3001/api/integrations/knowledge/entries
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" http://localhost:3001/api/mc/dm-kontrol/health
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" "http://localhost:3001/api/mc/dm-kontrol/feed?limit=20"
 ```
 
 | Endpoint | Method | Purpose |
@@ -284,39 +284,39 @@ Jarvis can query WhatsApp data, manage the ignore list, review appointment reque
 
 ```bash
 # WhatsApp stats
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/whatsapp/stats
 
 # Recent WhatsApp messages
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   "http://localhost:3001/api/integrations/whatsapp/recent-messages?limit=20"
 
 # Conversation history for a phone number
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/whatsapp/conversation/905551234567
 
 # Add to ignore list
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"phone":"+905551234567","label":"staff","added_by":"jarvis"}' \
   http://localhost:3001/api/integrations/whatsapp/ignore-list
 
 # Remove from ignore list
-curl -s -X DELETE -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -X DELETE -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/whatsapp/ignore-list/+905551234567
 
 # List pending appointment requests
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   "http://localhost:3001/api/integrations/whatsapp/appointment-requests?status=pending"
 
 # Mark appointment as confirmed
 curl -s -X PATCH -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"status":"confirmed","staff_notes":"Cumartesi 14:00 onaylandÃ„Â±"}' \
   http://localhost:3001/api/integrations/whatsapp/appointment-requests/APPOINTMENT_ID
 
 # WhatsApp pipeline config
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/mc/dm-kontrol/wa-pipeline-config
 ```
 
@@ -352,7 +352,7 @@ WhatsApp API endpoints:
 - Conversation: GET http://localhost:3001/api/integrations/whatsapp/conversation/:phone
 - Ignore list: GET/POST/DELETE http://localhost:3001/api/integrations/whatsapp/ignore-list
 - Appointments: GET/PATCH http://localhost:3001/api/integrations/whatsapp/appointment-requests
-Auth: `Authorization: Bearer <N8N_API_KEY>`
+Auth: `Authorization: Bearer <KIO_API_KEY>`
 ```
 
 ## Telegram Escalation Commands (Callback Button Fallback)
@@ -370,19 +370,19 @@ When the system sends escalation notifications with inline buttons (Onayla/Redde
 When you receive one of these commands, call the KIO API:
 ```bash
 # Approve
-curl -X PATCH -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -X PATCH -H "Authorization: Bearer <KIO_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"status":"scheduled"}' \
   "http://localhost:3001/api/mc/jobs/<jobId>/status"
 
 # Reject
-curl -X PATCH -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -X PATCH -H "Authorization: Bearer <KIO_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"status":"cancelled"}' \
   "http://localhost:3001/api/mc/jobs/<jobId>/status"
 
 # Detail
-curl -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -H "Authorization: Bearer <KIO_API_KEY>" \
   "http://localhost:3001/api/mc/jobs/<jobId>"
 ```
 

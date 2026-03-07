@@ -5,9 +5,9 @@
 HTTP API tool for calling the KIO backend.
 
 **Base URL:** `http://localhost:3001`
-**Auth:** `X-API-Key` header (value from `N8N_API_KEY` environment variable)
+**Auth:** `Authorization: Bearer <KIO_API_KEY>`
 
-All requests must include the `X-API-Key` header. All POST/PATCH requests must include `Content-Type: application/json`.
+All requests must include the `Authorization` header. All POST/PATCH requests must include `Content-Type: application/json`.
 
 ---
 
@@ -115,7 +115,7 @@ POST /api/integrations/whatsapp/validate-response
   "customer_message": "masaj fiyatları ne kadar?",
   "agent_response": "Masaj fiyatlarımız...",
   "knowledge_context": "...",
-  "model_used": "moonshotai/kimi-k2"
+  "model_used": "openai/gpt-4o-mini"
 }
 ```
 
@@ -159,7 +159,7 @@ POST /api/integrations/whatsapp/interaction
   "sentiment": "neutral",
   "ai_response": "Masaj fiyatlarımız...",
   "response_time_ms": 1500,
-  "model_used": "moonshotai/kimi-k2",
+  "model_used": "openai/gpt-4o-mini",
   "tokens_estimated": 350,
   "model_tier": "standard",
   "media_type": "text",

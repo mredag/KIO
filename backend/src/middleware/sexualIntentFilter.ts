@@ -559,7 +559,7 @@ async function evaluateBoundaryProbeIntent(messageText: string): Promise<SexualI
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://spa-kiosk.local',
+        'HTTP-Referer': 'https://kio.eformspa.local',
         'X-Title': 'Eform Boundary Probe Review',
       },
       body: JSON.stringify({
@@ -628,7 +628,7 @@ export async function classifySexualIntent(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://spa-kiosk.local',
+      'HTTP-Referer': 'https://kio.eformspa.local',
       'X-Title': 'Eform Sexual Intent Filter',
     },
     body: JSON.stringify({

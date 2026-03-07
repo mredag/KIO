@@ -148,7 +148,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(db);
   const semanticReranker = new DMKnowledgeRerankerService();
   
-  const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'spa-kiosk-instagram-verify';
+  const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'kio-instagram-verify';
   const OPENCLAW_WEBHOOK_URL = process.env.OPENCLAW_IG_WEBHOOK_URL || '';
   const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN || '';
   const OPENCLAW_SESSIONS_DIR = join(homedir(), '.openclaw', 'agents', 'main', 'sessions');
@@ -680,7 +680,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             recentMessageIds.set(mid, now);
           }
 
-          const API_KEY = process.env.N8N_API_KEY || ''; // legacy env var name
+          const API_KEY = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '';
           const startTime = Date.now();
           
           // Generate unique execution ID for this DM pipeline run
@@ -837,7 +837,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               },
               tierReason: 'Varsayılan model (hata durumu) → standard',
               modelTier: 'standard' as const,
-              modelId: 'moonshotai/kimi-k2',
+              modelId: 'openai/gpt-4o-mini',
               isNewCustomer: true,
               totalInteractions: 0,
             };

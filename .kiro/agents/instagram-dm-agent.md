@@ -39,7 +39,7 @@ Meta Webhook POST → KIO /webhook/instagram (port 3001)
 ## OpenClaw Agent Config
 - Agent ID: `instagram` (in agents.list, but hooks route to `main`)
 - Name: Eform Instagram Asistanı
-- Model: moonshotai/kimi-k2 (standard), google/gemini-2.5-flash-lite (light), openai/gpt-4o-mini (advanced)
+- Model: openai/gpt-4o-mini (standard), openai/gpt-4.1-mini (light), openai/gpt-4o-mini (advanced)
 - Workspace: `~/.openclaw/workspaces/instagram/`
 - Config: `~/.openclaw/openclaw.json`
 
@@ -88,14 +88,14 @@ Get-Content "$env:USERPROFILE\.openclaw\agents\main\sessions\sessions.json" | Co
 
 Check stats:
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:3001/api/integrations/instagram/stats" -Headers @{"Authorization"="Bearer dwsQf8q0BpFWXPqMhwy2SGLG/wHIw1hKyjW8eI4Cgd8="}
+Invoke-RestMethod -Uri "http://localhost:3001/api/integrations/instagram/stats" -Headers @{"Authorization"="Bearer <KIO_API_KEY>"}
 ```
 
 ## Model Tier Routing
 | Tier | Model | Trigger |
 |------|-------|---------|
-| light | google/gemini-2.5-flash-lite | Greetings, single-category hours/contact |
-| standard | moonshotai/kimi-k2 | Multi-category queries (default) |
+| light | openai/gpt-4.1-mini | Greetings, single-category hours/contact |
+| standard | openai/gpt-4o-mini | Multi-category queries (default) |
 | advanced | openai/gpt-4o-mini | Complaints, long messages (200+ chars) |
 
 ## Known Issues

@@ -144,7 +144,7 @@ export const corsOptions = {
  * Requirements: 33.1 - Set up secure session configuration
  */
 export const sessionConfig = {
-  secret: process.env.SESSION_SECRET || 'spa-kiosk-secret-change-in-production',
+  secret: process.env.SESSION_SECRET || 'kio-session-secret-change-in-production',
   name: 'sessionId', // Don't use default 'connect.sid'
   resave: false,
   saveUninitialized: false,

@@ -148,7 +148,7 @@ Etkileşimi kaydet ve devam etme.
 
 Tüm API çağrılarında şu header'ı kullan:
 ```
-X-API-Key: [N8N_API_KEY ortam değişkeninden]
+Authorization: Bearer [KIO_API_KEY ortam değişkeninden]
 ```
 
 Base URL: `http://localhost:3001`

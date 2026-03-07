@@ -16,8 +16,10 @@
 ## Team
 | Agent | Role | Model |
 |-------|------|-------|
+| main | Commander | GPT-4.1 (openai) |
 | forge | Senior Developer | GPT-5.3 Codex (openai-codex) |
-| instagram | DM Specialist | Kimi K2 |
+| instagram | DM Specialist | GPT-4o mini (openai) |
+| whatsapp | DM Specialist | GPT-4o mini (openai) |
 
 ## Key Learnings
 - web_fetch BLOCKED for localhost — use exec + curl/Invoke-RestMethod
@@ -28,7 +30,7 @@
 - OpenClaw heartbeat target = "none" (prevents session pollution)
 - Telegram 409 conflict: OpenClaw and TelegramCallbackPoller share bot token — poller auto-defers
 - Codex OAuth tokens expire ~10 days — refresh token should auto-renew
-- Sub-agents have NO direct DB access — must use HTTP API with X-API-Key header
+- Sub-agents have NO direct DB access — must use HTTP API (`Authorization: Bearer <KIO_API_KEY>` for `/api/integrations/*`)
 - mc_jobs table uses `payload` column (JSON), NOT `description` or `metadata`
 - Timestamps: always `new Date().toISOString()`, never SQLite `datetime('now')`
 

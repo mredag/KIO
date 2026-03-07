@@ -71,13 +71,13 @@ function resolveMissionControlAgentId(agentId: string): string {
 function createAgentWorkspace(agentId: string, name: string, role: string, objective: string): void {
   const wsDir = join(OPENCLAW_WORKSPACES_DIR, agentId);
   if (!existsSync(wsDir)) mkdirSync(wsDir, { recursive: true });
-  const apiKey = process.env.N8N_API_KEY || '<N8N_API_KEY>';
+  const apiKey = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<KIO_API_KEY>';
   const resolvedObjective = objective || 'Complete the assigned task accurately.';
 
   const files: Record<string, string> = {
     'AGENTS.md': `# ${name} - ${role}\n\nYou are ${name}, a Mission Control sub-agent for Eform Spor Merkezi.\n\n## Identity\n- Name: ${name}\n- Role: ${role}\n- Objective: ${resolvedObjective}\n\n## Operating Rules\n- Stay focused on the assigned task.\n- Read relevant files before changing them.\n- Use the KIO HTTP API for live operational data.\n- Verify the result before reporting completion.\n`,
     'SOUL.md': `# SOUL.md - ${name}\n\nMission:\n- Protect customer trust and business data.\n- Prefer facts over guesses.\n- Keep changes minimal and reversible.\n`,
-    'TOOLS.md': `# TOOLS.md - ${name}\n\nKIO API base: http://localhost:3001\nAuth header: X-API-Key: ${apiKey}\n\nWorkflow:\n1. Read the task and the relevant files first.\n2. Use HTTP API calls for operational data.\n3. Verify the result before marking the task complete.\n`,
+    'TOOLS.md': `# TOOLS.md - ${name}\n\nKIO API base: http://localhost:3001\nAuth header: Authorization: Bearer ${apiKey}\n\nWorkflow:\n1. Read the task and the relevant files first.\n2. Use HTTP API calls for operational data.\n3. Verify the result before marking the task complete.\n`,
     'IDENTITY.md': `# IDENTITY.md - ${name}\n\n- Name: ${name}\n- Role: ${role}\n- Objective: ${resolvedObjective}\n`,
     'BOOTSTRAP.md': `# BOOTSTRAP.md - ${name}\n\nOn startup, read AGENTS.md, TOOLS.md, IDENTITY.md, USER.md, and MEMORY.md before acting.\n`,
     'HEARTBEAT.md': `# HEARTBEAT.md - ${name}\n\nHEARTBEAT_OK\n`,

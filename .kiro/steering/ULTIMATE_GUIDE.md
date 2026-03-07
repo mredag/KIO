@@ -11,26 +11,24 @@ Dev Machine (Windows, Node 18 via fnm)
 ├── Backend (port 3001) — Express + SQLite (WAL mode)
 │   ├── /api/admin/*          — Session auth (admin panel)
 │   ├── /api/kiosk/*          — Public (kiosk UI)
-│   ├── /api/integrations/*   — API key auth (n8n/OpenClaw)
+│   ├── /api/integrations/*   — API key auth (KIO/OpenClaw)
 │   ├── /webhook/whatsapp     — Meta webhook (legacy, replaced by OpenClaw Baileys)
-│   └── /webhook/instagram    — Meta webhook → OpenClaw (USE_OPENCLAW=true) or n8n
+│   └── /webhook/instagram    — Meta webhook → backend pipeline → OpenClaw
 ├── OpenClaw (port 18789) — AI agent gateway (Instagram + WhatsApp + Jarvis)
 │   ├── Instagram hook        — GPT-4o-mini via OpenRouter, multi-model routing
 │   └── WhatsApp agent        — Baileys/WhatsApp Web channel, dedicated workspace, GPT-4o-mini
-├── n8n (Pi only, port 5678) — Workflow automation (legacy, disabled)
-│   └── WhatsApp workflow     — Replaced by OpenClaw WhatsApp agent
+├── Archived n8n material (repo only) — historical reference, not live runtime
 └── Frontend (served by backend in prod)
 
 Raspberry Pi 5 (192.168.1.8, Node 22.22.0, Debian 13 aarch64)
   Backend (PM2 kio-backend, port 3001) - same as above
   OpenClaw (PM2 kio-openclaw, port 18789) - Instagram AI + WhatsApp AI + Jarvis + Telegram
   Cloudflared (systemd) - tunnel webhook.eformspa.com -> localhost:3001
-  n8n (systemd, disabled) - WhatsApp workflow (legacy)
 ```
 
 **Dev:** Frontend :3000 + Backend :3001 + OpenClaw :18789
 **Prod (Pi):** Backend :3001 serves frontend + OpenClaw :18789 for AI agents
-**Old system:** `~/spa-kiosk/` (untouched rollback), n8n disabled
+**Old rollback checkout:** `~/spa-kiosk/` (manual rollback only)
 
 ---
 
@@ -155,7 +153,7 @@ node dist/index.js   # from backend/
 | Table | Purpose |
 |-------|---------|
 | `knowledge_base` | Live AI/admin KB facts (7 categories; count varies by environment) |
-| `ai_system_prompts` | Dynamic AI prompts for n8n |
+| `ai_system_prompts` | Dynamic AI prompts exposed through backend integration routes |
 | `coupon_tokens/wallets/redemptions` | Coupon loyalty system |
 | `instagram_interactions` | DM log with intent/sentiment + `model_used`, `tokens_estimated` columns |
 | `whatsapp_interactions` | Message log + `model_used`, `tokens_estimated`, `model_tier`, `pipeline_trace`, `pipeline_error`, `media_type` columns |
@@ -192,9 +190,9 @@ node dist/index.js   # from backend/
 
 ---
 
-## n8n Integration API
+## Integration API
 
-**Auth:** Bearer token (`N8N_API_KEY` env var)
+**Auth:** Bearer token (`KIO_API_KEY`, with legacy `N8N_API_KEY` fallback)
 **Base:** `http://localhost:3001/api/integrations`
 
 | Endpoint | Method | Purpose |
@@ -393,7 +391,7 @@ const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
   headers: {
     'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
     'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://spa-kiosk.local',
+    'HTTP-Referer': 'https://kio.eformspa.local',
     'X-Title': 'SPA Workflow Test'
   },
   body: JSON.stringify({
@@ -461,7 +459,7 @@ Meta Webhook POST → KIO /webhook/instagram
 | advanced | `openai/gpt-4o-mini` | Complaints, long messages (200+ chars) |
 
 **Model Upgrade History:**
-- 2026-03-02: Standard tier upgraded from `moonshotai/kimi-k2` to `openai/gpt-4o-mini` to eliminate hallucinations, improve Turkish response quality, and prevent system term exposure ("bilgi bankası", "veri tabanı"). Sexual intent filter also upgraded to GPT-4o-mini for better accuracy.
+- 2026-03-02: Standard tier upgraded from the earlier OpenRouter standard model to `openai/gpt-4o-mini` to eliminate hallucinations, improve Turkish response quality, and prevent system term exposure ("bilgi bankası", "veri tabanı"). Sexual intent filter also upgraded to GPT-4o-mini for better accuracy.
 
 ### Turkish Character Normalization (CRITICAL)
 `detectIntent()` and `classifyModelTier()` use `normalizeTurkish()` to convert Turkish diacritics to ASCII before keyword matching. Without this, `ücret` won't match `ucret` in `KEYWORD_CATEGORY_MAP`.
@@ -514,13 +512,13 @@ Key config fields:
 ### DM Simulator (Testing Without Instagram)
 `POST /api/workflow-test/simulate-agent` runs the EXACT same pipeline as the real Instagram webhook — intent detection → KB fetch → formatKnowledgeForPrompt → DirectResponseService → policy validation → faithfulness check. Skips: Meta webhook, OpenClaw gateway, Meta Graph API send.
 
-**Auth:** Session auth (admin panel) OR Bearer token (`N8N_API_KEY`)
+**Auth:** Session auth (admin panel) OR Bearer token (`KIO_API_KEY`, with legacy `N8N_API_KEY` fallback)
 **Results appear in:** DM Kontrol Merkezi live feed (same DB table + SSE events as real DMs)
 **UI:** Sidebar → Operasyonlar → DM Simülatör (`/admin/workflow-test`)
 
 ```powershell
-# Test via API (use N8N_API_KEY from backend/.env)
-$headers = @{"Authorization"="Bearer <N8N_API_KEY>"; "Content-Type"="application/json"}
+# Test via API (use KIO_API_KEY from backend/.env)
+$headers = @{"Authorization"="Bearer <KIO_API_KEY>"; "Content-Type"="application/json"}
 $body = '{"message":"masaj fiyatlari ne kadar","senderId":"sim_test_001"}'
 Invoke-RestMethod -Uri "http://localhost:3001/api/workflow-test/simulate-agent" -Method POST -Body $body -Headers $headers
 ```
@@ -624,7 +622,7 @@ const formatted = formatter.formatPricing('spa_massage_pricing', rawKbValue);
 - `courses_women` — kadın kursları
 
 ### System Term Prevention (Policy Rule 11)
-`ResponsePolicyService` includes Rule 11 (SİSTEM BİLGİSİ SIZINTISI) to prevent AI from exposing internal system terms to customers. This was added after Kimi K2 started saying "bilgi bankası" and "veri tabanı" in customer responses.
+`ResponsePolicyService` includes Rule 11 (SİSTEM BİLGİSİ SIZINTISI) to prevent AI from exposing internal system terms to customers. This was added after an earlier standard-tier model started saying "bilgi bankası" and "veri tabanı" in customer responses.
 
 **Blocked terms:**
 - "bilgi bankası" / "bilgi bankasında"
@@ -935,7 +933,7 @@ TELEGRAM_ADMIN_CHAT_ID=<from @userinfobot>
 
 1. **`.env` has real credentials committed to git** — needs `.gitignore` fix + token rotation
 2. **AI prompt routes have no auth** — `/api/integrations/ai/prompt/:name` is public
-3. **No webhook signature verification in backend** — backend forwards to n8n without verifying Meta signature
+3. **No webhook signature verification in backend** — inbound Meta webhook authenticity is not verified before processing
 4. **Instagram test mode is runtime-only** — PATCH `/dm-kontrol/test-mode` updates `process.env` in-memory, lost on restart. `.env` file is the persistent source of truth.
 
 ---
@@ -949,11 +947,11 @@ ssh eform-kio@192.168.1.8
 # SCP
 scp <local> eform-kio@192.168.1.8:<remote>
 
-# n8n commands (via SSH)
-n8n list:workflow 2>/dev/null
-n8n import:workflow --input=/path/to/file.json 2>/dev/null
-n8n update:workflow --id=<ID> --active=true 2>/dev/null
-sudo systemctl restart n8n
+# Live maintenance commands
+cd ~/kio-new/deployment/raspberry-pi
+./update-pi.sh
+./sync-openclaw-runtime.sh --dry-run
+./sync-openclaw-runtime.sh --restart
 ```
 
 ### Direct DB Editing (Pi)

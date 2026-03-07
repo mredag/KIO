@@ -36,7 +36,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - OpenClaw DM dispatch sends `model: analysis.modelId`; it does not default to Jarvis `main` model. The Instagram hook mapping targets `agentId: "instagram"` in `openclaw.json`.
 - Runtime toggle source of truth is `GET /api/mc/dm-kontrol/pipeline-config` (not static docs). Current live snapshot on March 4, 2026: `directResponse.enabled=true`, `light=true`, `standard=true`, `advanced=false`.
 - Every DM execution has an `execution_id` like `EXE-xxxxxxxx`. Use `GET /api/mc/dm-kontrol/execution/:executionId` before changing prompts or logic.
-- DM execution fast-debug command (preferred over ad-hoc SQL): `curl -s "http://localhost:3001/api/mc/dm-kontrol/execution/EXE-xxxxxxxx" -H "Authorization: Bearer $N8N_API_KEY"`.
+- DM execution fast-debug command (preferred over ad-hoc SQL): `curl -s "http://localhost:3001/api/mc/dm-kontrol/execution/EXE-xxxxxxxx" -H "Authorization: Bearer $KIO_API_KEY"`.
 - `InstagramContextService` still builds a bounded recent-history window for context: at most the last 8 messages from the last 10 minutes, then `formatConversationHistory()` caps the formatted text to 2000 chars.
 - `ConversationStateService` is now the primary compact memory for follow-up planning and repair; recent history is supplemental context, not the old raw 24-hour dump.
 - `analysis.formattedHistory` is still injected into both `DirectResponseService` and the OpenClaw fallback prompt, so DM token spend still includes a bounded recent-history payload until that prompt shape is changed deliberately.
@@ -75,7 +75,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Live KB data is the `knowledge_base` table shown in `/admin/knowledge-base`.
 - Live KB work must follow `scan -> preview -> approval -> apply -> verify -> final report`.
 - Integration KB routes expose `GET /api/integrations/knowledge/entries`, `GET /api/integrations/knowledge/context`, `POST /api/integrations/knowledge/change-sets/preview`, `GET /api/integrations/knowledge/change-sets/:id`, `POST /api/integrations/knowledge/change-sets/:id/apply`, `POST /api/integrations/knowledge/change-sets/:id/rollback`, and legacy `PUT /api/integrations/knowledge/entries/:id`.
-- `/api/integrations/*` uses `Authorization: Bearer <N8N_API_KEY>`; agents should use change sets for live KB edits instead of the legacy direct `PUT`.
+- `/api/integrations/*` uses `Authorization: Bearer <KIO_API_KEY>`; agents should use change sets for live KB edits instead of the legacy direct `PUT`.
 - KB updates must go through the admin or integration routes, not direct SQL edits.
 - Policy grounding depends on the KB slice loaded into the current execution.
 
@@ -109,7 +109,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Jarvis orchestrates. It should delegate real code changes to Forge.
 - Forge should stay pinned to `openai-codex/gpt-5.3-codex`.
 - Non-main agents do not use direct SQLite access. Use the KIO HTTP API.
-- For `/api/integrations/*`, use `Authorization: Bearer <N8N_API_KEY>`.
+- For `/api/integrations/*`, use `Authorization: Bearer <KIO_API_KEY>`.
 - On the Pi, `main` now runs on `openrouter/openai/gpt-4.1`. `forge` stays on `openai-codex/gpt-5.3-codex`, and channel agents `instagram` / `whatsapp` continue on `openrouter/openai/gpt-4o-mini`.
 - OpenClaw image handling on the Pi uses the global `agents.defaults.imageModel` route, currently `openrouter/openai/gpt-4o-mini`.
 - The live OpenClaw fallback path no longer uses DeepSeek; default spawned subagents now fall back to `openrouter/openai/gpt-4.1`.

@@ -182,8 +182,8 @@ Invoke-RestMethod -Uri "http://localhost:3001/webhook/instagram" -Method POST -B
 `POST /api/workflow-test/simulate-agent` runs the EXACT same pipeline as the real webhook: intent detection â†’ KB fetch â†’ formatKnowledgeForPrompt â†’ DirectResponseService â†’ policy validation â†’ faithfulness check. Skips Meta webhook, OpenClaw gateway, and Meta Graph API send.
 
 ```powershell
-# Auth: session (admin panel) or Bearer token (N8N_API_KEY from backend/.env)
-$headers = @{"Authorization"="Bearer <N8N_API_KEY>"; "Content-Type"="application/json"}
+# Auth: session (admin panel) or Bearer token (KIO_API_KEY from backend/.env)
+$headers = @{"Authorization"="Bearer <KIO_API_KEY>"; "Content-Type"="application/json"}
 
 # Test address (anti-hallucination check â€” should return Ã‡ay Mahallesi, not fake address)
 $body = '{"message":"adresiniz nedir","senderId":"sim_test_001"}'
@@ -246,9 +246,9 @@ KIO polls OpenClaw session JSONL files for the agent's response. Critical rules:
 ## Resolved Issues (2026-02-15)
 
 - âœ… OpenRouter 404 `requested_providers: ["openai"]` â€” Account-level "Allowed Providers" was set to OpenAI only. Fix: clear it at openrouter.ai/settings/privacy.
-- âœ… Switched from GPT-4o to Kimi K2 (`moonshotai/kimi-k2`) via OpenRouter â€” all config files updated.
+- âœ… Customer-facing routing later standardized on GPT-4.1-mini / GPT-4o-mini via OpenRouter â€” all config files updated.
 - âœ… OpenClaw updated to 2026.2.13 â€” uses `openrouter/<author>/<slug>` model format.
-- âœ… Full pipeline tested: webhook â†’ OpenClaw â†’ Kimi K2 â†’ response in ~6s â†’ send (Meta token expired) â†’ log OK.
+- âœ… Full pipeline tested: webhook â†’ OpenClaw â†’ OpenRouter â†’ response in ~6s â†’ send (Meta token expired) â†’ log OK.
 
 ## Resolved Issues (2026-02-22)
 

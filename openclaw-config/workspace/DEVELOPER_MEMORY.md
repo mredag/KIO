@@ -46,7 +46,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`.
 - The current schema does not expose `topic_slug`.
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`.
-- `/api/integrations/knowledge/*` uses `Authorization: Bearer <N8N_API_KEY>` and now supports:
+- `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`
   - `GET /api/integrations/knowledge/context`
   - `POST /api/integrations/knowledge/change-sets/preview`

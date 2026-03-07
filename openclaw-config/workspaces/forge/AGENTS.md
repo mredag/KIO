@@ -113,7 +113,7 @@ pm2 restart kio-backend
 ## Recent Feature Updates (2026-03-02)
 
 **Instagram DM Pipeline Improvements:**
-1. **GPT-4o-mini Upgrade:** Standard tier upgraded from Kimi K2 to GPT-4o-mini for better Turkish quality and hallucination prevention
+1. **GPT-4o-mini Upgrade:** Standard tier uses GPT-4o-mini for better Turkish quality and hallucination prevention
 2. **Execution ID Tracking:** Every DM execution gets unique `EXE-xxxxxxxx` ID stored in `instagram_interactions` and `whatsapp_interactions` tables. Use `GET /api/mc/dm-kontrol/execution/:executionId` for full pipeline trace debugging
 3. **System Term Prevention:** Policy Rule 11 blocks responses containing "bilgi bankası", "veri tabanı", "sistem", "prompt". System prompts changed from "BILGI_BANKASI" to "verilen bilgiler"
 4. **PriceFormatterService:** Mobile-optimized price formatting from KB data with category-specific templates (spa_massage, membership, courses, etc.)
@@ -127,19 +127,19 @@ pm2 restart kio-backend
 
 ## KIO API Reference
 Base: `http://localhost:3001`
-Auth: `/api/integrations/*` uses `Authorization: Bearer <N8N_API_KEY>`; `/api/mc/*` is the local backend/admin surface
+Auth: `/api/integrations/*` uses `Authorization: Bearer <KIO_API_KEY>`; `/api/mc/*` is the local backend/admin surface
 
 ```bash
 # Health check (no auth)
 curl -s http://localhost:3001/api/kiosk/health
 
 # Authenticated GET
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/mc/dashboard
 
 # POST with JSON
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"title":"test","status":"queued"}' \
   http://localhost:3001/api/mc/jobs
 ```
@@ -222,32 +222,32 @@ Base: `http://localhost:3001/api/integrations/whatsapp`
 ### curl Examples (WhatsApp)
 ```bash
 # Stats
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/whatsapp/stats
 
 # Recent messages
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   "http://localhost:3001/api/integrations/whatsapp/recent-messages?limit=20"
 
 # Conversation for a phone
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/whatsapp/conversation/905551234567
 
 # Add to ignore list
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"phone":"+905551234567","label":"staff","added_by":"forge"}' \
   http://localhost:3001/api/integrations/whatsapp/ignore-list
 
 # Create appointment request
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"phone":"905551234567","service_requested":"Aromaterapi masajı","preferred_date":"Cumartesi","preferred_time":"14:00"}' \
   http://localhost:3001/api/integrations/whatsapp/appointment-requests
 
 # Update appointment status
 curl -s -X PATCH -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"status":"confirmed","staff_notes":"Onaylandı"}' \
   http://localhost:3001/api/integrations/whatsapp/appointment-requests/APPOINTMENT_ID
 ```
@@ -257,17 +257,17 @@ Runtime-editable pipeline config stored in `mc_policies` table.
 
 ```bash
 # Get current WhatsApp pipeline config
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/mc/dm-kontrol/wa-pipeline-config
 
 # Update WhatsApp pipeline config (deep merge)
 curl -s -X PATCH -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"directResponse":{"tiers":{"light":{"enabled":true}}}}' \
   http://localhost:3001/api/mc/dm-kontrol/wa-pipeline-config
 
 # Reset to defaults
-curl -s -X POST -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -X POST -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/mc/dm-kontrol/wa-pipeline-config/reset
 ```
 
@@ -276,18 +276,18 @@ When updating Knowledge Base entries (prices, hours, services), the change affec
 Follow the preview-first KB protocol in `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` and use Bearer auth for the integration KB routes:
 ```bash
 # List KB entries
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/knowledge/entries
 
 # Preview a KB change set (affects both channels after apply)
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"requestedBy":"forge","operations":[{"type":"update","id":"ENTRY_ID","value":"Yeni fiyat: 500 TL","description":"Masaj fiyati guncellendi"}]}' \
   http://localhost:3001/api/integrations/knowledge/change-sets/preview
 
 # Apply the approved KB change set
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"appliedBy":"forge"}' \
   http://localhost:3001/api/integrations/knowledge/change-sets/CHANGE_SET_ID/apply
 ```

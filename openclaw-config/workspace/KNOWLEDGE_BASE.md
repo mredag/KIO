@@ -57,7 +57,7 @@ Important:
 
 ## Access Modes
 
-- OpenClaw agent access to `/api/integrations/knowledge/*`: `Authorization: Bearer <N8N_API_KEY>`
+- OpenClaw agent access to `/api/integrations/knowledge/*`: `Authorization: Bearer <KIO_API_KEY>`
 - Admin UI/API: authenticated browser session
 - Older `X-API-Key` wording in stale workspace notes does not apply to the current integration KB routes
 

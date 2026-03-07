@@ -1357,7 +1357,7 @@ Auth: Session auth (admin panel cookies) — API çağrılarında X-API-Key KULL
 - Codebase: D:\\\\PERSONEL\\\\Eform-Resepsion-Kiosk-ClawBot
 - npm workspaces: frontend/ (React+Vite+Tailwind) ve backend/ (Express+SQLite)
 - DB: backend/data/kiosk.db (SQLite WAL, better-sqlite3)
-- Backend API: http://localhost:3001 (Auth: X-API-Key header)
+- Backend API: http://localhost:3001 (/api/integrations/* => Authorization: Bearer <KIO_API_KEY>, /api/mc/* => session auth)
 - Node 18 gerekli (fnm use 18) — backend/DB komutlarından ÖNCE geçiş yap
 - tsconfig.json'ı DEĞİŞTİRME`);
 
@@ -1370,7 +1370,7 @@ bash pty:true workdir:D:\\\\PERSONEL\\\\Eform-Resepsion-Kiosk-ClawBot command:"c
 - Codex'e TAM bağlam ver: hangi dosya, ne değişecek, neden
 
 ## API Çağrıları → PowerShell
-Invoke-RestMethod -Uri "URL" -Method GET -Headers @{ "X-API-Key" = "$\{process.env.N8N_API_KEY\}" }
+Invoke-RestMethod -Uri "URL" -Method GET -Headers @{ "Authorization" = "Bearer <KIO_API_KEY>" }
 DİKKAT: curl KULLANMA (PowerShell'de Invoke-WebRequest'e alias'lıdır)
 
 ## DB Sorguları → Node.js (sqlite3 CLI YOK)

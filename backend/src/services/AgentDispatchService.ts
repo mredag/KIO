@@ -207,7 +207,7 @@ export class AgentDispatchService {
     parts.push(`- OS: Windows + PowerShell`);
     parts.push(`- Codebase: D:\\\\PERSONEL\\\\Eform-Resepsion-Kiosk-ClawBot`);
     parts.push(`- Backend API: http://localhost:3001`);
-    parts.push(`- API Key: ${process.env.N8N_API_KEY || '<N8N_API_KEY>'}`);
+    parts.push(`- API Key: ${process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<KIO_API_KEY>'}`);
     parts.push('');
     parts.push(`İşin bitince ne yaptığını kısaca özetle.`);
 

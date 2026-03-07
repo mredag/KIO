@@ -40,7 +40,7 @@ Current KB schema in this repo:
 Important:
 
 - The current KB schema does not expose `topic_slug`
-- `/api/integrations/knowledge/*` uses `Authorization: Bearer <N8N_API_KEY>`
+- `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>`
 - The current integration API in code supports:
   - `GET /api/integrations/knowledge/entries`
   - `GET /api/integrations/knowledge/context`
@@ -189,7 +189,7 @@ Final State
 
 Allowed:
 
-- Use `Authorization: Bearer <N8N_API_KEY>` for `/api/integrations/knowledge/*`
+- Use `Authorization: Bearer <KIO_API_KEY>` for `/api/integrations/knowledge/*`
 - `GET /api/integrations/knowledge/entries`
 - `GET /api/integrations/knowledge/context`
 - `POST /api/integrations/knowledge/change-sets/preview`

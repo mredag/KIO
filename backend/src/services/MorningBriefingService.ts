@@ -170,7 +170,7 @@ export class MorningBriefingService {
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://spa-kiosk.local',
+        'HTTP-Referer': 'https://kio.eformspa.local',
         'X-Title': 'Eform Morning Briefing',
       },
       body: JSON.stringify({

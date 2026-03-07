@@ -637,7 +637,7 @@ async function attemptCorrection(
       agentResponse,
       validation,
       knowledgeContext || '',
-      modelUsed || 'moonshotai/kimi-k2',
+      modelUsed || 'openai/gpt-4o-mini',
     );
 
     if (correction.response) {

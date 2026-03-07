@@ -1,168 +1,54 @@
 # Scripts Directory
 
-Utility scripts for managing the SPA Kiosk application.
+Current standard:
+- Pi live app: `~/kio-new`
+- Pi backend PM2 name: `kio-backend`
+- Pi OpenClaw PM2 name: `kio-openclaw`
+- Standard Pi update: `deployment/raspberry-pi/update-pi.sh`
+- Legacy n8n workflows are archived and not part of current operations
 
-## Raspberry Pi Scripts
+## Recommended Paths
 
-### Update Scripts
+### Pi maintenance
+Use the deployment runbook and updater:
 
-**`pi-update.sh`** - Full update process
-- Pulls latest code
-- Checks and installs dependencies if needed
-- Rebuilds backend and frontend
-- Restarts PM2 service
-- Verifies deployment
-
-Usage:
 ```bash
-cd ~/spa-kiosk
-./scripts/pi-update.sh
+cd ~/kio-new/deployment/raspberry-pi
+./update-pi.sh
 ```
 
-**`pi-quick-update.sh`** - Quick update (no dependency check)
-- Pulls latest code
-- Rebuilds backend and frontend
-- Restarts service
+### Remote deploy from Windows
+Use the maintained wrapper:
 
-Usage:
-```bash
-cd ~/spa-kiosk
-./scripts/pi-quick-update.sh
-```
-
-### Database Scripts
-
-**`db/check-db.cjs`** - Check local database contents
-```bash
-node scripts/db/check-db.cjs
-```
-
-**`db/check-pi-db.cjs`** - Check Raspberry Pi database contents
-```bash
-node scripts/db/check-pi-db.cjs
-```
-
-**`db/check-pi-settings.cjs`** - Check Pi system settings
-```bash
-node scripts/db/check-pi-settings.cjs
-```
-
-**`db/checkpoint-pi-db.cjs`** - Create database checkpoint
-```bash
-node scripts/db/checkpoint-pi-db.cjs
-```
-
-**`db/fix-pi-database.cjs`** - Fix database issues
-```bash
-node scripts/db/fix-pi-database.cjs
-```
-
-**`db/init-pi-db.cjs`** - Initialize Pi database
-```bash
-node scripts/db/init-pi-db.cjs
-```
-
-### Data Management Scripts
-
-**`data/export-all-data.cjs`** - Export all data
-```bash
-node scripts/data/export-all-data.cjs
-```
-
-**`data/export-massages-sql.cjs`** - Export massages as SQL
-```bash
-node scripts/data/export-massages-sql.cjs
-```
-
-**`data/export-surveys-sql.cjs`** - Export surveys as SQL
-```bash
-node scripts/data/export-surveys-sql.cjs
-```
-
-**`data/import-massages.js`** - Import massages
-```bash
-node scripts/data/import-massages.js
-```
-
-**`data/import-on-pi.cjs`** - Import data on Pi
-```bash
-node scripts/data/import-on-pi.cjs
-```
-
-**`data/import-settings-pi.cjs`** - Import settings to Pi
-```bash
-node scripts/data/import-settings-pi.cjs
-```
-
-**`data/import-surveys-pi.cjs`** - Import surveys to Pi
-```bash
-node scripts/data/import-surveys-pi.cjs
-```
-
-**`data/compare-surveys.cjs`** - Compare survey data
-```bash
-node scripts/data/compare-surveys.cjs
-```
-
-### Sync Scripts
-
-**`sync/migrate-and-sync.cjs`** - Migrate and sync data
-```bash
-node scripts/sync/migrate-and-sync.cjs
-```
-
-**`sync/sync-db-to-pi.ps1`** - Sync database to Pi (PowerShell)
 ```powershell
-.\scripts\sync\sync-db-to-pi.ps1
+.\deployment\raspberry-pi\remote-deploy.ps1
 ```
 
-**`sync/sync-all-to-pi.ps1`** - Sync everything to Pi (PowerShell)
-```powershell
-.\scripts\sync\sync-all-to-pi.ps1
-```
-
-### Admin Scripts
-
-**`admin/create-admin.cjs`** - Create admin user
+### OpenClaw runtime sync
 ```bash
-node scripts/admin/create-admin.cjs
+cd ~/kio-new
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --dry-run
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart
 ```
 
-**`admin/update-pi-settings.cjs`** - Update Pi settings
-```bash
-node scripts/admin/update-pi-settings.cjs
-```
+## Script Policy
 
-### Deployment Scripts
+- `scripts/pi-update.sh` and `scripts/pi-quick-update.sh` forward to the standard Pi updater.
+- `scripts/pi-sync-translations.*` forward to the same remote update path because frontend changes still require the normal production build.
+- `scripts/deploy/deploy-to-pi.ps1` forwards to the maintained remote deploy helper.
+- Direct Pi database copy scripts are deprecated because they can overwrite live data.
 
-**`deploy/deploy-to-pi.ps1`** - Deploy to Pi (PowerShell)
-```powershell
-.\scripts\deploy\deploy-to-pi.ps1
-```
+## Safe Utilities Still Relevant
 
-**`deploy/setup-ssh-key.ps1`** - Setup SSH key (PowerShell)
-```powershell
-.\scripts\deploy\setup-ssh-key.ps1
-```
+- `scripts/db/*`: local database inspection and maintenance helpers
+- `scripts/data/*`: local import/export utilities
+- `scripts/admin/*`: admin/bootstrap helpers
+- `scripts/sync/migrate-and-sync.cjs`: local data migration helper
 
-## Making Scripts Executable
+## Archived / Dangerous Paths
 
-For bash scripts on Linux/Mac/Pi:
-```bash
-chmod +x scripts/*.sh
-chmod +x scripts/**/*.sh
-```
-
-## Script Organization
-
-```
-scripts/
-├── README.md              # This file
-├── pi-update.sh          # Full Pi update
-├── pi-quick-update.sh    # Quick Pi update
-├── db/                   # Database utilities
-├── data/                 # Data import/export
-├── sync/                 # Sync utilities
-├── admin/                # Admin utilities
-└── deploy/               # Deployment scripts
-```
+Do not use these as operational workflow patterns:
+- old `~/spa-kiosk` paths
+- old `kiosk-backend` / `spa-kiosk-backend` PM2 names
+- direct DB overwrite scripts for the live Pi
+- old n8n workflow instructions for current Instagram/WhatsApp production

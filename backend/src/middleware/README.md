@@ -27,15 +27,17 @@ import { apiKeyAuth } from './middleware/apiKeyAuth.js';
 // Apply to integration routes
 router.post('/api/integrations/coupons/consume', apiKeyAuth, (req, res) => {
   // Only requests with valid API key can access this
-  // req.apiClient will be set to 'n8n' for logging
+  // req.apiClient will be set to 'integration' for logging
 });
 ```
 
 **Configuration:**
-Set `N8N_API_KEY` in `.env` file:
+Set `KIO_API_KEY` in `.env` file:
 ```bash
 # Generate with: openssl rand -base64 32
-N8N_API_KEY=your-secure-random-key-here
+KIO_API_KEY=your-secure-random-key-here
+# Optional legacy alias for older integrations:
+N8N_API_KEY=
 ```
 
 **Request Format:**
@@ -55,7 +57,7 @@ curl -X POST http://localhost:3001/api/integrations/coupons/consume \
 - **401 MISSING_API_KEY:** Authorization header not provided
 - **401 INVALID_AUTH_FORMAT:** Authorization header format is incorrect
 - **401 INVALID_API_KEY:** API key does not match configured value
-- **500 SERVER_MISCONFIGURATION:** N8N_API_KEY not configured in environment
+- **500 SERVER_MISCONFIGURATION:** KIO_API_KEY or legacy N8N_API_KEY not configured in environment
 
 ## Testing
 

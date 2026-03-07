@@ -53,7 +53,7 @@ describe('Property 12: Completion updates', () => {
         name TEXT NOT NULL,
         role TEXT NOT NULL,
         objective TEXT,
-        model TEXT DEFAULT 'moonshotai/kimi-k2',
+        model TEXT DEFAULT 'openai/gpt-4.1',
         provider TEXT DEFAULT 'openrouter',
         status TEXT DEFAULT 'idle',
         channel_scope TEXT,
@@ -221,7 +221,7 @@ describe('Property 12: Completion updates', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 500 }),
-        fc.constantFrom('moonshotai/kimi-k2', 'openai/gpt-4o-mini', 'deepseek/deepseek-chat'),
+        fc.constantFrom('openai/gpt-4.1', 'openai/gpt-4o-mini', 'openai-codex/gpt-5.3-codex'),
         (resultText, model) => {
           const { sessionId, agentId, jobId } = seedRunningSession({ model, initialTotalRuns: 0 });
 
@@ -241,7 +241,7 @@ describe('Property 12: Completion updates', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 500 }),
-        fc.constantFrom('moonshotai/kimi-k2', 'openai/gpt-4o-mini', 'deepseek/deepseek-chat'),
+        fc.constantFrom('openai/gpt-4.1', 'openai/gpt-4o-mini', 'openai-codex/gpt-5.3-codex'),
         (resultText, model) => {
           const { sessionId, agentId, jobId, runId } = seedRunningSession({ model, initialTotalRuns: 0 });
 
@@ -262,7 +262,7 @@ describe('Property 12: Completion updates', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 500 }),
-        fc.constantFrom('moonshotai/kimi-k2', 'openai/gpt-4o-mini', 'deepseek/deepseek-chat'),
+        fc.constantFrom('openai/gpt-4.1', 'openai/gpt-4o-mini', 'openai-codex/gpt-5.3-codex'),
         (resultText, model) => {
           const { sessionId, agentId, jobId, runId } = seedRunningSession({ model, initialTotalRuns: 0 });
 
@@ -286,7 +286,7 @@ describe('Property 12: Completion updates', () => {
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 200 }),
-        fc.constantFrom('moonshotai/kimi-k2', 'openai/gpt-4o-mini', 'deepseek/deepseek-chat'),
+        fc.constantFrom('openai/gpt-4.1', 'openai/gpt-4o-mini', 'openai-codex/gpt-5.3-codex'),
         fc.integer({ min: 0, max: 100 }),
         (resultText, model, initialRuns) => {
           const { sessionId, agentId, jobId } = seedRunningSession({ model, initialTotalRuns: initialRuns });

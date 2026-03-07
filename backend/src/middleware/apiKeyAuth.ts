@@ -14,8 +14,8 @@ declare global {
 
 /**
  * API Key authentication middleware for integration endpoints
- * Verifies Bearer token in Authorization header matches N8N_API_KEY env var
- * (env var name is legacy — it's a generic integration API key)
+ * Verifies Bearer token in Authorization header matches KIO_API_KEY
+ * (falls back to legacy N8N_API_KEY for compatibility)
  * Requirements: 16.2, 16.3
  */
 export function apiKeyAuth(
@@ -53,11 +53,11 @@ export function apiKeyAuth(
   }
 
   const token = parts[1];
-  const expectedApiKey = process.env.N8N_API_KEY;
+  const expectedApiKey = process.env.KIO_API_KEY || process.env.N8N_API_KEY;
 
-  // Check if N8N_API_KEY is configured
+  // Check if the integration API key is configured
   if (!expectedApiKey) {
-    console.error('N8N_API_KEY is not configured in environment variables');
+    console.error('KIO_API_KEY/N8N_API_KEY is not configured in environment variables');
     res.status(500).json({
       error: {
         code: 'SERVER_MISCONFIGURATION',

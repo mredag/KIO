@@ -27,7 +27,7 @@ function createTestApp() {
   db.exec(`
     CREATE TABLE mc_agents (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, objective TEXT,
-      model TEXT DEFAULT 'moonshotai/kimi-k2', provider TEXT DEFAULT 'openrouter',
+      model TEXT DEFAULT 'openai/gpt-4.1', provider TEXT DEFAULT 'openrouter',
       status TEXT CHECK(status IN ('active','idle','error','disabled')) DEFAULT 'idle',
       channel_scope TEXT, capabilities TEXT, guardrails TEXT,
       health_score REAL DEFAULT 100.0, total_runs INTEGER DEFAULT 0,

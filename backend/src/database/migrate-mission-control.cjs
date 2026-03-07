@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS mc_agents (
   name TEXT NOT NULL,
   role TEXT NOT NULL,
   objective TEXT,
-  model TEXT DEFAULT 'moonshotai/kimi-k2',
+  model TEXT DEFAULT 'openai/gpt-4.1',
   provider TEXT DEFAULT 'openrouter',
   status TEXT CHECK(status IN ('active', 'idle', 'error', 'disabled')) DEFAULT 'idle',
   channel_scope TEXT,
@@ -187,7 +187,7 @@ if (!existing) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     'instagram-dm', 'Eform Instagram Asistani', 'customer_support',
     'Instagram DM uzerinden gelen musteri sorularini Turkce olarak yanitla',
-    'moonshotai/kimi-k2', 'openrouter', 'active',
+    'openai/gpt-4o-mini', 'openrouter', 'active',
     JSON.stringify(['instagram']),
     JSON.stringify(['answer_questions', 'provide_pricing', 'share_hours', 'greet_customers'])
   );

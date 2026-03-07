@@ -21,7 +21,7 @@ describe('Property 5: Task summary detection', () => {
     objective: fc.string({ minLength: 1, maxLength: 200 }),
     constraints: fc.array(fc.string({ minLength: 1, maxLength: 50 }), { minLength: 0, maxLength: 5 }),
     deliverables: fc.array(fc.string({ minLength: 1, maxLength: 50 }), { minLength: 1, maxLength: 5 }),
-    suggestedModel: fc.constantFrom('moonshotai/kimi-k2', 'openai/gpt-4o-mini', 'deepseek/deepseek-chat'),
+    suggestedModel: fc.constantFrom('openai/gpt-4.1', 'openai/gpt-4o-mini', 'openai-codex/gpt-5.3-codex'),
     suggestedRole: fc.constantFrom('developer', 'researcher', 'analyst'),
   });
 

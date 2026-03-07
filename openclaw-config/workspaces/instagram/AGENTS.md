@@ -41,7 +41,7 @@ When admin asks about DM operations, you can report on:
 - Suspicious user flags
 
 ## KIO API (Read-Only)
-Base: `http://localhost:3001` | Auth: `Authorization: Bearer <N8N_API_KEY>`
+Base: `http://localhost:3001` | Auth: `Authorization: Bearer <KIO_API_KEY>`
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|

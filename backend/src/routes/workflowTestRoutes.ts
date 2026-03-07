@@ -297,7 +297,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const kbCategories: Set<string> = new Set(analysis.intentCategories);
       kbCategories.add('contact');
       const categoriesParam = Array.from(kbCategories).join(',');
-      const API_KEY = process.env.N8N_API_KEY || '';
+      const API_KEY = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '';
       let knowledgeContext = '';
       let knowledgeEntriesCount = 0;
       let selectedEvidence = '';

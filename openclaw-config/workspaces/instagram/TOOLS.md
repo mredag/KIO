@@ -1,7 +1,7 @@
 # TOOLS - Instagram DM Agent
 
 Base URL: `http://localhost:3001`
-Auth: `X-API-Key` from `N8N_API_KEY`
+Auth: `Authorization: Bearer <KIO_API_KEY>`
 
 Modes:
 - Hook mode: reply with plain Turkish text only. Do not call tools or APIs.

@@ -1,6 +1,6 @@
 /**
  * Instagram Hook Transform for OpenClaw
- * Replaces the n8n Instagram workflow pipeline:
+ * Replaces the legacy Instagram workflow pipeline:
  *   Parse → Service Check → [Customer + Knowledge + Prompt + Intent] →
  *   Suspicious Check → Enrich Context → build agent message
  *
@@ -8,7 +8,7 @@
  */
 
 const KIO_BASE = process.env.KIO_API_URL || 'http://localhost:3001';
-const KIO_TOKEN = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<N8N_API_KEY>';
+const KIO_TOKEN = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<KIO_API_KEY>';
 
 async function kioFetch(path, options = {}) {
   const url = `${KIO_BASE}${path}`;
@@ -29,10 +29,10 @@ async function kioFetch(path, options = {}) {
   }
 }
 
-// ── Intent classification (replicates n8n AI Intent Detection node) ──
+// ── Intent classification (replicates the legacy AI intent categories) ──
 async function classifyIntent(text) {
   // Use KIO's existing knowledge context endpoint with intent param
-  // For now, use simple regex-based classification matching the n8n prompt categories
+  // For now, use simple regex-based classification matching the legacy prompt categories
   const t = text.toLowerCase();
   const n = t.replace(/ş/g,'s').replace(/ı/g,'i').replace(/ğ/g,'g')
              .replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c');
@@ -269,7 +269,7 @@ export default async function transform(ctx) {
     })),
   ]);
 
-  // Intent classification (regex-based, same as n8n AI intent node categories)
+  // Intent classification (regex-based, same as the legacy AI intent categories)
   const intents = await classifyIntent(text);
 
   // Context enrichment (port of enrich_context_v31_ai_driven.js)

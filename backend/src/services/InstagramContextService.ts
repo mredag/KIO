@@ -897,7 +897,7 @@ export class InstagramContextService {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'SPA Context Repair',
         },
         body: JSON.stringify({
@@ -974,7 +974,7 @@ export class InstagramContextService {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'SPA State Context Repair',
         },
         body: JSON.stringify({
@@ -1086,7 +1086,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'SPA Intent Detection'
         },
         body: JSON.stringify({
@@ -1238,7 +1238,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'SPA Context Planner',
         },
         body: JSON.stringify({

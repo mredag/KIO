@@ -567,7 +567,7 @@ export class ResponsePolicyService {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'Eform Policy Agent',
         },
         body: JSON.stringify({
@@ -781,7 +781,7 @@ YANITINI SADECE JSON OLARAK VER:
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'Eform Faithfulness Check',
         },
         body: JSON.stringify({
@@ -855,7 +855,7 @@ YANITINI SADECE JSON OLARAK VER:
     failedResponse: string,
     validation: PolicyValidationResult,
     knowledgeContext: string,
-    modelId: string = 'moonshotai/kimi-k2',
+    modelId: string = 'openai/gpt-4o-mini',
     context: Pick<PolicyValidationContext, 'selectedEvidence' | 'followUpHint' | 'activeTopic' | 'responseDirective'> = {},
   ): Promise<{ response: string | null; latencyMs: number; tokensEstimated: number }> {
     if (!this.apiKey) {
@@ -933,7 +933,7 @@ Kurallara uygun yeni bir yanıt yaz.`;
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://spa-kiosk.local',
+          'HTTP-Referer': 'https://kio.eformspa.local',
           'X-Title': 'Eform Policy Correction',
         },
         body: JSON.stringify({

@@ -15,7 +15,7 @@
 - Windows repo: `D:\PERSONEL\Eform-Resepsion-Kiosk-ClawBot`
 
 ## Auth Modes
-- `/api/integrations/*`: `Authorization: Bearer <N8N_API_KEY>`
+- `/api/integrations/*`: `Authorization: Bearer <KIO_API_KEY>`
 - `/api/mc/*`: local backend/admin surface in the current codebase
 - Do not use stale `X-API-Key` snippets for integration routes
 
@@ -33,12 +33,12 @@ For live KB changes use:
 curl -s http://localhost:3001/api/kiosk/health
 
 # List KB entries
-curl -s -H "Authorization: Bearer <N8N_API_KEY>" \
+curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
   http://localhost:3001/api/integrations/knowledge/entries
 
 # Preview a KB change set
 curl -s -X POST -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <N8N_API_KEY>" \
+  -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"requestedBy":"forge","operations":[{"type":"update","id":"ENTRY_ID","value":"Yeni deger"}]}' \
   http://localhost:3001/api/integrations/knowledge/change-sets/preview
 ```
@@ -48,7 +48,7 @@ curl -s -X POST -H "Content-Type: application/json" \
 Invoke-RestMethod -Uri "http://localhost:3001/api/kiosk/health" -Method GET
 
 # List KB entries
-Invoke-RestMethod -Uri "http://localhost:3001/api/integrations/knowledge/entries" -Method GET -Headers @{ "Authorization" = "Bearer <N8N_API_KEY>" }
+Invoke-RestMethod -Uri "http://localhost:3001/api/integrations/knowledge/entries" -Method GET -Headers @{ "Authorization" = "Bearer <KIO_API_KEY>" }
 ```
 
 ## Build and Deploy on Pi

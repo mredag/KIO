@@ -44,11 +44,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `openai-codex/*` is treated as `openai-oauth` with `cost=0` when `OPENAI_API_KEY` is not set; if API key billing is enabled, provider becomes `openai-api`.
 - In current DM runtime, unprefixed `openai/*` tier models are still treated as OpenRouter-routed unless explicitly changed.
 - Optional OpenAI API pricing envs for better estimates: `OPENAI_API_DEFAULT_INPUT_PER_MILLION_USD`, `OPENAI_API_DEFAULT_OUTPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_INPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_OUTPUT_PER_MILLION_USD`.
-- The fragment buffer is handled by `backend/src/services/DMInboundAggregationService.ts`.
-- The fragment buffer is a rolling 5 second window.
-- Each fragment-like inbound extends `flush_after`.
-- Do not dispatch just because the merged text reached 3 words. That early-dispatch rule was removed.
-- Dispatch immediately only when the newest inbound is not fragment-like, or when the rolling timer expires.
+- Do not assume a local-only DM fragment buffer exists on every machine. Verify the tracked `instagramWebhookRoutes.ts` implementation before changing inbound timing behavior.
+- Do not assume any old "3 merged words" or fixed 5 second buffering rule exists unless it is present in the deployed tracked code.
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.
 - Generic pricing clarifiers and topic-selection clarifiers should stay lightweight and deterministic when possible.
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.
@@ -81,8 +78,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 
 ## Where To Look First
 - DM planner and follow-up logic: `backend/src/services/InstagramContextService.ts`
-- DM fragment buffering: `backend/src/services/DMInboundAggregationService.ts`
-- Clarifier and semantic skip heuristics: `backend/src/services/DMPipelineHeuristics.ts`
+- DM routing and orchestration: `backend/src/routes/instagramWebhookRoutes.ts`
+- Clarifier and follow-up logic: `backend/src/services/InstagramContextService.ts`
 - Semantic retrieval and rerank: `backend/src/services/DMKnowledgeRetrievalService.ts`, `backend/src/services/DMKnowledgeRerankerService.ts`
 - Policy correction and grounding: `backend/src/services/ResponsePolicyService.ts`
 - Instagram webhook orchestration: `backend/src/routes/instagramWebhookRoutes.ts`

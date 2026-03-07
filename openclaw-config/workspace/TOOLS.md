@@ -58,4 +58,4 @@ pm2 restart kio-backend
 ## Notes
 - Do not use direct SQLite access for live business data work.
 - On Pi, Jarvis delegates coding to Forge.
-- Keep the 5 second rolling DM fragment buffer behavior intact unless the task explicitly changes it.
+- Verify the tracked Instagram webhook route before changing inbound timing behavior; do not assume local-only fragment buffering exists.

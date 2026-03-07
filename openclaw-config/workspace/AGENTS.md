@@ -119,7 +119,7 @@ Current live defaults you should keep in mind:
 - Instagram DM routing order is: pre-check exits -> deterministic handlers -> direct response -> OpenClaw fallback only if no response exists yet or direct call fails.
 - OpenClaw fallback dispatch uses `analysis.modelId` and Instagram hook mapping targets `agentId: "instagram"` (not Jarvis `main`).
 - Cost tracking is provider-aware: `openai-codex/*` becomes `openai-oauth` with zero cost when `OPENAI_API_KEY` is not set; unprefixed `openai/*` tier models remain OpenRouter-routed unless changed.
-- Instagram DM uses a rolling 5 second fragment buffer. Each fragment-like inbound extends the timer.
+- Verify inbound timing behavior in the tracked Instagram webhook route before changing it. Do not assume local-only fragment buffering exists on every machine.
 - Do not assume Instagram buttons or quick replies are reliable. Use compact text menus for customer choices.
 - Keep generic pricing and topic-selection clarifiers lightweight when possible.
 

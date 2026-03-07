@@ -68,9 +68,9 @@ For OpenClaw-related changes, compare the docs with the real implementation befo
 - OpenClaw agent IDs are `main`, `forge`, `instagram`, and `whatsapp`.
 - Mission Control mirrors the channel agents as `instagram-dm` and `whatsapp-dm`.
 - On Pi, `main` runs `openrouter/openai/gpt-4.1`, `forge` runs `openai-codex/gpt-5.3-codex`, and `instagram` / `whatsapp` use `openrouter/openai/gpt-4o-mini`.
-- Instagram DM uses a rolling 5 second fragment buffer in `DMInboundAggregationService`.
-- Each fragment-like inbound extends the timer.
-- Do not restore the removed "dispatch after 3 merged words" behavior.
+- Verify inbound timing behavior in the tracked Instagram webhook route before changing it.
+- Do not assume local-only fragment buffering exists on every machine.
+- Do not invent speculative early-dispatch heuristics without confirming the deployed code path first.
 - Use compact text menus instead of relying on Instagram buttons or quick replies.
 - Keep generic pricing and topic-selection clarifiers on deterministic lightweight paths when possible.
 

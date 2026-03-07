@@ -26,9 +26,8 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 ## DM Runtime Rules
 - Instagram DM is hybrid: direct OpenRouter first, OpenClaw fallback/advanced only
 - Always inspect the `EXE-...` trace before changing DM logic
-- The inbound fragment buffer is a rolling 5 second window
-- Each fragment-like message extends the timer
-- Do not restore the old "dispatch after 3 merged words" behavior
+- Do not assume a local-only fragment buffer exists on every machine
+- Verify inbound timing behavior in the tracked Instagram webhook route before changing it
 - Use compact text menus instead of relying on Instagram buttons
 - Keep generic pricing and topic clarifiers deterministic and cheap when possible
 
@@ -52,8 +51,8 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 ## Main Files To Inspect
 - `backend/src/routes/instagramWebhookRoutes.ts`
 - `backend/src/services/InstagramContextService.ts`
-- `backend/src/services/DMInboundAggregationService.ts`
-- `backend/src/services/DMPipelineHeuristics.ts`
+- `backend/src/services/DMKnowledgeRetrievalService.ts`
+- `backend/src/services/DMKnowledgeRerankerService.ts`
 - `backend/src/services/ResponsePolicyService.ts`
 - `backend/src/routes/jarvisRoutes.ts`
 - `backend/src/services/OpenClawClientService.ts`

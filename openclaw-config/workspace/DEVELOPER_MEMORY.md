@@ -28,9 +28,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Routing order is fixed: pre-check exits (echo/test-mode/dedup/safety) -> deterministic handlers -> direct response -> OpenClaw fallback only when no response exists yet or direct call fails.
 - OpenClaw fallback dispatch uses `analysis.modelId` and Instagram hook mapping targets `agentId: "instagram"` (not Jarvis `main`).
 - Use `EXE-...` traces before changing DM logic.
-- The inbound fragment buffer is a rolling 5 second window.
-- Each fragment-like message extends the timer.
-- Do not dispatch early just because the merged text became 3 words.
+- Do not assume a local-only fragment buffer exists on every machine. Verify the tracked Instagram webhook route before changing inbound timing behavior.
 - Use compact text menus for customer choices. Do not assume Instagram buttons render reliably.
 - Keep simple clarifiers deterministic and lightweight when possible.
 
@@ -67,8 +65,8 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 ## Main Files To Inspect
 - `backend/src/routes/instagramWebhookRoutes.ts`
 - `backend/src/services/InstagramContextService.ts`
-- `backend/src/services/DMInboundAggregationService.ts`
-- `backend/src/services/DMPipelineHeuristics.ts`
+- `backend/src/services/DMKnowledgeRetrievalService.ts`
+- `backend/src/services/DMKnowledgeRerankerService.ts`
 - `backend/src/services/ResponsePolicyService.ts`
 - `backend/src/routes/jarvisRoutes.ts`
 - `backend/src/services/OpenClawClientService.ts`

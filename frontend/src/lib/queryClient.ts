@@ -1,7 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
 const QUERY_CACHE_KEY = 'kio-cache';
-const LEGACY_QUERY_CACHE_KEY = 'spa-kiosk-cache';
 
 // Create persister for localStorage using the experimental API
 export const persister = {
@@ -15,9 +14,7 @@ export const persister = {
   },
   restoreClient: async () => {
     try {
-      const data =
-        window.localStorage.getItem(QUERY_CACHE_KEY) ||
-        window.localStorage.getItem(LEGACY_QUERY_CACHE_KEY);
+      const data = window.localStorage.getItem(QUERY_CACHE_KEY);
       return data ? JSON.parse(data) : undefined;
     } catch (error) {
       console.error('Failed to restore query client:', error);
@@ -26,7 +23,6 @@ export const persister = {
   },
   removeClient: async () => {
     window.localStorage.removeItem(QUERY_CACHE_KEY);
-    window.localStorage.removeItem(LEGACY_QUERY_CACHE_KEY);
   },
 };
 

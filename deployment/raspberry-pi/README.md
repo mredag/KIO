@@ -2,6 +2,11 @@
 
 Complete deployment solution for Raspberry Pi kiosk systems.
 
+Current production note:
+- Live system: `~/kio-new`
+- Rollback system: `~/spa-kiosk`
+- Standard maintenance command: `~/kio-new/deployment/raspberry-pi/update-pi.sh`
+
 ## 🚀 Quick Start
 
 ### One-Command Setup (Recommended)
@@ -89,6 +94,7 @@ sudo reboot
 
 ### Update Application
 ```bash
+cd ~/kio-new/deployment/raspberry-pi
 ./update-pi.sh
 ```
 
@@ -106,12 +112,14 @@ sudo reboot
 ### Check Status
 ```bash
 pm2 status
-pm2 logs kiosk-backend
+pm2 logs kio-backend
+pm2 logs kio-openclaw
 ```
 
 ### Restart Services
 ```bash
-pm2 restart kiosk-backend
+pm2 restart kio-backend
+pm2 restart kio-openclaw
 pkill chromium  # Kiosk will auto-restart
 ```
 

@@ -20,6 +20,23 @@ inclusion: manual
 
 ## Deploy Updates
 
+Recommended standard maintenance command:
+```bash
+cd ~/kio-new/deployment/raspberry-pi
+./update-pi.sh
+```
+
+What it does:
+- `git pull --ff-only origin master`
+- `npm install`
+- backend build via `tsconfig.build.json`
+- copies `*.sql` into `backend/dist/database/`
+- frontend build + copy to `backend/public/`
+- restarts `kio-backend`
+- runs `sync-openclaw-runtime.sh --restart`
+- checks `http://localhost:3001/api/kiosk/health`
+
+Manual equivalent:
 ```bash
 # SSH into Pi
 ssh eform-kio@192.168.1.8

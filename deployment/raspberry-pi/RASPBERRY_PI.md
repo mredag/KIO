@@ -2,6 +2,11 @@
 
 Complete guide for deploying the SPA Digital Kiosk on Raspberry Pi OS.
 
+Current production note:
+- Live system is `~/kio-new`
+- `~/spa-kiosk` is rollback only
+- Standard live update command is `~/kio-new/deployment/raspberry-pi/update-pi.sh`
+
 ## 🚀 Quick Start (Recommended)
 
 **For fresh Raspberry Pi 5 with Raspberry Pi OS:**
@@ -43,9 +48,10 @@ This automated script handles everything:
 
 ```bash
 pm2 status                    # Check backend status
-pm2 logs kiosk-backend        # View logs
-pm2 restart kiosk-backend     # Restart backend
-pm2 stop kiosk-backend        # Stop backend
+pm2 logs kio-backend          # View backend logs
+pm2 logs kio-openclaw         # View OpenClaw logs
+pm2 restart kio-backend       # Restart backend
+pm2 restart kio-openclaw      # Restart OpenClaw
 ```
 
 ### Kiosk Control
@@ -58,7 +64,7 @@ pkill chromium                # Restart kiosk (auto-restarts via watchdog)
 ### Updates
 
 ```bash
-cd ~/spa-kiosk/deployment/raspberry-pi
+cd ~/kio-new/deployment/raspberry-pi
 ./update-pi.sh                # Update to latest version
 ```
 

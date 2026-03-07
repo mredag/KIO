@@ -12,10 +12,13 @@ import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../serv
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { buildDMStyleProfile } from '../services/DMResponseStyleService.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
+import type { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
+import type { ConductState, SuspiciousUserService } from '../services/SuspiciousUserService.js';
 import { randomUUID } from 'crypto';
 
 // Escalation service injection (set from index.ts)
@@ -24,9 +27,14 @@ export function setSimulatorEscalation(svc: EscalationService): void {
   _escalationService = svc;
 }
 
-// Compatibility hook: currently no-op, kept for index wiring stability.
-export function setSimulatorDMSafety(_svc: unknown): void {
-  // no-op
+let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
+export function setSimulatorDMSafety(svc: DMSafetyPhraseService | null): void {
+  _dmSafetyPhraseService = svc;
+}
+
+let _dmConductService: SuspiciousUserService | null = null;
+export function setSimulatorConductService(svc: SuspiciousUserService | null): void {
+  _dmConductService = svc;
 }
 
 /**
@@ -139,6 +147,29 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     }
   }
 
+  function buildConductReply(
+    action: 'retry_question' | 'block_message',
+    conductState: ConductState,
+  ): string | null {
+    if (conductState === 'silent') {
+      return null;
+    }
+
+    if (conductState === 'final_warning') {
+      return action === 'block_message'
+        ? 'Bu tur mesajlara cevap veremiyorum. Devam ederseniz yanit verilmeyecektir.'
+        : 'Sadece profesyonel spa ve spor hizmetleri konusunda yardimci olabilirim. Uygunsuz israrda yanit verilmeyecektir.';
+    }
+
+    if (conductState === 'guarded') {
+      return action === 'block_message'
+        ? 'Bu tur mesajlara cevap veremiyorum.'
+        : 'Sadece profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyorum.';
+    }
+
+    return getSexualIntentReply(action);
+  }
+
   /**
    * POST /api/workflow-test/simulate-agent
    * Full Instagram DM agent simulation — runs the EXACT same pipeline as the real webhook.
@@ -202,21 +233,39 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         });
       } catch { /* non-fatal */ }
 
-      // ═══ STAGE 0: Sexual Intent Filter (same as webhook) ═══
+      // STAGE 0: Sexual Intent Filter + conduct ladder
       const sexualIntentStartTime = Date.now();
       let sexualIntentResult;
       try {
-        sexualIntentResult = await evaluateSexualIntent(text);
+        const safetyResult = _dmSafetyPhraseService
+          ? await _dmSafetyPhraseService.evaluateMessage({
+              messageText: text,
+              channel: 'workflow_test',
+              senderId,
+              allowReviewAlerts: false,
+            })
+          : {
+              decision: await evaluateSexualIntent(text),
+              matchedPhrase: null,
+              reviewRequest: { triggered: false, status: 'disabled', reviewId: null },
+            };
+        sexualIntentResult = safetyResult.decision;
         const sexualIntentLatency = Date.now() - sexualIntentStartTime;
-        
-        // If blocked or retry, stop here and return early
+        const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
+
         if (sexualIntentResult.action !== 'allow') {
-          const responseText = getSexualIntentReply(sexualIntentResult.action) || (
-            sexualIntentResult.action === 'block_message'
-              ? 'Bu konuda yardimci olamam. Lutfen uygun bir dille yazin.'
-              : 'Tekrar eder misiniz? Anlayamadim...'
-          );
-          // Log outbound with sexual intent trace
+          const conductAfter = _dmConductService?.flagUser('instagram', senderId, sexualIntentResult.reason, {
+            action: sexualIntentResult.action,
+            severity: sexualIntentResult.action === 'block_message' ? 'high' : 'medium',
+            source: sexualIntentResult.modelUsed,
+            messageText: text,
+          });
+          const effectiveState = conductAfter?.conductState || 'guarded';
+          const responseText = buildConductReply(sexualIntentResult.action, effectiveState) || '[sessiz engel]';
+          const interactionIntent = effectiveState === 'silent'
+            ? 'blocked_silent'
+            : (sexualIntentResult.action === 'block_message' ? 'security_block' : 'retry_question');
+
           const outboundId = randomUUID();
           const trace = {
             sexualIntent: {
@@ -226,8 +275,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               modelUsed: sexualIntentResult.modelUsed,
               latencyMs: sexualIntentLatency,
             },
+            conductControl: {
+              state: effectiveState,
+              shouldReply: conductAfter?.shouldReply ?? (effectiveState !== 'silent'),
+              offenseCount: conductAfter?.offenseCount || 0,
+              manualMode: conductAfter?.manualMode || 'auto',
+              silentUntil: conductAfter?.silentUntil || null,
+              reason: conductAfter?.reason || sexualIntentResult.reason,
+            },
           };
-          
+
           rawDb.prepare(`
             INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, model_used, execution_id, created_at, pipeline_trace)
             VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?)
@@ -235,15 +292,14 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             outboundId,
             senderId,
             responseText,
-            sexualIntentResult.action === 'block_message' ? 'security_block' : 'retry_question',
-            responseText,
+            interactionIntent,
+            effectiveState === 'silent' ? null : responseText,
             sexualIntentResult.modelUsed,
             executionId,
             new Date().toISOString(),
             JSON.stringify(trace),
           );
 
-          // Push SSE event
           try {
             DmSSEManager.getInstance().pushEvent({
               type: 'dm:response',
@@ -272,12 +328,35 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               latencyMs: sexualIntentLatency,
             },
             response: responseText,
+            conductControl: trace.conductControl,
             responseTime: Date.now() - startTime,
           });
           return;
         }
 
-        // Store sexual intent result for allowed messages
+        if (conductBefore?.shouldReply === false) {
+          sexualIntentResult = {
+            ...sexualIntentResult,
+            latencyMs: sexualIntentLatency,
+          };
+
+          res.json({
+            ok: true,
+            sexualIntent: sexualIntentResult,
+            response: '[sessiz engel]',
+            conductControl: {
+              state: conductBefore.conductState || 'silent',
+              shouldReply: false,
+              offenseCount: conductBefore.offenseCount || 0,
+              manualMode: conductBefore.manualMode || 'auto',
+              silentUntil: conductBefore.silentUntil || null,
+              reason: conductBefore.reason,
+            },
+            responseTime: Date.now() - startTime,
+          });
+          return;
+        }
+
         sexualIntentResult = {
           ...sexualIntentResult,
           latencyMs: sexualIntentLatency,
@@ -287,13 +366,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         sexualIntentResult = {
           action: 'allow' as const,
           confidence: 0,
-          reason: `Error: ${intentErr?.message || String(intentErr)}`,
+          reason: `Error: ${intentErr instanceof Error ? intentErr.message : String(intentErr)}`,
           modelUsed: 'error',
           latencyMs: Date.now() - sexualIntentStartTime,
         };
       }
 
-      // ═══ STAGE 1: Context Analysis (same as webhook) ═══
+      // STAGE 1: Context Analysis (same as webhook)
       const analysis = await contextService.analyzeMessage(senderId, text);
 
       // ═══ STAGE 2: Knowledge Fetch + Format (same as webhook) ═══
@@ -435,13 +514,22 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
       const customerSummary = analysis.isNewCustomer
         ? 'YENI MUSTERI'
-        : `Etkileşim: ${analysis.totalInteractions}`;
+        : `Etkilesim: ${analysis.totalInteractions}`;
+      const conductForReply = _dmConductService?.checkSuspicious('instagram', senderId);
+      const conductStateForReply: ConductState = conductForReply?.conductState || 'normal';
+      const styleProfile = buildDMStyleProfile({
+        customerMessage: text,
+        conversationHistory: analysis.conversationHistory,
+        isNewCustomer: analysis.isNewCustomer,
+        followUpHint: analysis.followUpHint,
+        conductState: conductStateForReply,
+      });
 
       const directService = new DirectResponseService();
-      const deterministicInfoResponse = isGenericInfoRequest(text)
+      const deterministicInfoResponse = conductStateForReply === 'normal' && isGenericInfoRequest(text)
         ? buildGenericInfoTemplateFromKnowledge()
         : null;
-      const deterministicClarifier = deterministicInfoResponse
+      const deterministicClarifier = deterministicInfoResponse || conductStateForReply !== 'normal'
         ? null
         : buildDeterministicClarifierResponse({
             messageText: text,
@@ -478,6 +566,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             knowledgeContext: formattedKnowledge,
             selectedEvidence,
             conversationHistory: analysis.formattedHistory,
+            styleInstructions: styleProfile.instructions,
             followUpHint: analysis.followUpHint,
             responseDirective: analysis.responseDirective,
             customerSummary,
@@ -590,6 +679,15 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         knowledgeEntriesCount,
         semanticRetrieval: semanticRetrievalTrace,
         semanticRerank: semanticRerankTrace,
+        conductControl: {
+          state: conductStateForReply,
+          shouldReply: conductForReply?.shouldReply !== false,
+          offenseCount: conductForReply?.offenseCount || 0,
+          manualMode: conductForReply?.manualMode || 'auto',
+          silentUntil: conductForReply?.silentUntil || null,
+          reason: conductForReply?.reason,
+        },
+        responseStyle: styleProfile.trace,
         openclawDispatchStatus: 'skipped',
         openclawSessionKey: deterministicSessionKey,
         agentPollDurationMs: 0,
@@ -697,6 +795,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           latencyMs: directResult.latencyMs,
           tokensEstimated: directResult.tokensEstimated,
         },
+        conductControl: pipelineTrace.conductControl,
+        responseStyle: pipelineTrace.responseStyle,
         responseTime,
       });
     } catch (error) {

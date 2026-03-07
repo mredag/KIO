@@ -64,6 +64,11 @@ export default function Header({ onSearchClick, onMobileMenuToggle }: HeaderProp
       '/admin/mc/documents': 'Dokümanlar',
       '/admin/mc/policies': 'Politikalar',
       '/admin/mc/jarvis': 'Jarvis AI',
+      '/admin/mc/dm-kontrol': 'DM Kontrol',
+      '/admin/mc/dm-conduct': 'DM Davranis',
+      '/admin/mc/autopilot': 'AutoPilot',
+      '/admin/mc/activity': 'Canli Akis',
+      '/admin/mc/cron': 'Zamanlayici',
     };
 
     if (pathMap[path]) {

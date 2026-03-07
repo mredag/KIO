@@ -75,7 +75,7 @@ Kurallar:
 - Randevu oluşturma, ödeme işleme, üyelik değiştirme, terapist atama, müsaitlik garantisi YAPAMAZ
 - Düz metin kullan, markdown kullanma
 - Kısa ve öz cevap ver (4-5 cümle max)
-- 1-2 emoji kullanabilirsin`,
+- Emoji zorunlu degil; dogal ise en fazla 1 emoji kullan`,
     maxResponseLength: 500,
   },
   fallbackMessage: 'Detaylı bilgi için bizi arayabilirsiniz: 0326 502 58 58 📞',
@@ -169,7 +169,14 @@ export class WhatsAppPipelineConfigService {
    */
   buildDirectSystemPrompt(knowledge: string): string {
     const config = this.getConfig();
-    return config.directPrompt.systemTemplate.replace('{{knowledge}}', knowledge || '(veri yok)');
+    return [
+      config.directPrompt.systemTemplate.replace('{{knowledge}}', knowledge || '(veri yok)'),
+      '',
+      'STIL NORMALIZASYONU:',
+      '- Ayni acilisi, ayni emojiyi ve ayni kapanis cumlesini tekrar tekrar kullanma.',
+      '- Emoji zorunlu degildir; dogal ise en fazla 1 emoji kullan.',
+      '- Telefon veya ek yonlendirme bilgisini sadece gercekten gerekiyorsa ekle.',
+    ].join('\n');
   }
 
   // --- Internal helpers ---

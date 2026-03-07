@@ -31,6 +31,10 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Do not assume a local-only fragment buffer exists on every machine. Verify the tracked Instagram webhook route before changing inbound timing behavior.
 - Use compact text menus for customer choices. Do not assume Instagram buttons render reliably.
 - Keep simple clarifiers deterministic and lightweight when possible.
+- The live webhook and the simulator now share the same conduct ladder wiring before normal DM generation.
+- Conduct states are `normal`, `guarded`, `final_warning`, and `silent`.
+- `DMResponseStyleService` now adds anti-repetition tone guidance. Emoji should be optional, not routine.
+- Guarded/final-warning users should not receive the friendly deterministic info template path.
 
 ## Safety and KB Rules
 - Safety is AI-first plus a narrow euphemism guard. Do not replace it with a giant phrase list.
@@ -43,6 +47,8 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - `knowledge_base.id` must stay non-null and durable.
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`.
 - The current schema does not expose `topic_slug`.
+- Human conduct overrides now live in `/admin/mc/dm-conduct`.
+- `force_normal` is the correct lift path for test accounts; `reset` clears offense history; `force_silent` manually mutes.
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`.
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`
@@ -69,5 +75,8 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - `backend/src/services/DMKnowledgeRetrievalService.ts`
 - `backend/src/services/DMKnowledgeRerankerService.ts`
 - `backend/src/services/ResponsePolicyService.ts`
+- `backend/src/services/SuspiciousUserService.ts`
+- `backend/src/services/DMResponseStyleService.ts`
+- `frontend/src/pages/admin/mc/MCDMConductPage.tsx`
 - `backend/src/routes/jarvisRoutes.ts`
 - `backend/src/services/OpenClawClientService.ts`

@@ -123,7 +123,7 @@ RANDEVU KURALLARI:
 - Müşteri müsaitlik soruyorsa: Çalışma saatlerini ver (yukarıdaki kurala bak)
 
 DİĞER KURALLAR:
-- Kısa, samimi, profesyonel yanıt ver (max 3-4 cümle, 1-2 emoji)
+- Kisa, profesyonel ve dogal yanit ver (genelde 2-4 cumle). Emoji zorunlu degil; dogal ise en fazla 1 emoji kullan.
 - Düz metin yaz, markdown kullanma
 - "Bilgi bankası", "veri tabanı", "sistem" gibi teknik terimler KULLANMA — müşteri bunları görmemeli
 
@@ -136,7 +136,7 @@ VERİLEN BİLGİLER:
 {{knowledge}}`,
     maxResponseLength: 500,
   },
-  fallbackMessage: 'Detaylı bilgi için lütfen bizi arayın: 0326 502 58 58. Size yardımcı olmaktan memnuniyet duyarız! 😊',
+  fallbackMessage: 'Detayli bilgi icin lutfen bizi arayin: 0326 502 58 58. Size yardimci olmaya haziriz.',
 };
 
 export class PipelineConfigService {
@@ -251,7 +251,14 @@ export class PipelineConfigService {
    */
   buildDirectSystemPrompt(knowledgeContext: string): string {
     const config = this.getConfig();
-    return config.directPrompt.systemTemplate.replace('{{knowledge}}', knowledgeContext || '(veri yok)');
+    return [
+      config.directPrompt.systemTemplate.replace('{{knowledge}}', knowledgeContext || '(veri yok)'),
+      '',
+      'STIL NORMALIZASYONU:',
+      '- Ayni acilisi, ayni emojiyi ve ayni kapanis cumlesini arka arkaya tekrarlama.',
+      '- Emoji zorunlu degildir; dogal ise en fazla 1 emoji kullan.',
+      '- Telefon numarasini sadece gerekli oldugunda ekle; aliskanliktan ekleme.',
+    ].join('\n');
   }
 
   // --- Internal helpers ---

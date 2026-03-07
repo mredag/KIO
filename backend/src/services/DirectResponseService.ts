@@ -41,6 +41,7 @@ export class DirectResponseService {
     knowledgeContext: string;
     selectedEvidence?: string;
     conversationHistory: string;
+    styleInstructions?: string;
     followUpHint?: FollowUpContextHint | null;
     responseDirective?: ResponseDirective;
     customerSummary: string;
@@ -52,6 +53,7 @@ export class DirectResponseService {
       customerMessage,
       selectedEvidence,
       conversationHistory,
+      styleInstructions,
       followUpHint,
       responseDirective,
       customerSummary,
@@ -85,6 +87,10 @@ export class DirectResponseService {
       systemParts.push('');
     } else {
       console.log('[DirectResponse] NO conversation history provided');
+    }
+    if (styleInstructions?.trim()) {
+      systemParts.push(styleInstructions.trim());
+      systemParts.push('');
     }
     if (responseDirective) {
       console.log('[DirectResponse] Applying response directive:', responseDirective.mode);

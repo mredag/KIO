@@ -232,6 +232,14 @@ function App() {
               }
             />
             <Route
+              path="/admin/mc/dm-conduct"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCDMConductPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/mc/autopilot"
               element={
                 <ProtectedRoute>

@@ -13,12 +13,15 @@ import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { buildDMStyleProfile } from '../services/DMResponseStyleService.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
+import type { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
+import type { ConductState, SuspiciousUserService } from '../services/SuspiciousUserService.js';
 
 // Escalation service injection (set from index.ts)
 let _escalationService: EscalationService | null = null;
@@ -26,9 +29,14 @@ export function setEscalationService(svc: EscalationService): void {
   _escalationService = svc;
 }
 
-// Compatibility hook: currently no-op, kept for index wiring stability.
-export function setDMSafetyPhraseService(_svc: unknown): void {
-  // no-op
+let _dmSafetyPhraseService: DMSafetyPhraseService | null = null;
+export function setDMSafetyPhraseService(svc: DMSafetyPhraseService | null): void {
+  _dmSafetyPhraseService = svc;
+}
+
+let _dmConductService: SuspiciousUserService | null = null;
+export function setDMConductService(svc: SuspiciousUserService | null): void {
+  _dmConductService = svc;
 }
 
 export interface PipelineTrace {
@@ -105,7 +113,22 @@ export interface PipelineTrace {
     skippedReason: string | null;
     rationale: string | null;
   };
-  openclawDispatchStatus: 'success' | 'fail';
+  conductControl?: {
+    state: ConductState;
+    shouldReply: boolean;
+    offenseCount: number;
+    manualMode: 'auto' | 'force_normal' | 'force_silent';
+    silentUntil: string | null;
+    reason?: string;
+  };
+  responseStyle?: {
+    mode: 'normal' | 'guarded' | 'final_warning';
+    greetingPolicy: 'normal' | 'skip_repeat_greeting' | 'minimal';
+    emojiPolicy: 'none' | 'optional_single';
+    ctaPolicy: 'only_when_needed' | 'minimal';
+    antiRepeatSignals: string[];
+  };
+  openclawDispatchStatus: 'success' | 'fail' | 'skipped';
   openclawSessionKey: string;
   agentPollDurationMs: number;
   // Policy Agent validation (post-processing)
@@ -291,6 +314,29 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
       console.error('[Instagram Webhook] Failed to build deterministic info template:', error);
       return null;
     }
+  }
+
+  function buildConductReply(
+    action: 'retry_question' | 'block_message',
+    conductState: ConductState,
+  ): string | null {
+    if (conductState === 'silent') {
+      return null;
+    }
+
+    if (conductState === 'final_warning') {
+      return action === 'block_message'
+        ? 'Bu tur mesajlara cevap veremiyorum. Devam ederseniz yanit verilmeyecektir.'
+        : 'Sadece profesyonel spa ve spor hizmetleri konusunda yardimci olabilirim. Uygunsuz israrda yanit verilmeyecektir.';
+    }
+
+    if (conductState === 'guarded') {
+      return action === 'block_message'
+        ? 'Bu tur mesajlara cevap veremiyorum.'
+        : 'Sadece profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyorum.';
+    }
+
+    return getSexualIntentReply(action);
   }
 
   /**
@@ -693,17 +739,24 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           const trace: Partial<PipelineTrace> = {};
           let pipelineError: PipelineError | null = null;
 
-          // Safety filter (AI intent classification) — replaces hard regex rules
-          // Flow:
-          // - >85% sexual => block reply + stop pipeline
-          // - 70-85% => retry prompt + stop pipeline
-          // - <70% => continue normal DM flow
+          // Safety filter + conduct ladder
           const sexualIntentStartTime = Date.now();
           try {
-            const sexualDecision = await evaluateSexualIntent(messageText);
+            const safetyResult = _dmSafetyPhraseService
+              ? await _dmSafetyPhraseService.evaluateMessage({
+                  messageText,
+                  channel: 'instagram',
+                  senderId,
+                })
+              : {
+                  decision: await evaluateSexualIntent(messageText),
+                  matchedPhrase: null,
+                  reviewRequest: { triggered: false, status: 'disabled', reviewId: null },
+                };
+            const sexualDecision = safetyResult.decision;
             const sexualIntentLatency = Date.now() - sexualIntentStartTime;
+            const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
 
-            // Store sexual intent result in trace (for transparency in all cases)
             trace.sexualIntent = {
               action: sexualDecision.action,
               confidence: sexualDecision.confidence,
@@ -711,11 +764,40 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               modelUsed: sexualDecision.modelUsed,
               latencyMs: sexualIntentLatency,
             };
+            if (conductBefore) {
+              trace.conductControl = {
+                state: conductBefore.conductState || 'normal',
+                shouldReply: conductBefore.shouldReply !== false,
+                offenseCount: conductBefore.offenseCount || 0,
+                manualMode: conductBefore.manualMode || 'auto',
+                silentUntil: conductBefore.silentUntil || null,
+                reason: conductBefore.reason,
+              };
+            }
 
             if (sexualDecision.action !== 'allow') {
+              const conductAfter = _dmConductService?.flagUser('instagram', senderId, sexualDecision.reason, {
+                action: sexualDecision.action,
+                severity: sexualDecision.action === 'block_message' ? 'high' : 'medium',
+                source: sexualDecision.modelUsed,
+                messageText,
+              });
+              const effectiveState = conductAfter?.conductState || 'guarded';
+              const replyText = buildConductReply(sexualDecision.action, effectiveState);
               const now = new Date().toISOString();
+              const interactionIntent = effectiveState === 'silent'
+                ? 'blocked_silent'
+                : (sexualDecision.action === 'block_message' ? 'security_block' : 'retry_question');
 
-              // Ensure customer exists before logging interaction rows
+              trace.conductControl = {
+                state: effectiveState,
+                shouldReply: conductAfter?.shouldReply ?? (effectiveState !== 'silent'),
+                offenseCount: conductAfter?.offenseCount || 0,
+                manualMode: conductAfter?.manualMode || 'auto',
+                silentUntil: conductAfter?.silentUntil || null,
+                reason: conductAfter?.reason || sexualDecision.reason,
+              };
+
               db.prepare(`
                 INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
                 VALUES (?, 0, ?, ?)
@@ -726,15 +808,13 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               db.prepare(`
                 INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
                 VALUES (?, ?, 'inbound', ?, ?, ?, ?)
-              `).run(inboundId, senderId, messageText, `sexual_intent_${sexualDecision.action}`, executionId, now);
+              `).run(inboundId, senderId, messageText, interactionIntent, executionId, now);
 
-              const replyText = getSexualIntentReply(sexualDecision.action);
-              const outboundIntent = sexualDecision.action === 'block_message'
-                ? 'security_block'
-                : 'retry_question';
-
-              const sendResult = await sendInstagramText(API_KEY, senderId, replyText);
-              const sent = sendResult.ok;
+              let sent = false;
+              if (replyText) {
+                const sendResult = await sendInstagramText(API_KEY, senderId, replyText);
+                sent = sendResult.ok;
+              }
 
               const outboundId = randomUUID();
               db.prepare(`
@@ -743,24 +823,24 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               `).run(
                 outboundId,
                 senderId,
-                replyText,
-                outboundIntent,
-                replyText,
+                replyText || '[sessiz engel]',
+                interactionIntent,
+                replyText || null,
                 sexualDecision.modelUsed,
                 executionId,
-                new Date().toISOString(),
+                now,
                 JSON.stringify(trace),
               );
 
-              console.log('[Instagram Webhook] Sexual intent filter triggered:', {
+              console.log('[Instagram Webhook] Safety/conduct triggered:', {
                 senderId,
                 action: sexualDecision.action,
+                effectiveState,
                 confidence: Number((sexualDecision.confidence * 100).toFixed(1)),
                 reason: sexualDecision.reason,
                 sent,
               });
 
-              // Push SSE event for blocked/retry messages
               try {
                 DmSSEManager.getInstance().pushEvent({
                   type: 'dm:response',
@@ -768,7 +848,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                     id: outboundId,
                     instagramId: senderId,
                     direction: 'outbound',
-                    messageText: replyText.substring(0, 200),
+                    messageText: (replyText || '[sessiz engel]').substring(0, 200),
                     responseTimeMs: sexualIntentLatency,
                     modelTier: null,
                     modelUsed: sexualDecision.modelUsed,
@@ -781,20 +861,46 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
               return;
             }
+
+            if (conductBefore?.shouldReply === false) {
+              const now = new Date().toISOString();
+              trace.conductControl = {
+                state: conductBefore.conductState || 'silent',
+                shouldReply: false,
+                offenseCount: conductBefore.offenseCount || 0,
+                manualMode: conductBefore.manualMode || 'auto',
+                silentUntil: conductBefore.silentUntil || null,
+                reason: conductBefore.reason,
+              };
+
+              db.prepare(`
+                INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
+                VALUES (?, 0, ?, ?)
+                ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
+              `).run(senderId, now, now);
+
+              const inboundId = randomUUID();
+              db.prepare(`
+                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
+                VALUES (?, ?, 'inbound', ?, 'blocked_silent', ?, ?)
+              `).run(inboundId, senderId, messageText, executionId, now);
+
+              console.log('[Instagram Webhook] Silent conduct suppression active for sender %s', senderId);
+              return;
+            }
           } catch (intentErr) {
             const sexualIntentLatency = Date.now() - sexualIntentStartTime;
             console.error('[Instagram Webhook] Sexual intent classification failed, continuing normal flow:', intentErr);
-            // Store error in trace for debugging
             trace.sexualIntent = {
               action: 'allow',
               confidence: 0,
-              reason: `Classification error: ${intentErr?.message || String(intentErr)}`,
+              reason: `Classification error: ${intentErr instanceof Error ? intentErr.message : String(intentErr)}`,
               modelUsed: 'error',
               latencyMs: sexualIntentLatency,
             };
           }
 
-          // Context Service — analyze message for intent, model routing, and conversation history
+          // Context service: analyze message for intent, model routing, and conversation history
           const contextService = new InstagramContextService(db);
           let analysis;
 
@@ -1058,6 +1164,17 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               : analysis.totalInteractions > 0 && analysis.conversationHistory.length === 0
                 ? `Geri gelen musteri (toplam ${analysis.totalInteractions} mesaj, son 24 saatte mesaj yok)`
                 : `Etkilesim: ${analysis.totalInteractions}`;
+            const conductStateForReply = trace.conductControl?.state && trace.conductControl.state !== 'silent'
+              ? trace.conductControl.state
+              : 'normal';
+            const styleProfile = buildDMStyleProfile({
+              customerMessage: messageText,
+              conversationHistory: analysis.conversationHistory,
+              isNewCustomer: analysis.isNewCustomer,
+              followUpHint: analysis.followUpHint,
+              conductState: conductStateForReply,
+            });
+            trace.responseStyle = styleProfile.trace;
 
             // ═══════════════════════════════════════════════════════════════
             // PIPELINE CONFIG — Dynamic routing (direct vs OpenClaw)
@@ -1070,7 +1187,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
             let agentResponse: string | null = null;
 
-            if (isGenericInfoRequest(messageText)) {
+            if (conductStateForReply === 'normal' && isGenericInfoRequest(messageText)) {
               const deterministicInfoResponse = buildGenericInfoTemplateFromKnowledge();
               if (deterministicInfoResponse) {
                 console.log('[Instagram Webhook] Using deterministic info template response');
@@ -1089,7 +1206,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               }
             }
 
-            if (!agentResponse) {
+            if (!agentResponse && conductStateForReply === 'normal') {
               const deterministicClarifier = buildDeterministicClarifierResponse({
                 messageText,
                 intentCategories: analysis.intentCategories,
@@ -1130,6 +1247,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 knowledgeContext: formattedKnowledge,
                 selectedEvidence,
                 conversationHistory: analysis.formattedHistory,
+                styleInstructions: styleProfile.instructions,
                 followUpHint: analysis.followUpHint,
                 responseDirective: analysis.responseDirective,
                 customerSummary,
@@ -1167,6 +1285,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 `KRITIK: Yanitindaki HER bilgi asagidaki BILGI_BANKASI'ndan gelmeli. BILGI_BANKASI'nda OLMAYAN bilgi YAZMA.`,
                 `Sadece musterinin sorusuna cevap ver. Sorulmayan bilgiyi PAYLASMA.`,
                 `Musteri "merhaba" dediyse: sadece selamla + "Size nasil yardimci olabilirim?" de. Baska bilgi VERME.`,
+                styleProfile.instructions,
                 `YANIT MODU: ${analysis.responseDirective.mode}`,
                 `YANIT TALIMATI: ${analysis.responseDirective.instruction}`,
                 `YANIT GEREKCESI: ${analysis.responseDirective.rationale}`,

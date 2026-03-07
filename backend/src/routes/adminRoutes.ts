@@ -1556,6 +1556,170 @@ export function createAdminRoutes(
   });
 
   // ============================================
+  // DM CONDUCT MANAGEMENT
+  // ============================================
+
+  /**
+   * GET /api/admin/dm-conduct/users
+   * Get users in the DM conduct ladder, including manual overrides.
+   */
+  router.get('/dm-conduct/users', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const platform = typeof req.query.platform === 'string' ? req.query.platform : undefined;
+
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      const users = suspiciousService.getSuspiciousUsers(platform);
+
+      res.json({
+        count: users.length,
+        users,
+      });
+    } catch (error) {
+      console.error('[Admin] Error fetching DM conduct users:', error);
+      res.status(500).json({ error: 'Failed to fetch DM conduct users' });
+    }
+  });
+
+  /**
+   * GET /api/admin/dm-conduct/users/:platform/:platformUserId/events
+   * Get conduct ladder events for a user.
+   */
+  router.get('/dm-conduct/users/:platform/:platformUserId/events', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      const limit = parseInt(req.query.limit as string, 10) || 20;
+
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      const events = suspiciousService.getConductEvents(platform, platformUserId, limit);
+
+      res.json({
+        platform,
+        platformUserId,
+        count: events.length,
+        events,
+      });
+    } catch (error) {
+      console.error('[Admin] Error fetching DM conduct events:', error);
+      res.status(500).json({ error: 'Failed to fetch DM conduct events' });
+    }
+  });
+
+  /**
+   * GET /api/admin/dm-conduct/users/:platform/:platformUserId/history
+   * Get recent message history for a conduct-managed user.
+   */
+  router.get('/dm-conduct/users/:platform/:platformUserId/history', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      const limit = parseInt(req.query.limit as string, 10) || 50;
+
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      const history = suspiciousService.getChatHistory(platform, platformUserId, limit);
+
+      res.json({
+        platform,
+        platformUserId,
+        count: history.length,
+        messages: history,
+      });
+    } catch (error) {
+      console.error('[Admin] Error fetching DM conduct chat history:', error);
+      res.status(500).json({ error: 'Failed to fetch DM conduct chat history' });
+    }
+  });
+
+  /**
+   * POST /api/admin/dm-conduct/users/:platform/:platformUserId/reset
+   * Reset a user back to normal behavior, preserving event history.
+   */
+  router.post('/dm-conduct/users/:platform/:platformUserId/reset', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      const reset = suspiciousService.unflagUser(platform, platformUserId);
+
+      if (!reset) {
+        res.status(404).json({ error: 'Conduct-managed user not found' });
+        return;
+      }
+
+      db.createLog({
+        level: 'info',
+        message: 'DM conduct user reset',
+        details: { platform, platformUserId, admin: req.session?.user?.username },
+      });
+
+      res.json({ success: true, message: 'User reset to normal conduct' });
+    } catch (error) {
+      console.error('[Admin] Error resetting DM conduct user:', error);
+      res.status(500).json({ error: 'Failed to reset DM conduct user' });
+    }
+  });
+
+  /**
+   * POST /api/admin/dm-conduct/users/:platform/:platformUserId/override
+   * Set a temporary or permanent manual conduct override.
+   */
+  router.post('/dm-conduct/users/:platform/:platformUserId/override', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const { platform, platformUserId } = req.params;
+      const { mode, durationHours, note } = req.body as {
+        mode?: 'auto' | 'force_normal' | 'force_silent';
+        durationHours?: number | null;
+        note?: string | null;
+      };
+
+      if (!mode || !['auto', 'force_normal', 'force_silent'].includes(mode)) {
+        res.status(400).json({ error: 'mode must be auto, force_normal, or force_silent' });
+        return;
+      }
+
+      const parsedDuration = durationHours == null ? null : Number(durationHours);
+      if (parsedDuration !== null && (!Number.isFinite(parsedDuration) || parsedDuration <= 0)) {
+        res.status(400).json({ error: 'durationHours must be a positive number when provided' });
+        return;
+      }
+
+      const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
+      const suspiciousService = new SuspiciousUserService(db.getDb());
+      const user = suspiciousService.setManualMode(platform, platformUserId, {
+        mode,
+        durationHours: parsedDuration,
+        note: note || null,
+      });
+
+      db.createLog({
+        level: 'info',
+        message: 'DM conduct override updated',
+        details: {
+          platform,
+          platformUserId,
+          mode,
+          durationHours: parsedDuration,
+          admin: req.session?.user?.username,
+        },
+      });
+
+      res.json({
+        success: true,
+        user,
+      });
+    } catch (error) {
+      console.error('[Admin] Error updating DM conduct override:', error);
+      if (error instanceof Error && error.message === 'Suspicious user not found') {
+        res.status(404).json({ error: 'Conduct-managed user not found' });
+        return;
+      }
+      res.status(500).json({ error: 'Failed to update DM conduct override' });
+    }
+  });
+
+  // ============================================
   // SUSPICIOUS USERS MANAGEMENT
   // ============================================
 

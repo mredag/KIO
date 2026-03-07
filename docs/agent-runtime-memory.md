@@ -49,6 +49,10 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.
 - Generic pricing clarifiers and topic-selection clarifiers should stay lightweight and deterministic when possible.
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.
+- The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
+- DM conduct states are `normal`, `guarded`, `final_warning`, and `silent`.
+- `DMResponseStyleService` now injects anti-repetition style guidance into direct-response prompts and OpenClaw fallback prompts. Emoji should be optional, not habitual.
+- Guarded/final-warning users should not get the friendly deterministic info/clarifier templates; those stay normal-only.
 
 ## Safety and Policy Notes
 - `sexualIntentFilter.ts` is AI-first, with a narrow euphemism guard for phrases like `mutlu son`, `extra hizmet`, and `premium paket`.
@@ -67,6 +71,9 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Telegram callback actions for `dmphr:*` and `esc:*` are handled by the backend callback poller; they must not be treated as normal Jarvis chat.
 - `ResponsePolicyService` price guards are not hardcoded. Allowed price values are extracted from the current formatted KB context for that execution.
 - If policy flags a correct price, the real issue is usually missing or wrong KB context, not a stale hardcoded whitelist.
+- Human overrides for conduct state live in `/admin/mc/dm-conduct`.
+- `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` is the manual mute path.
+- Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
 
 ## Knowledge Base Rules
 - `knowledge_base.id` must be non-null and durable.
@@ -89,6 +96,9 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Semantic retrieval and rerank: `backend/src/services/DMKnowledgeRetrievalService.ts`, `backend/src/services/DMKnowledgeRerankerService.ts`
 - Policy correction and grounding: `backend/src/services/ResponsePolicyService.ts`
 - Instagram webhook orchestration: `backend/src/routes/instagramWebhookRoutes.ts`
+- Conduct ladder + overrides: `backend/src/services/SuspiciousUserService.ts`
+- DM style variation: `backend/src/services/DMResponseStyleService.ts`
+- Conduct admin UI: `frontend/src/pages/admin/mc/MCDMConductPage.tsx`
 - Jarvis orchestration: `backend/src/routes/jarvisRoutes.ts`
 - OpenClaw client RPC: `backend/src/services/OpenClawClientService.ts`
 

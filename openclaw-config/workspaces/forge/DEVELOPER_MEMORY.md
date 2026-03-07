@@ -30,6 +30,10 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - Verify inbound timing behavior in the tracked Instagram webhook route before changing it
 - Use compact text menus instead of relying on Instagram buttons
 - Keep generic pricing and topic clarifiers deterministic and cheap when possible
+- The live webhook and simulator now share the same conduct ladder before normal DM generation
+- Conduct states are `normal`, `guarded`, `final_warning`, and `silent`
+- `DMResponseStyleService` now injects anti-repetition style instructions; avoid reintroducing hardcoded emoji habits
+- Guarded/final-warning users should not get the friendly deterministic info template path
 
 ## Safety and KB Rules
 - The safety layer is AI-first plus a narrow euphemism guard
@@ -37,6 +41,8 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - `knowledge_base.id` must stay non-null and durable
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`
 - The current schema does not expose `topic_slug`
+- Human conduct overrides live in `/admin/mc/dm-conduct`
+- `force_normal` lifts a test account, `reset` clears offense history, and `force_silent` is the manual mute path
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`
@@ -55,5 +61,8 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - `backend/src/services/DMKnowledgeRetrievalService.ts`
 - `backend/src/services/DMKnowledgeRerankerService.ts`
 - `backend/src/services/ResponsePolicyService.ts`
+- `backend/src/services/SuspiciousUserService.ts`
+- `backend/src/services/DMResponseStyleService.ts`
+- `frontend/src/pages/admin/mc/MCDMConductPage.tsx`
 - `backend/src/routes/jarvisRoutes.ts`
 - `backend/src/services/OpenClawClientService.ts`

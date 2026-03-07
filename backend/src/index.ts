@@ -35,7 +35,7 @@ import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.
 import { createIntegrationRoutes } from './routes/integrationRoutes.js';
 import { createAIPromptsRoutes } from './routes/aiPromptsRoutes.js';
 import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsRoutes.js';
-import { createWorkflowTestRoutes, setSimulatorDMSafety, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
+import { createWorkflowTestRoutes, setSimulatorConductService, setSimulatorDMSafety, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
 import { createMissionControlRoutes, setSchedulerService } from './routes/missionControlRoutes.js';
 import { MCSchedulerService } from './services/MCSchedulerService.js';
 import { createJarvisRoutes, setJarvisHardwareWatchdog } from './routes/jarvisRoutes.js';
@@ -60,9 +60,10 @@ import { NightlyAuditService } from './services/NightlyAuditService.js';
 import { TelegramNotificationService } from './services/TelegramNotificationService.js';
 import { EscalationService } from './services/EscalationService.js';
 import { DMSafetyPhraseService } from './services/DMSafetyPhraseService.js';
-import { setDMSafetyPhraseService as setWebhookDMSafety, setEscalationService as setWebhookEscalation } from './routes/instagramWebhookRoutes.js';
+import { setDMConductService, setDMSafetyPhraseService as setWebhookDMSafety, setEscalationService as setWebhookEscalation } from './routes/instagramWebhookRoutes.js';
 import { AgentLifecycleService } from './services/AgentLifecycleService.js';
 import { CouponPolicyService } from './services/CouponPolicyService.js';
+import { SuspiciousUserService } from './services/SuspiciousUserService.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import {
@@ -333,14 +334,17 @@ nightlyAudit.start();
 const telegramNotifier = new TelegramNotificationService(db);
 const dmSafetyPhraseService = new DMSafetyPhraseService(db, telegramNotifier);
 const escalationService = new EscalationService(db, telegramNotifier);
+const dmConductService = new SuspiciousUserService(db);
 
 // Wire escalation into all pipeline components
 autoPilot.setEscalationService(escalationService);
 nightlyAudit.setEscalationService(escalationService);
 setWebhookEscalation(escalationService);
 setWebhookDMSafety(dmSafetyPhraseService);
+setDMConductService(dmConductService);
 setSimulatorEscalation(escalationService);
 setSimulatorDMSafety(dmSafetyPhraseService);
+setSimulatorConductService(dmConductService);
 setIntentDMSafety(dmSafetyPhraseService);
 setEscalationActionService(escalationService);
 setTelegramWebhookDeps(escalationService, telegramNotifier, dmSafetyPhraseService);

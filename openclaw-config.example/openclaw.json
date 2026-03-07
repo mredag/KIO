@@ -8,10 +8,9 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/moonshotai/kimi-k2",
+        "primary": "openrouter/openai/gpt-4.1",
         "fallbacks": [
           "openrouter/openai/gpt-4o-mini",
-          "openrouter/deepseek/deepseek-chat",
           "openrouter/google/gemini-2.5-flash-lite"
         ]
       },
@@ -21,14 +20,26 @@
       },
       "models": {
         "openrouter/moonshotai/kimi-k2": { "alias": "kimi" },
+        "openrouter/moonshotai/kimi-k2.5": { "alias": "kimi25" },
         "openrouter/openai/gpt-4o-mini": { "alias": "mini" },
-        "openrouter/deepseek/deepseek-chat": { "alias": "ds" },
         "openrouter/google/gemini-2.5-flash-lite": { "alias": "flash" },
         "openrouter/openrouter/auto": { "alias": "auto" },
+        "openrouter/openai/gpt-4.1": { "alias": "gpt41" },
+        "openrouter/openai/gpt-5.1-codex": { "alias": "codex" },
         "openai-codex/gpt-5.3-codex": { "alias": "codex53" }
       },
       "workspace": "~/.openclaw/workspace",
-      "contextTokens": 128000,
+      "contextTokens": 48000,
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokensFloor": 12000,
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 3000,
+          "systemPrompt": "Session nearing compaction. Store any important operational context, pending tasks, or decisions to memory.",
+          "prompt": "Write any lasting notes to memory/session-notes.md; reply with NO_REPLY if nothing to store."
+        }
+      },
       "heartbeat": {
         "every": "0",
         "model": "openrouter/google/gemini-2.5-flash-lite",
@@ -36,15 +47,16 @@
       },
       "subagents": {
         "maxConcurrent": 3,
-        "archiveAfterMinutes": 120,
-        "model": "openrouter/deepseek/deepseek-chat"
+        "archiveAfterMinutes": 45,
+        "model": "openrouter/openai/gpt-4.1"
       }
     },
     "list": [
       {
         "id": "main",
         "identity": { "name": "Jarvis" },
-        "subagents": { "allowAgents": ["nexus", "forge", "atlas", "ledger", "instagram", "whatsapp"] }
+        "subagents": { "allowAgents": ["forge", "instagram", "whatsapp"] },
+        "model": "openrouter/openai/gpt-4.1"
       },
       {
         "id": "forge",
@@ -53,9 +65,15 @@
         "identity": { "name": "Forge" }
       },
       {
+        "id": "instagram",
+        "name": "instagram",
+        "model": "openrouter/openai/gpt-4o-mini",
+        "identity": { "name": "Eform Instagram Asistani" }
+      },
+      {
         "id": "whatsapp",
         "workspace": "~/.openclaw/workspace-whatsapp",
-        "model": "openrouter/moonshotai/kimi-k2",
+        "model": "openrouter/openai/gpt-4o-mini",
         "identity": { "name": "Eform WhatsApp Asistan" }
       }
     ]
@@ -68,6 +86,7 @@
     "path": "/hooks",
     "token": "<YOUR_HOOKS_TOKEN>",
     "allowRequestSessionKey": true,
+    "transformsDir": "~/.openclaw/hooks/transforms",
     "mappings": [
       {
         "id": "instagram",

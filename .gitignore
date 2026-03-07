@@ -104,8 +104,9 @@ backend/dev-startup.log
 *-test-report.json
 *-test-report.md
 
-# OpenClaw config (contains API keys, bot tokens, gateway secrets)
-openclaw-config/
+# OpenClaw config source tree
+# Track workspace/transforms docs and templates, but keep the live secret-bearing config ignored.
+openclaw-config/openclaw.json
 
 # Reference/source directories (large, not needed in repo)
 openclaw-source/

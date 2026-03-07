@@ -1,0 +1,3 @@
+# HEARTBEAT - WhatsApp Agent
+
+HEARTBEAT_OK

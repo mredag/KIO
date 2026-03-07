@@ -148,6 +148,7 @@ node dist/index.js   # from backend/
 **Migrations:** Ad-hoc `ALTER TABLE` in `init.ts` (no formal framework)
 **KB Migration Script:** `backend/scripts/migrate-kb.mjs` (bulk migration tool - not for one-off live KB edits)
 **Live KB Rule:** `/admin/knowledge-base` shows live `knowledge_base` data. For live KB changes use the admin API or the preview-first integration flow in `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md`. Do not bulk-reseed live KB data to change one row.
+**KB Guardrail Baseline (2026-03-07):** Change-set preview defaults to value-only edits. `description` edits require explicit opt-in (`allowDescriptionChanges=true`). Apply requires `approvedChangeSetId` plus `approvalText` containing the exact change-set id. Legacy direct `PUT /api/integrations/knowledge/entries/:id` is disabled for API consumers.
 
 ### Key Tables
 | Table | Purpose |
@@ -202,7 +203,10 @@ node dist/index.js   # from backend/
 | `/coupons/wallet/:phone` | GET | Check balance |
 | `/knowledge/context?categories=X,Y` | GET | Knowledge for AI (category-filtered) |
 | `/knowledge/entries` | GET | List all KB entries (raw, for agents) |
-| `/knowledge/entries/:id` | PUT | Update KB entry (value, description, category) |
+| `/knowledge/change-sets/preview` | POST | Preview KB changes without writing |
+| `/knowledge/change-sets/:id` | GET | Fetch KB preview/apply/rollback state |
+| `/knowledge/change-sets/:id/apply` | POST | Apply a previewed KB change set with explicit approval proof |
+| `/knowledge/change-sets/:id/rollback` | POST | Roll back an applied KB change set |
 | `/ai/prompt/:name` | GET | AI system prompt (⚠️ no auth) |
 | `/instagram/customer/:id` | GET | Customer data |
 | `/instagram/interaction` | POST | Log interaction (accepts `modelUsed`, `tokensEstimated`) |
@@ -949,6 +953,7 @@ scp <local> eform-kio@192.168.1.8:<remote>
 
 # Live maintenance commands
 cd ~/kio-new/deployment/raspberry-pi
+./pre-feature-snapshot.sh
 ./update-pi.sh
 ./sync-openclaw-runtime.sh --dry-run
 ./sync-openclaw-runtime.sh --restart

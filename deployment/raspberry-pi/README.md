@@ -72,6 +72,20 @@ cd ~/kio-new/deployment/raspberry-pi
 ./backup-database.sh
 ```
 
+Create a pre-feature rollback snapshot:
+
+```bash
+cd ~/kio-new/deployment/raspberry-pi
+./pre-feature-snapshot.sh
+```
+
+This captures:
+- current git SHA
+- SQLite database copy
+- backend `.env`
+- OpenClaw runtime archive
+- PM2 status and health response
+
 Restore a backup:
 
 ```bash
@@ -95,6 +109,7 @@ curl http://localhost:3001/api/kiosk/health
 - `update-pi.sh`: standard live update
 - `sync-openclaw-runtime.sh`: sync tracked OpenClaw files to runtime
 - `backup-database.sh`: manual DB backup
+- `pre-feature-snapshot.sh`: full rollback snapshot before risky feature work
 - `restore-backup.sh`: interactive DB restore
 - `test-kiosk-setup.sh`: post-install verification
 - `start-backend-pm2.sh`: backend PM2 bootstrap helper

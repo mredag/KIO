@@ -28,7 +28,7 @@ cd ~/kio-new/deployment/raspberry-pi
 
 What it does:
 - `git pull --ff-only origin master`
-- `npm install`
+- `npm ci --no-audit --no-fund`
 - backend build via `tsconfig.build.json`
 - copies `*.sql` into `backend/dist/database/`
 - frontend build + copy to `backend/public/`

@@ -66,8 +66,8 @@ cd "${APP_DIR}"
 log_info "Pulling latest code..."
 git pull --ff-only origin master
 
-log_info "Installing workspace dependencies..."
-npm install
+log_info "Installing workspace dependencies with npm ci..."
+npm ci --no-audit --no-fund
 
 log_info "Building backend with tsconfig.build.json..."
 cd "${BACKEND_DIR}"

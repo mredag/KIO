@@ -491,6 +491,7 @@ export class InstagramContextService {
       '- Mesaj spesifik bir hizmet veya konu belirtiyorsa topicSummary bunu kisa ve dogal sekilde belirtmelidir.',
       '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
       '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',
+      '- Mesaj masaj/spa baglaminda sure, uzun sureli, kisa sureli, dk veya seans gibi bir tercih belirtiyorsa categories pricing de icermeli; sure secenekleri fiyat listesiyle birlikte dusunulmeli.',
       '- Mesaj yas, 18+, cocuk, veli veya ebeveyn izni soruyorsa categories MUTLAKA policies icermeli; aktif konu olsa bile policy bilgisini atlama.',
       '- Mumsen cevaplanabilen kismi cevaplat; sadece gerekli ise sonunda tek bir kisa netlestirme sorusu oner.',
       '- Yanit sadece gecerli JSON olsun.',
@@ -746,6 +747,47 @@ export class InstagramContextService {
         ...plan.responseDirective,
         instruction: `${plan.responseDirective.instruction} Yas, 18+ ve ebeveyn/veli kurali soruluyorsa verilen politikalari acikca kontrol et; belgesiz sekilde "yas siniri yok" deme.`.trim(),
         rationale: `${plan.responseDirective.rationale} Yas/minor sinyali oldugu icin policy bilgisi zorunlu.`,
+      };
+    }
+  }
+
+  private applyMassagePricingSignals(plan: AIContextPlan, messageText: string): void {
+    const normalizedMessage = normalizeTurkish(messageText.toLowerCase());
+    const normalizedTopic = normalizeTurkish([
+      plan.followUpHint?.topicLabel || '',
+      plan.followUpHint?.rewrittenQuestion || '',
+      plan.topicSummary || '',
+    ].join(' ').toLowerCase());
+
+    const mentionsMassageContext = /\b(?:masaj|massage|spa|hamam|kese|kopuk|medikal|sicak tas|mix)\b/.test(
+      `${normalizedMessage} ${normalizedTopic}`,
+    );
+    if (!mentionsMassageContext) {
+      return;
+    }
+
+    const hasDurationSignal = /\b(?:uzun|kisa)\s*sure(?:li)?\b/.test(normalizedMessage)
+      || /\b(?:sure|sureli|dakika|dk|seans)\b/.test(normalizedMessage)
+      || /\b\d+\s*(?:dk|dakika)\b/.test(normalizedMessage)
+      || plan.keywords.includes('duration_specific');
+    if (!hasDurationSignal) {
+      return;
+    }
+
+    if (!plan.categories.includes('pricing')) {
+      plan.categories = ['pricing', ...plan.categories];
+    }
+
+    if (!plan.keywords.includes('massage_duration_pricing_signal')) {
+      plan.keywords.push('massage_duration_pricing_signal');
+    }
+
+    const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
+    if (!normalizedInstruction.includes('fiyat')) {
+      plan.responseDirective = {
+        ...plan.responseDirective,
+        instruction: `${plan.responseDirective.instruction} Masaj suresi veya uzun/kisa secenek soruluyorsa ilgili fiyat bilgisini de kullan; fiyat listesi varsa sure seceneklerini onunla eslestir.`.trim(),
+        rationale: `${plan.responseDirective.rationale} Masaj sure/sureli sinyali fiyat bilgisini gerektiriyor.`,
       };
     }
   }
@@ -1188,6 +1230,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       stateRepairApplied: false,
     };
     this.applyPolicyPrioritySignals(plan, messageText);
+    this.applyMassagePricingSignals(plan, messageText);
     return plan;
   }
 
@@ -1222,6 +1265,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       stateRepairApplied: false,
     };
     this.applyPolicyPrioritySignals(plan, messageText);
+    this.applyMassagePricingSignals(plan, messageText);
     return plan;
   }
 
@@ -1354,6 +1398,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       }
 
       this.applyPolicyPrioritySignals(plan, messageText);
+      this.applyMassagePricingSignals(plan, messageText);
       this.applyGroundedFollowUpGuard(plan);
 
       return plan;

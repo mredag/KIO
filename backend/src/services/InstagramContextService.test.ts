@@ -145,6 +145,41 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Yas, 18+ ve ebeveyn/veli kurali');
   });
 
+  it('adds pricing for duration-based massage follow-ups even when the planner returns only services', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services'],
+      semanticSignals: ['service_inquiry', 'duration_specific'],
+      followUpHint: {
+        topicLabel: 'masaj hizmetleri',
+        rewrittenQuestion: 'masaj hizmetleri icin uzun sureli masaj',
+        sourceMessage: 'en iyi masaj',
+      },
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Aktif konu: masaj hizmetleri. Uzun sureli secenekleri belirt.',
+        rationale: 'Musteri sure odakli bir masaj secenegi istiyor.',
+      },
+      tier: 'standard',
+      tierReason: 'Masaj sure tercihi',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'Uzun sureli masaj',
+      createHistory([
+        { text: 'En iyi masaj', minutesAgo: 1 },
+        { direction: 'outbound', text: 'MIX masaj onerilir.', minutesAgo: 0.5 },
+      ]),
+    );
+
+    expect(result.categories).toContain('services');
+    expect(result.categories).toContain('pricing');
+    expect(result.keywords).toContain('massage_duration_pricing_signal');
+    expect(result.responseDirective.instruction).toContain('fiyat bilgisini de kullan');
+  });
+
   it('normalizes fenced JSON replies from the planner', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue({

@@ -1348,7 +1348,7 @@ Hafıza: POST/GET/DELETE /comms/memory { board_id, key, value, memory_type, tags
 message_type: nudge | delegation | status_update | context_share | query | response
 memory_type: context | decision | artifact | reference
 
-Auth: Session auth (admin panel cookies) — API çağrılarında X-API-Key KULLANMA, session cookie kullan.`);
+Auth: Session auth (admin panel cookies) — Authorization Bearer kullanma, session cookie kullan.`);
   }
 
   // --- Section 3: Environment (compact) ---

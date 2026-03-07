@@ -8,7 +8,7 @@
  */
 
 const KIO_BASE = process.env.KIO_API_URL || 'http://localhost:3001';
-const KIO_TOKEN = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<KIO_API_KEY>';
+const KIO_TOKEN = process.env.KIO_API_KEY || '<KIO_API_KEY>';
 
 async function kioFetch(path, options = {}) {
   const url = `${KIO_BASE}${path}`;

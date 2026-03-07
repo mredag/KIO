@@ -192,7 +192,7 @@ node dist/index.js   # from backend/
 
 ## Integration API
 
-**Auth:** Bearer token (`KIO_API_KEY`, with legacy `N8N_API_KEY` fallback)
+**Auth:** Bearer token (`KIO_API_KEY`)
 **Base:** `http://localhost:3001/api/integrations`
 
 | Endpoint | Method | Purpose |
@@ -512,7 +512,7 @@ Key config fields:
 ### DM Simulator (Testing Without Instagram)
 `POST /api/workflow-test/simulate-agent` runs the EXACT same pipeline as the real Instagram webhook — intent detection → KB fetch → formatKnowledgeForPrompt → DirectResponseService → policy validation → faithfulness check. Skips: Meta webhook, OpenClaw gateway, Meta Graph API send.
 
-**Auth:** Session auth (admin panel) OR Bearer token (`KIO_API_KEY`, with legacy `N8N_API_KEY` fallback)
+**Auth:** Session auth (admin panel) OR Bearer token (`KIO_API_KEY`)
 **Results appear in:** DM Kontrol Merkezi live feed (same DB table + SSE events as real DMs)
 **UI:** Sidebar → Operasyonlar → DM Simülatör (`/admin/workflow-test`)
 

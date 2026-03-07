@@ -17,10 +17,10 @@ describe('apiKeyAuth middleware', () => {
 
   beforeEach(() => {
     // Save original env
-    originalEnv = process.env.N8N_API_KEY;
+    originalEnv = process.env.KIO_API_KEY;
     
     // Set test API key
-    process.env.N8N_API_KEY = 'test-api-key-12345';
+    process.env.KIO_API_KEY = 'test-api-key-12345';
 
     // Setup mock request, response, and next
     mockReq = {
@@ -38,9 +38,9 @@ describe('apiKeyAuth middleware', () => {
   afterEach(() => {
     // Restore original env
     if (originalEnv !== undefined) {
-      process.env.N8N_API_KEY = originalEnv;
+      process.env.KIO_API_KEY = originalEnv;
     } else {
-      delete process.env.N8N_API_KEY;
+      delete process.env.KIO_API_KEY;
     }
   });
 
@@ -124,8 +124,8 @@ describe('apiKeyAuth middleware', () => {
     expect(mockReq.apiClient).toBe('integration');
   });
 
-  it('should return 500 if N8N_API_KEY is not configured', () => {
-    delete process.env.N8N_API_KEY;
+  it('should return 500 if KIO_API_KEY is not configured', () => {
+    delete process.env.KIO_API_KEY;
 
     mockReq.headers = {
       authorization: 'Bearer some-key',

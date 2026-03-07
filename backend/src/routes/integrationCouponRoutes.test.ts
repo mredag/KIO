@@ -109,7 +109,7 @@ describe('Integration Coupon Routes', () => {
     app.use(express.json());
 
     // Set API key in environment
-    process.env.N8N_API_KEY = validApiKey;
+    process.env.KIO_API_KEY = validApiKey;
 
     // Mount routes
     app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
@@ -117,7 +117,7 @@ describe('Integration Coupon Routes', () => {
 
   afterEach(() => {
     db.close();
-    delete process.env.N8N_API_KEY;
+    delete process.env.KIO_API_KEY;
   });
 
   describe('POST /api/integrations/coupons/consume', () => {

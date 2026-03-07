@@ -372,7 +372,7 @@ describe('Integration KB change-set routes', () => {
       is_active: true,
     });
 
-    process.env.N8N_API_KEY = validApiKey;
+    process.env.KIO_API_KEY = validApiKey;
 
     app = express();
     app.use(express.json());
@@ -381,7 +381,7 @@ describe('Integration KB change-set routes', () => {
 
   afterEach(() => {
     dbService.close();
-    delete process.env.N8N_API_KEY;
+    delete process.env.KIO_API_KEY;
   });
 
   it('previews KB updates without mutating live data', async () => {

@@ -71,7 +71,7 @@ function resolveMissionControlAgentId(agentId: string): string {
 function createAgentWorkspace(agentId: string, name: string, role: string, objective: string): void {
   const wsDir = join(OPENCLAW_WORKSPACES_DIR, agentId);
   if (!existsSync(wsDir)) mkdirSync(wsDir, { recursive: true });
-  const apiKey = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<KIO_API_KEY>';
+  const apiKey = process.env.KIO_API_KEY || '<KIO_API_KEY>';
   const resolvedObjective = objective || 'Complete the assigned task accurately.';
 
   const files: Record<string, string> = {

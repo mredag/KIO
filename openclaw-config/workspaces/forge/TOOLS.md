@@ -17,7 +17,7 @@
 ## Auth Modes
 - `/api/integrations/*`: `Authorization: Bearer <KIO_API_KEY>`
 - `/api/mc/*`: local backend/admin surface in the current codebase
-- Do not use stale `X-API-Key` snippets for integration routes
+- Integration routes use `Authorization: Bearer <KIO_API_KEY>`
 
 ## Safe KB Workflow
 For live KB changes use:

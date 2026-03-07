@@ -59,7 +59,7 @@ Important:
 
 - OpenClaw agent access to `/api/integrations/knowledge/*`: `Authorization: Bearer <KIO_API_KEY>`
 - Admin UI/API: authenticated browser session
-- Older `X-API-Key` wording in stale workspace notes does not apply to the current integration KB routes
+- Integration KB routes use `Authorization: Bearer <KIO_API_KEY>`
 
 ## API-Key Routes Available Today
 

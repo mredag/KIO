@@ -4,7 +4,7 @@
  */
 
 const KIO_BASE_URL = process.env.KIO_API_URL || 'http://localhost:3001';
-const KIO_AUTH = `Bearer ${process.env.KIO_API_KEY || process.env.N8N_API_KEY || '<KIO_API_KEY>'}`;
+const KIO_AUTH = `Bearer ${process.env.KIO_API_KEY || '<KIO_API_KEY>'}`;
 
 class WhatsAppHandler {
   constructor() {

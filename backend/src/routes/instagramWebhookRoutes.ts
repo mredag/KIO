@@ -680,7 +680,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             recentMessageIds.set(mid, now);
           }
 
-          const API_KEY = process.env.KIO_API_KEY || process.env.N8N_API_KEY || '';
+          const API_KEY = process.env.KIO_API_KEY || '';
           const startTime = Date.now();
           
           // Generate unique execution ID for this DM pipeline run

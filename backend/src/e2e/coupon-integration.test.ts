@@ -53,7 +53,7 @@ describe('Coupon System Integration Tests', () => {
 
     // Set API key for testing
     apiKey = 'test-api-key-12345';
-    process.env.N8N_API_KEY = apiKey;
+    process.env.KIO_API_KEY = apiKey;
 
     // Initialize services - pass raw dbInstance, not DatabaseService wrapper
     const couponService = new CouponService(dbInstance);
@@ -111,7 +111,7 @@ describe('Coupon System Integration Tests', () => {
     if (fs.existsSync(testDbPath)) {
       fs.unlinkSync(testDbPath);
     }
-    delete process.env.N8N_API_KEY;
+    delete process.env.KIO_API_KEY;
   });
 
   beforeEach(async () => {

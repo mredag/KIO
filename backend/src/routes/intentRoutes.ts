@@ -11,9 +11,7 @@ export function setIntentDMSafety(svc: DMSafetyPhraseService): void {
 
 function authorizeIntentApi(req: Request, res: Response): boolean {
   const authHeader = req.header('Authorization') || req.header('authorization');
-  const bearerKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  const legacyHeaderKey = req.header('X-API-Key') || req.header('x-api-key');
-  const headerKey = bearerKey || legacyHeaderKey || '';
+  const headerKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   const expected = process.env.INTENT_API_KEY || STATIC_INTENT_API_KEY;
 
   if (!headerKey || headerKey !== expected) {

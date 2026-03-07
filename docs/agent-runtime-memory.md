@@ -55,6 +55,9 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `sexualIntentFilter.ts` includes a clear-business guard for concrete pricing asks (including compact typo forms like `30daka ne kadar`) so they bypass boundary-probe hard blocks.
 - The first sexual-intent gate now receives bounded conversation context from `instagram_interactions`: last 24 hours only, capped to at most 6 short lines and ~600 chars before model prompts.
 - `ResponsePolicyService` now receives a compact conversation snippet for rule/faithfulness checks (max 4 lines, ~600 chars) so follow-up turns are judged with context without large token bloat.
+- Age and minor signals (`yas`, `18`, `cocuk`, `ebeveyn`, `veli`) must keep `policies` in the fetched KB slice even inside follow-up pricing/service context.
+- `ResponsePolicyService` now has a deterministic age-policy contradiction guard. Replies like `yasa bakmiyoruz` must fail when KB evidence says massage/spa is `18+` or otherwise age-restricted.
+- Duration-led massage follow-ups (`uzun sureli masaj`, `kisa sureli`, `60 dk`, `90dk`, `seans`) must force `pricing` alongside `services`; otherwise policy repair can ground on unrelated package prices.
 - Rule-stage style/format failures are treated as soft signals; hard blocking should come from moderation, explicit hard-rule violations, or deterministic grounding mismatches.
 - Do not turn the safety layer into a long brittle banned-word list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop ahead of the AI gate.

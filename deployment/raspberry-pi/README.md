@@ -79,6 +79,8 @@ cd ~/kio-new/deployment/raspberry-pi
 ./pre-feature-snapshot.sh
 ```
 
+Use this before risky DM/policy/prompt changes. Record both the printed snapshot directory and `git rev-parse --short HEAD` so rollback has an exact code + runtime baseline.
+
 This captures:
 - current git SHA
 - SQLite database copy

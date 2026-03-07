@@ -286,6 +286,18 @@ describe('sexualIntentFilter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
+  it('blocks guzel-son euphemisms immediately without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('guzel son yapiyor musunuz');
+
+    expect(decision.action).toBe('block_message');
+    expect(decision.modelUsed).toBe('heuristic-euphemism-guard');
+    expect(decision.reason).toContain('happy-ending');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
   it('blocks mutluluk probes immediately without relying on the model', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

@@ -40,6 +40,16 @@ const BENIGN_GREETING_PATTERN = /\b(merhaba|selam|slm|kolay\s*gelsin|iyi\s*gunle
 const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
 const BOUNDARY_SUSPICIOUS_CUE_PATTERN = /\b(mutlu|extra|ekstra|ozel|muamele|sonunda)\b/u;
 
+function hasHappyEndingCue(compact: string): boolean {
+  return compact.includes('mutluson')
+    || compact.includes('mutuson')
+    || compact.includes('happyending')
+    || compact.includes('guzelson')
+    || compact.includes('guzelsonlu')
+    || compact.includes('iyison')
+    || compact.includes('iyisonlu');
+}
+
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -144,9 +154,7 @@ function buildBoundaryProbeContext(messageText: string): BoundaryProbeContext {
   const tokenCount = spaced ? spaced.split(' ').length : 0;
   const hasBusinessAnchor = SAFE_BUSINESS_ANCHOR_PATTERN.test(spaced);
   const hasPotentialSexualCue = BOUNDARY_SUSPICIOUS_CUE_PATTERN.test(spaced)
-    || compact.includes('mutluson')
-    || compact.includes('mutuson')
-    || compact.includes('happyending')
+    || hasHappyEndingCue(compact)
     || compact.includes('extrahizmet')
     || compact.includes('ekstrahizmet')
     || compact.includes('ozelmuamele');
@@ -172,9 +180,7 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
 
   // Never force-allow if explicit or euphemistic sexual cues are present.
   const hasExplicitSexualCue = EXPLICIT_SEXUAL_PATTERN.test(spaced);
-  const hasEuphemisticCue = compact.includes('mutluson')
-    || compact.includes('mutuson')
-    || compact.includes('happyending')
+  const hasEuphemisticCue = hasHappyEndingCue(compact)
     || compact.includes('extrahizmet')
     || compact.includes('ekstrahizmet')
     || compact.includes('ozelmuamele');
@@ -259,9 +265,7 @@ function detectSexualEuphemismGuard(messageText: string): SexualIntentDecision |
     return null;
   }
 
-  const hasHappyEndingProbe = compact.includes('mutluson')
-    || compact.includes('mutuson')
-    || compact.includes('happyending');
+  const hasHappyEndingProbe = hasHappyEndingCue(compact);
 
   if (hasHappyEndingProbe) {
     return {

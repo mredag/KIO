@@ -19,6 +19,21 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+wait_for_health() {
+  local url="$1"
+  local attempts="${2:-20}"
+  local sleep_seconds="${3:-2}"
+
+  for ((i = 1; i <= attempts; i++)); do
+    if curl -fsS "${url}" >/dev/null; then
+      return 0
+    fi
+    sleep "${sleep_seconds}"
+  done
+
+  return 1
+}
+
 APP_DIR="${APP_DIR:-/home/$USER/kio-new}"
 BACKEND_DIR="${APP_DIR}/backend"
 FRONTEND_DIR="${APP_DIR}/frontend"
@@ -92,11 +107,12 @@ cd "${APP_DIR}"
 "${SYNC_SCRIPT}" --restart
 
 if command -v curl >/dev/null 2>&1; then
-  log_info "Running backend health check..."
-  if curl -fsS "${HEALTH_URL}" >/dev/null; then
+  log_info "Running backend health check with retry..."
+  if wait_for_health "${HEALTH_URL}" 20 2; then
     log_success "Health check passed: ${HEALTH_URL}"
   else
-    log_warning "Health check failed: ${HEALTH_URL}"
+    log_error "Health check failed after retries: ${HEALTH_URL}"
+    exit 1
   fi
 else
   log_warning "curl not found; skipping backend health check"

@@ -119,6 +119,31 @@ describe('DMKnowledgeRerankerService', () => {
     expect(result.trace.rationale).toContain('dogrudan yardim etmiyor');
   });
 
+  it('prioritizes age-policy candidates in fallback mode for age-related follow-ups', async () => {
+    delete process.env.OPENROUTER_API_KEY;
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'yasa bakiyor musunuz',
+      followUpHint: {
+        topicLabel: 'masaj fiyatlari',
+        rewrittenQuestion: 'masaj fiyatlari icin yasa bakiyor musunuz',
+        sourceMessage: 'masaj fiyatlari nedir',
+      },
+      activeTopic: 'masaj fiyatlari',
+      requestedCategories: ['services', 'pricing', 'policies'],
+      candidates: [
+        createCandidate('c1', 'faq', 'kese_kopuk_fiyat', 0.42, 'Kese kopuk ekleme 100 TL.'),
+        createCandidate('c2', 'policies', 'age_groups', 0.28, 'SPA/masaj: 18 yas ve uzeri.'),
+      ],
+      maxSelections: 1,
+    });
+
+    expect(result.selectedCandidates).toHaveLength(1);
+    expect(result.selectedCandidates[0].id).toBe('c2');
+    expect(result.trace.skippedReason).toBe('no_api_key');
+  });
+
   it('formats selected evidence into a compact prompt block', () => {
     const formatted = formatSelectedEvidenceBlock([
       createCandidate('c1', 'faq', 'havuz_sicaklik', 0.27, 'Havuz 28-30 derece arasindadir.'),

@@ -34,6 +34,12 @@
 
 import type { FollowUpContextHint, ResponseDirective } from './InstagramContextService.js';
 import { extractUsageMetrics } from './UsageMetrics.js';
+import {
+  hasAgePolicySignals,
+  hasAgeRestrictionEvidenceLine,
+  hasNoAgeRestrictionClaim,
+  normalizePolicySignalText,
+} from './PolicySignalService.js';
 
 // VALIDATION_MODEL is now dynamically passed from PipelineConfigService
 
@@ -78,6 +84,7 @@ Aşağıdaki kurallara göre yanıtı kontrol et:
    - Kısa bir selamlama mesajına uzun bilgi dolu yanıt verilmişse FAIL.
 10. PAPAĞAN/TEKRAR KONTROLÜ: Yanıt, BILGI_BANKASI'ndaki verileri olduğu gibi kopyalayıp yapıştırmış mı? Asistan bilgiyi kendi cümleleriyle, müşterinin sorusuna uygun şekilde özetlemeli. Bilgi bankasının tamamını veya büyük bölümünü aynen tekrarlamak YASAK.
 11. SİSTEM BİLGİSİ SIZINTISI (YENİ): Yanıt "bilgi bankası", "bilgi bankasında", "veri tabanı", "sistem", "prompt" gibi iç sistem terimlerini içeriyor mu? Müşteri bu terimleri GÖRMEMELİ. Asistan sadece doğal, profesyonel Türkçe kullanmalı.
+12. YAŞ/POLITIKA TUTARSIZLIĞI: Müşteri yaş sınırı, 18+, çocuk kabulü, ebeveyn/veli izni gibi bir kural soruyorsa BILGI_BANKASI'ndaki policy satırlarıyla çelişme. BILGI_BANKASI yaş sınırı veya veli kuralı içeriyorsa "yaşa bakmıyoruz", "herkes gelebilir", "yaş sınırı yok" gibi genelleyici ifadeler FAIL olmalıdır.
 
 YANITINI SADECE JSON OLARAK VER, başka hiçbir şey yazma:
 {"valid": boolean, "violations": ["kural numarası ve kısa açıklama"], "reason": "tek cümle özet"}`;
@@ -389,6 +396,7 @@ export class ResponsePolicyService {
     ].join(' ');
     const queryTokens = this.extractEvidenceTokens(querySource);
     const pricingContext = this.hasPricingSignals(querySource);
+    const agePolicyContext = hasAgePolicySignals(querySource);
 
     if (queryTokens.length === 0) {
       return [];
@@ -405,17 +413,18 @@ export class ResponsePolicyService {
         const hasPriceToken = /\d[\d.,]*\s*(?:â‚º|TL|tl|lira)/.test(line);
         const hasDurationToken = /\b\d+\s*(?:dk|dakika|saat)\b/i.test(line);
         const pricingBoost = pricingContext && (hasPriceToken || hasDurationToken) ? 2 : 0;
+        const policyBoost = agePolicyContext && hasAgeRestrictionEvidenceLine(line) ? 2 : 0;
 
         return {
           line,
           index,
-          score: overlap.length + hasNumericRange + pricingBoost,
+          score: overlap.length + hasNumericRange + pricingBoost + policyBoost,
         };
       })
       .filter(item => item.score > 0)
       .sort((a, b) => (b.score - a.score) || (a.index - b.index));
 
-    const maxEvidenceLines = pricingContext ? 10 : 4;
+    const maxEvidenceLines = (pricingContext || agePolicyContext) ? 10 : 4;
     return [...new Set(scoredLines.slice(0, maxEvidenceLines).map(item => item.line))];
   }
 
@@ -727,6 +736,78 @@ export class ResponsePolicyService {
     return `${rulePrefix}: Yanitta KB'de olmayan deger var (${invalidSummary}). Izinli degerler: ${allowedSummary}`;
   }
 
+  private getRelevantAgePolicyLines(context: PolicyValidationContext): string[] {
+    if (!hasAgePolicySignals(
+      context.customerMessage,
+      context.agentResponse,
+      context.followUpHint?.rewrittenQuestion,
+      context.followUpHint?.topicLabel,
+      context.activeTopic,
+    )) {
+      return [];
+    }
+
+    const queryTokens = new Set(this.extractEvidenceTokens([
+      context.customerMessage,
+      context.followUpHint?.rewrittenQuestion || '',
+      context.followUpHint?.topicLabel || '',
+      context.activeTopic || '',
+    ].join(' ')));
+
+    return context.knowledgeContext
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('['))
+      .filter(line => hasAgeRestrictionEvidenceLine(line))
+      .map((line, index) => {
+        const normalizedLine = normalizePolicySignalText(line);
+        let score = 2;
+        if (/\b(?:spa|masaj|massage|hamam|fitness|pilates|yuzme|taekwondo|jimnastik|kickboks|boks)\b/.test(normalizedLine)) {
+          score += 1;
+        }
+        for (const token of queryTokens) {
+          if (normalizedLine.includes(token)) {
+            score += 1;
+          }
+        }
+        return { line, index, score };
+      })
+      .sort((left, right) => (right.score - left.score) || (left.index - right.index))
+      .slice(0, 4)
+      .map(item => item.line);
+  }
+
+  private validateAgePolicyGrounding(context: PolicyValidationContext): DeterministicGroundingResult {
+    const startTime = Date.now();
+    const relevantPolicyLines = this.getRelevantAgePolicyLines(context);
+    if (relevantPolicyLines.length === 0) {
+      return {
+        valid: true,
+        violations: [],
+        reason: 'age policy grounding not applicable',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    if (hasNoAgeRestrictionClaim(context.agentResponse)) {
+      return {
+        valid: false,
+        violations: [
+          `12. YAS/POLITIKA TUTARSIZLIGI: Yanit yas siniri olmadigini soyluyor, ancak KB'de yas/policy kurali var. Kanit: ${relevantPolicyLines.join(' | ')}`,
+        ],
+        reason: 'Yanitta KB ile catisan yas/policy ifadesi var',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    return {
+      valid: true,
+      violations: [],
+      reason: 'age policy grounding passed',
+      latencyMs: Date.now() - startTime,
+    };
+  }
+
   private validateDeterministicGrounding(context: PolicyValidationContext): DeterministicGroundingResult {
     const startTime = Date.now();
     const allowedPrices = this.extractPriceValues(context.knowledgeContext);
@@ -758,20 +839,30 @@ export class ResponsePolicyService {
       violations.push(this.buildInvalidValueViolation('2. UYDURMA BILGI (TELEFON)', invalidPhones, allowedPhones));
     }
 
+    const agePolicyResult = this.validateAgePolicyGrounding(context);
+    if (!agePolicyResult.valid) {
+      violations.push(...agePolicyResult.violations);
+    }
+
     return {
       valid: violations.length === 0,
       violations,
       reason: violations.length === 0
         ? 'deterministic grounding passed'
-        : 'Yanitta KB ile eslesmeyen sayisal bilgi var',
-      latencyMs: Date.now() - startTime,
+        : 'Yanitta KB ile eslesmeyen deterministik bilgi var',
+      latencyMs: Date.now() - startTime + agePolicyResult.latencyMs,
     };
   }
 
   private shouldRunFaithfulness(context: PolicyValidationContext): boolean {
     const responseLength = context.agentResponse.trim().length;
     if (responseLength <= 60) {
-      return false;
+      return hasAgePolicySignals(
+        context.customerMessage,
+        context.agentResponse,
+        context.followUpHint?.rewrittenQuestion,
+        context.activeTopic,
+      ) && responseLength >= 20;
     }
 
     const hasPriceValues = this.extractPriceValues(context.agentResponse).length > 0;
@@ -783,7 +874,12 @@ export class ResponsePolicyService {
       || this.extractPhoneValues(context.agentResponse).length > 0
       || /\b(?:adres|konum|mahalle|sokak|kat|blok)\b/i.test(context.agentResponse);
 
-    return hasFactualSignals;
+    return hasFactualSignals || hasAgePolicySignals(
+      context.customerMessage,
+      context.agentResponse,
+      context.followUpHint?.rewrittenQuestion,
+      context.activeTopic,
+    );
   }
 
   private buildAllowedFactsHint(knowledgeContext: string): string {

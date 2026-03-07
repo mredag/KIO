@@ -14,6 +14,7 @@ import { EscalationService } from '../services/EscalationService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
+import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
 import { randomUUID } from 'crypto';
 
@@ -298,6 +299,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       // ═══ STAGE 2: Knowledge Fetch + Format (same as webhook) ═══
       // Always include 'contact' — phone/address are in system prompt and fallback
       const kbCategories: Set<string> = new Set(analysis.intentCategories);
+      if (hasAgePolicySignals(text, analysis.followUpHint?.rewrittenQuestion, analysis.activeTopicLabel)) {
+        kbCategories.add('policies');
+      }
       kbCategories.add('contact');
       const categoriesParam = Array.from(kbCategories).join(',');
       const API_KEY = process.env.KIO_API_KEY || '';
@@ -355,7 +359,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           messageText: text,
           followUpHint: analysis.followUpHint,
           activeTopic: analysis.activeTopicLabel,
-          requestedCategories: analysis.intentCategories,
+          requestedCategories: Array.from(kbCategories),
           candidates: semanticRetrieval.candidates,
           maxSelections: 3,
         });

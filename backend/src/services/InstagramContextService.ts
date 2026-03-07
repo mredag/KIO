@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { ConversationStateService } from './ConversationStateService.js';
 import type { ConversationStateRecord } from './ConversationStateService.js';
+import { hasAgePolicySignals } from './PolicySignalService.js';
 
 /**
  * Normalize Turkish diacritical characters to ASCII equivalents.
@@ -490,6 +491,7 @@ export class InstagramContextService {
       '- Mesaj spesifik bir hizmet veya konu belirtiyorsa topicSummary bunu kisa ve dogal sekilde belirtmelidir.',
       '- Mesaj fiyat + saat gibi birden fazla genis niyet iceriyorsa, net bir referans yoksa bunu yeni bir soru olarak ele al.',
       '- Belirsiz durumda spesifik hizmet uydurma, eski konuyu zorla tasima.',
+      '- Mesaj yas, 18+, cocuk, veli veya ebeveyn izni soruyorsa categories MUTLAKA policies icermeli; aktif konu olsa bile policy bilgisini atlama.',
       '- Mumsen cevaplanabilen kismi cevaplat; sadece gerekli ise sonunda tek bir kisa netlestirme sorusu oner.',
       '- Yanit sadece gecerli JSON olsun.',
       '',
@@ -717,6 +719,35 @@ export class InstagramContextService {
       instruction: this.buildGroundedFollowUpDirectiveInstruction(plan.followUpHint.topicLabel, plan.categories),
       rationale: `Aktif konu belli. Onceki yanittaki belirsizlik tekrar edilmemeli; guncel verilen bilgiler once kullanilmali.`,
     };
+  }
+
+  private applyPolicyPrioritySignals(plan: AIContextPlan, messageText: string): void {
+    const shouldPrioritizePolicies = hasAgePolicySignals(
+      messageText,
+      plan.followUpHint?.rewrittenQuestion,
+      plan.followUpHint?.topicLabel,
+      plan.topicSummary,
+    );
+    if (!shouldPrioritizePolicies) {
+      return;
+    }
+
+    if (!plan.categories.includes('policies')) {
+      plan.categories = ['policies', ...plan.categories];
+    }
+
+    if (!plan.keywords.includes('policy_age_signal')) {
+      plan.keywords.push('policy_age_signal');
+    }
+
+    const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
+    if (!normalizedInstruction.includes('yas') && !normalizedInstruction.includes('18')) {
+      plan.responseDirective = {
+        ...plan.responseDirective,
+        instruction: `${plan.responseDirective.instruction} Yas, 18+ ve ebeveyn/veli kurali soruluyorsa verilen politikalari acikca kontrol et; belgesiz sekilde "yas siniri yok" deme.`.trim(),
+        rationale: `${plan.responseDirective.rationale} Yas/minor sinyali oldugu icin policy bilgisi zorunlu.`,
+      };
+    }
   }
 
   private isModifierOnlyRequest(categories: string[]): boolean {
@@ -1144,7 +1175,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       && categories.includes('faq');
     const modelTier: ModelTier = isGeneralRecovery ? 'light' : 'standard';
 
-    return {
+    const plan: AIContextPlan = {
       categories,
       keywords: currentIntent.keywords,
       followUpHint: null,
@@ -1156,6 +1187,8 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
         : 'AI kurtarma plani: baglamli varsayilan standart',
       stateRepairApplied: false,
     };
+    this.applyPolicyPrioritySignals(plan, messageText);
+    return plan;
   }
 
   private buildFallbackContextPlan(messageText: string, history: ConversationEntry[]): AIContextPlan {
@@ -1178,7 +1211,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     const categories = [...contextCategories];
     const tier = this.classifyModelTier(messageText, categories);
 
-    return {
+    const plan: AIContextPlan = {
       categories,
       keywords: currentIntent.keywords,
       followUpHint: null,
@@ -1188,6 +1221,8 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       tierReason: `${tier.reason} (legacy fallback)`,
       stateRepairApplied: false,
     };
+    this.applyPolicyPrioritySignals(plan, messageText);
+    return plan;
   }
 
   private parseAIContextPlan(rawContent: string, messageText: string): AIContextPlan {
@@ -1318,6 +1353,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
           plan.followUpHint.rewrittenQuestion);
       }
 
+      this.applyPolicyPrioritySignals(plan, messageText);
       this.applyGroundedFollowUpGuard(plan);
 
       return plan;
@@ -1350,6 +1386,13 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
           matchedCategories.add(category);
           matchedKeywords.push(keyword);
         }
+      }
+    }
+
+    if (hasAgePolicySignals(messageText)) {
+      matchedCategories.add('policies');
+      if (!matchedKeywords.includes('policy_age_signal')) {
+        matchedKeywords.push('policy_age_signal');
       }
     }
 
@@ -1682,7 +1725,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
           // Standard formatting for non-pricing categories
           const lines: string[] = [`[${label}]`];
 
-          for (const [_key, value] of Object.entries(entries as Record<string, string>)) {
+          for (const [, value] of Object.entries(entries as Record<string, string>)) {
             if (typeof value === 'string' && value.trim()) {
               lines.push(`• ${value}`);
             }

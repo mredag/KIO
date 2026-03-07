@@ -95,6 +95,32 @@ describe('ResponsePolicyService deterministic grounding', () => {
     expect(result.violations.join(' ')).toContain('2700');
   });
 
+  it('rejects no-age-restriction claims when KB contains an age policy', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: 'masajda yas siniri var mi',
+      agentResponse: 'Masaj hizmetlerimizde yasa bakmiyoruz. Herkes faydalanabilir.',
+      knowledgeContext: '[POLICIES]\n• Yas gruplari: SPA/masaj: 18 yas ve uzeri.\nTelefon: 0326 502 58 58',
+      followUpHint: {
+        topicLabel: 'masaj fiyatlari',
+        rewrittenQuestion: 'masaj fiyatlari icin yas siniri var mi',
+        sourceMessage: 'masaj fiyatlari nedir',
+      },
+      activeTopic: 'masaj fiyatlari',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(false);
+    expect(result.modelUsed).toBe('deterministic-grounding');
+    expect(result.violations.join(' ')).toContain('YAS/POLITIKA TUTARSIZLIGI');
+    expect(result.violations.join(' ')).toContain('18 yas ve uzeri');
+  });
+
   it('runs faithfulness for non-price factual replies', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn()
@@ -107,6 +133,24 @@ describe('ResponsePolicyService deterministic grounding', () => {
       customerMessage: 'saat kacta aciksiniz',
       agentResponse: 'Tesisimiz 08:00-00:00 saatleri arasinda aciktir. Telefon: 0326 502 58 58',
       knowledgeContext: 'Calisma Saatleri: 08:00-00:00\nTelefon: 0326 502 58 58',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.valid).toBe(true);
+  });
+
+  it('runs faithfulness for grounded age-policy replies', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(createOpenRouterResult({ valid: true }))
+      .mockResolvedValueOnce(createOpenRouterResult({ faithful: true, claims: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: 'masajda yas siniri var mi',
+      agentResponse: 'Spa ve masaj hizmetlerimiz 18 yas ve uzeri misafirler icindir.',
+      knowledgeContext: '[POLICIES]\n• Yas gruplari: SPA/masaj: 18 yas ve uzeri.',
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -154,7 +198,8 @@ describe('ResponsePolicyService deterministic grounding', () => {
   it('passes selected evidence into the rule validator prompt', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn()
-      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+      .mockResolvedValueOnce(createOpenRouterResult({ valid: true }))
+      .mockResolvedValueOnce(createOpenRouterResult({ faithful: true, claims: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
     const service = new ResponsePolicyService();
@@ -167,7 +212,7 @@ describe('ResponsePolicyService deterministic grounding', () => {
     });
 
     expect(result.valid).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(requestInit.body)) as {

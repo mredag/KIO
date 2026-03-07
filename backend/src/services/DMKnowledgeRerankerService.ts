@@ -1,5 +1,6 @@
 import type { FollowUpContextHint } from './InstagramContextService.js';
 import type { SemanticRetrievalCandidate } from './DMKnowledgeRetrievalService.js';
+import { hasAgePolicySignals, normalizePolicySignalText } from './PolicySignalService.js';
 
 const RERANK_MODEL = 'google/gemini-2.5-flash-lite';
 
@@ -82,7 +83,7 @@ export class DMKnowledgeRerankerService {
     }
 
     if (!this.shouldRunRerank(params)) {
-      const selected = this.fallbackSelect(params.candidates, maxSelections);
+      const selected = this.fallbackSelect(params, maxSelections);
       return {
         selectedCandidates: selected,
         trace: {
@@ -98,7 +99,7 @@ export class DMKnowledgeRerankerService {
     }
 
     if (!this.apiKey) {
-      const selected = this.fallbackSelect(params.candidates, maxSelections);
+      const selected = this.fallbackSelect(params, maxSelections);
       return {
         selectedCandidates: selected,
         trace: {
@@ -137,7 +138,7 @@ export class DMKnowledgeRerankerService {
       });
 
       if (!response.ok) {
-        const selected = this.fallbackSelect(params.candidates, maxSelections);
+        const selected = this.fallbackSelect(params, maxSelections);
         return {
           selectedCandidates: selected,
           trace: {
@@ -189,7 +190,7 @@ export class DMKnowledgeRerankerService {
         },
       };
     } catch {
-      const selected = this.fallbackSelect(params.candidates, maxSelections);
+      const selected = this.fallbackSelect(params, maxSelections);
       return {
         selectedCandidates: selected,
         trace: {
@@ -233,6 +234,11 @@ export class DMKnowledgeRerankerService {
     maxSelections: number,
   ): string {
     const activeTopic = params.followUpHint?.topicLabel || params.activeTopic || null;
+    const prioritizeAgePolicies = hasAgePolicySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      activeTopic,
+    );
 
     return [
       'Sen bir bilgi secim reranker ajanisin.',
@@ -250,7 +256,9 @@ export class DMKnowledgeRerankerService {
       `- En fazla ${maxSelections} aday sec.`,
       '- Aktif konu varsa secimi once bu konuya gore yap.',
       '- Yalnizca musteri sorusuna cevap kurmaya yardim eden destek bilgileri sec.',
-      '- Soru fiyat/saat odakliysa, sadece konu kapsaminda aciklayici destek girisleri sec; alakasiz politika metinlerini secme.',
+      prioritizeAgePolicies
+        ? '- Mesaj yas, 18+, cocuk, veli veya ebeveyn izni soruyorsa ilgili policies adaylarini ONCELIKLE sec; aktif konu fiyat olsa bile yas kurali alakasiz sayilmaz.'
+        : '- Soru fiyat/saat odakliysa, sadece konu kapsaminda aciklayici destek girisleri sec; alakasiz politika metinlerini secme.',
       '- Emin degilsen bos liste daha iyidir.',
       '',
       'INPUT:',
@@ -271,8 +279,62 @@ export class DMKnowledgeRerankerService {
     ].join('\n');
   }
 
-  private fallbackSelect(candidates: SemanticRetrievalCandidate[], maxSelections: number): SemanticRetrievalCandidate[] {
-    return candidates.slice(0, maxSelections);
+  private fallbackSelect(
+    params: {
+      messageText: string;
+      followUpHint: FollowUpContextHint | null;
+      activeTopic: string | null;
+      candidates: SemanticRetrievalCandidate[];
+    },
+    maxSelections: number,
+  ): SemanticRetrievalCandidate[] {
+    const prioritizeAgePolicies = hasAgePolicySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
+    if (!prioritizeAgePolicies) {
+      return params.candidates.slice(0, maxSelections);
+    }
+
+    const topicTokens = new Set(
+      normalizePolicySignalText([
+        params.messageText,
+        params.followUpHint?.rewrittenQuestion || '',
+        params.followUpHint?.topicLabel || '',
+        params.activeTopic || '',
+      ].join(' '))
+        .split(/\s+/)
+        .filter(token => token.length >= 3),
+    );
+
+    return [...params.candidates]
+      .sort((left, right) => {
+        const leftBoost = this.getAgePolicyCandidateBoost(left, topicTokens);
+        const rightBoost = this.getAgePolicyCandidateBoost(right, topicTokens);
+        return (rightBoost - leftBoost) || (right.score - left.score);
+      })
+      .slice(0, maxSelections);
+  }
+
+  private getAgePolicyCandidateBoost(candidate: SemanticRetrievalCandidate, topicTokens: Set<string>): number {
+    const candidateText = normalizePolicySignalText([
+      candidate.category,
+      candidate.keyName,
+      candidate.value,
+      candidate.description || '',
+    ].join(' '));
+    let score = candidate.category === 'policies' ? 5 : 0;
+    if (/\b(?:yas|18|ebeveyn|veli|cocuk)\b/.test(candidateText)) {
+      score += 4;
+    }
+    for (const token of topicTokens) {
+      if (candidateText.includes(token)) {
+        score += 1;
+      }
+    }
+    return score;
   }
 
   private toTraceEntries(candidates: SemanticRetrievalCandidate[]): Array<{

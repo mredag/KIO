@@ -15,6 +15,7 @@ import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../serv
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
+import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
@@ -905,6 +906,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // in the system prompt and fallback message, so the policy agent needs
             // to see them to avoid false "hallucination" flags.
             const categories: Set<string> = new Set(analysis.intentCategories);
+            if (hasAgePolicySignals(messageText, analysis.followUpHint?.rewrittenQuestion, analysis.activeTopicLabel)) {
+              categories.add('policies');
+            }
             categories.add('contact');
             const categoriesParam = Array.from(categories).join(',');
             const [knowledgeRes] = await Promise.allSettled([
@@ -962,7 +966,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 messageText,
                 followUpHint: analysis.followUpHint,
                 activeTopic: analysis.activeTopicLabel,
-                requestedCategories: analysis.intentCategories,
+                requestedCategories: Array.from(categories),
                 candidates: semanticRetrieval.candidates,
                 maxSelections: 3,
               });

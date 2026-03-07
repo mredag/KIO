@@ -110,6 +110,41 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Saat gibi net bilgileri ver');
   });
 
+  it('forces policies into age-related follow-ups even when the planner anchors to a service topic', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services', 'general'],
+      semanticSignals: ['age_inquiry'],
+      followUpHint: {
+        topicLabel: 'masaj fiyatlari',
+        rewrittenQuestion: 'masaj fiyatlari icin yasa bakiyor musunuz',
+        sourceMessage: 'masaj fiyatlari nedir',
+      },
+      responseDirective: {
+        mode: 'clarify_only',
+        instruction: 'Aktif konuya gore once neyin soruldugunu netlestir.',
+        rationale: 'Mesaj kisa bir takip sorusu.',
+      },
+      tier: 'standard',
+      tierReason: 'Baglama dayali politika sorusu',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'yasa bakiyor musunuz',
+      createHistory([
+        { text: 'masaj fiyatlari nedir', minutesAgo: 1 },
+        { direction: 'outbound', text: 'Masaj fiyatlarimiz mevcut.', minutesAgo: 0.5 },
+      ]),
+    );
+
+    expect(result.categories).toContain('policies');
+    expect(result.categories).toContain('services');
+    expect(result.keywords).toContain('policy_age_signal');
+    expect(result.responseDirective.instruction).toContain('Yas, 18+ ve ebeveyn/veli kurali');
+  });
+
   it('normalizes fenced JSON replies from the planner', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue({

@@ -125,6 +125,7 @@ Current live defaults you should keep in mind:
 - DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent`.
 - The live webhook and simulator now share the same conduct ladder before normal DM generation.
 - `DMResponseStyleService` now shapes tone to reduce repetition. Emoji should be optional, not habitual.
+- For obvious euphemisms like `mutlu son`, keep the visible legacy rejection wording; the conduct ladder escalates silently in the background.
 
 ## Sub-Agent Delegation (MANDATORY for complex tasks)
 You are an ORCHESTRATOR. DELEGATE using `/spawn` or `sessions_spawn` tool.
@@ -172,6 +173,7 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 - `force_normal` is the correct lift path for test accounts.
 - `reset` clears offense history and returns the user to normal state.
 - `force_silent` is the manual mute path.
+- The conduct page should offer username/ID/phone search, state explanations, and explicit action feedback.
 - Do not try to change conduct state through KB edits, prompt hacks, or direct SQL.
 
 **Commands:** `/spawn <task>`, `/subagents list|stop|log|send`

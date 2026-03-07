@@ -36,7 +36,7 @@ describe('sexualIntentFilter', () => {
 
   it('returns the business-safe block reply and retry guidance', () => {
     expect(getSexualIntentReply('block_message')).toBe(
-      'O söylediğiniz şey bizde yoktur. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.',
+      'Bizde o dediginiz sey yoktur. Yalnizca profesyonel spa ve spor hizmetleri veriyoruz.',
     );
     expect(getSexualIntentReply('retry_question')).toContain('profesyonel spa ve spor');
   });
@@ -405,3 +405,4 @@ describe('sexualIntentFilter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 });
+

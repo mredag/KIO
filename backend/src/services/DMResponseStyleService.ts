@@ -96,9 +96,10 @@ export function buildDMStyleProfile(params: {
       mode: 'final_warning',
       instructions: [
         'YANIT STILI:',
-        '- Tek cumlelik, net, resmi ve emojisiz yaz.',
-        '- Nezaketi koru ama sicak davranma; ek soru sorma.',
-        '- Yalnizca gerekli siniri veya gerekli bilgiyi ver, baska aciklama ekleme.',
+        '- En kisa tamamlanmis yaniti ver; emojisiz, selamlamasiz ve mesafeli yaz.',
+        '- Takip sorusu sorma, sohbet acma, tesekkur veya sicak kapanis ekleme.',
+        '- Telefon, randevu veya ek yardim cagrisi ekleme; musteri acikca istemediyse yonlendirme yapma.',
+        '- Eger mesru bir fiyat/saat/adres bilgisi verilecekse sadece cekirdek bilgiyi ver, ekstra aciklama ekleme.',
       ].join('\n'),
       trace: {
         mode: 'final_warning',
@@ -116,8 +117,8 @@ export function buildDMStyleProfile(params: {
       instructions: [
         'YANIT STILI:',
         '- Kisa, mesafeli ve emojisiz yaz.',
-        '- Gereksiz nezaket, uzun acilis veya kapanis kullanma.',
-        '- Sadece gereken bilgiyi ver; takip sorusu sorma.',
+        '- Uzun acilis, yumusak sohbet tonu, tesekkur veya davetkar kapanis kullanma.',
+        '- Sadece gereken bilgiyi ver; takip sorusu sorma ve gereksiz telefon/iletisim yonlendirmesi ekleme.',
       ].join('\n'),
       trace: {
         mode: 'guarded',

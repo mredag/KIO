@@ -53,6 +53,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent`.
 - `DMResponseStyleService` now injects anti-repetition style guidance into direct-response prompts and OpenClaw fallback prompts. Emoji should be optional, not habitual.
 - Guarded/final-warning users should not get the friendly deterministic info/clarifier templates; those stay normal-only.
+- For obvious sexual/euphemistic asks such as `mutlu son`, the visible customer-facing reply should stay the legacy rejection copy; the conduct ladder should escalate in the background.
+- Users with prior obvious violations should keep receiving colder, shorter business replies with no follow-up question or extra CTA until they are reset or lifted.
 
 ## Safety and Policy Notes
 - `sexualIntentFilter.ts` is AI-first, with a narrow euphemism guard for phrases like `mutlu son`, `extra hizmet`, and `premium paket`.
@@ -74,6 +76,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Human overrides for conduct state live in `/admin/mc/dm-conduct`.
 - `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` is the manual mute path.
 - Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
+- The DM conduct page now needs to support: search by Instagram username/ID/phone, explicit success-error feedback after actions, and visible explanations of all conduct states.
 
 ## Knowledge Base Rules
 - `knowledge_base.id` must be non-null and durable.

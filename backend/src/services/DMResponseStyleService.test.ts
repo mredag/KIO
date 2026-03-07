@@ -48,6 +48,7 @@ describe('DMResponseStyleService', () => {
 
     expect(profile.mode).toBe('final_warning');
     expect(profile.trace.greetingPolicy).toBe('minimal');
-    expect(profile.instructions).toContain('Tek cumlelik, net, resmi ve emojisiz yaz.');
+    expect(profile.instructions).toContain('En kisa tamamlanmis yaniti ver; emojisiz, selamlamasiz ve mesafeli yaz.');
+    expect(profile.instructions).toContain('Takip sorusu sorma');
   });
 });

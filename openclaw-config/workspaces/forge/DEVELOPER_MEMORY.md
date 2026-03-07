@@ -34,6 +34,8 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - Conduct states are `normal`, `guarded`, `final_warning`, and `silent`
 - `DMResponseStyleService` now injects anti-repetition style instructions; avoid reintroducing hardcoded emoji habits
 - Guarded/final-warning users should not get the friendly deterministic info template path
+- Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation must stay in the background
+- Obvious violators should continue to receive shorter, colder business replies with no follow-up question or extra CTA until reset/lift
 
 ## Safety and KB Rules
 - The safety layer is AI-first plus a narrow euphemism guard
@@ -43,6 +45,7 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - The current schema does not expose `topic_slug`
 - Human conduct overrides live in `/admin/mc/dm-conduct`
 - `force_normal` lifts a test account, `reset` clears offense history, and `force_silent` is the manual mute path
+- The conduct UI must support search by username/ID/phone, state explanations, and explicit success/error feedback after actions
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`

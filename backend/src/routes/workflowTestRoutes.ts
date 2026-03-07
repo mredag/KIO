@@ -155,18 +155,6 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       return null;
     }
 
-    if (conductState === 'final_warning') {
-      return action === 'block_message'
-        ? 'Bu tur mesajlara cevap veremiyorum. Devam ederseniz yanit verilmeyecektir.'
-        : 'Sadece profesyonel spa ve spor hizmetleri konusunda yardimci olabilirim. Uygunsuz israrda yanit verilmeyecektir.';
-    }
-
-    if (conductState === 'guarded') {
-      return action === 'block_message'
-        ? 'Bu tur mesajlara cevap veremiyorum.'
-        : 'Sadece profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyorum.';
-    }
-
     return getSexualIntentReply(action);
   }
 

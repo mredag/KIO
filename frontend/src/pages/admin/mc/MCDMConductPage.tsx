@@ -70,6 +70,13 @@ const stateLabels: Record<ConductState, string> = {
   silent: 'Silent',
 };
 
+const stateDescriptions: Record<ConductState, string> = {
+  normal: 'Normal hizmet tonu. Ek kisit yok.',
+  guarded: 'Kisa ve mesafeli cevap. Emoji, yumusak acilis ve gereksiz yardim azaltilir.',
+  final_warning: 'Son sert uyari seviyesi. Takip sorusu, sicak kapanis ve ek yardim yok.',
+  silent: 'Yanitsiz mod. Kullaniciya cevap gitmez; sadece log tutulur.',
+};
+
 const manualModeLabels: Record<ManualMode, string> = {
   auto: 'Auto',
   force_normal: 'Force normal',
@@ -80,6 +87,18 @@ const platformLabels: Record<Platform, string> = {
   instagram: 'Instagram',
   whatsapp: 'WhatsApp',
 };
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLocaleLowerCase('tr-TR')
+    .replace(/\u00e7/g, 'c')
+    .replace(/\u011f/g, 'g')
+    .replace(/\u0131/g, 'i')
+    .replace(/\u00f6/g, 'o')
+    .replace(/\u015f/g, 's')
+    .replace(/\u00fc/g, 'u')
+    .trim();
+}
 
 const conductApi = {
   async getUsers(platform?: Platform): Promise<{ count: number; users: ConductUser[] }> {
@@ -134,12 +153,15 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint: 
 export default function MCDMConductPage() {
   const queryClient = useQueryClient();
   const [platformFilter, setPlatformFilter] = useState<'all' | Platform>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
+  const [hasInitialSelection, setHasInitialSelection] = useState(false);
   const [overrideMode, setOverrideMode] = useState<ManualMode>('force_normal');
   const [overrideDuration, setOverrideDuration] = useState<number>(24);
   const [overrideNote, setOverrideNote] = useState('');
   const [newPlatform, setNewPlatform] = useState<Platform>('instagram');
   const [newUserId, setNewUserId] = useState('');
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const usersQuery = useQuery({
     queryKey: ['mc', 'dm-conduct', 'users', platformFilter],
@@ -148,18 +170,48 @@ export default function MCDMConductPage() {
   });
 
   const users = usersQuery.data?.users || [];
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(searchQuery);
+    if (!normalizedQuery) {
+      return users;
+    }
+
+    return users.filter((user) => {
+      const haystacks = [
+        user.platformUserId,
+        user.username || '',
+        user.reason || '',
+        user.lastSource || '',
+      ].map(normalizeSearchText);
+
+      return haystacks.some(value => value.includes(normalizedQuery));
+    });
+  }, [searchQuery, users]);
+
   const selectedUser = useMemo(() => {
     if (!selectedUserKey) {
-      return users[0] || null;
+      return null;
     }
-    return users.find((user) => userKey(user.platform, user.platformUserId) === selectedUserKey) || null;
-  }, [selectedUserKey, users]);
+    return filteredUsers.find((user) => userKey(user.platform, user.platformUserId) === selectedUserKey) || null;
+  }, [filteredUsers, selectedUserKey]);
 
   useEffect(() => {
-    if ((!selectedUserKey || !selectedUser) && users[0]) {
-      setSelectedUserKey(userKey(users[0].platform, users[0].platformUserId));
+    if (!hasInitialSelection && !selectedUserKey && filteredUsers[0]) {
+      setSelectedUserKey(userKey(filteredUsers[0].platform, filteredUsers[0].platformUserId));
+      setHasInitialSelection(true);
     }
-  }, [selectedUser, selectedUserKey, users]);
+  }, [filteredUsers, hasInitialSelection, selectedUserKey]);
+
+  useEffect(() => {
+    if (selectedUserKey && !selectedUser && filteredUsers[0]) {
+      setSelectedUserKey(userKey(filteredUsers[0].platform, filteredUsers[0].platformUserId));
+      return;
+    }
+
+    if (selectedUserKey && !selectedUser && filteredUsers.length === 0) {
+      setSelectedUserKey(null);
+    }
+  }, [filteredUsers, selectedUser, selectedUserKey]);
 
   useEffect(() => {
     if (!selectedUser) {
@@ -171,8 +223,17 @@ export default function MCDMConductPage() {
 
     setOverrideMode(selectedUser.manualMode);
     setOverrideDuration(24);
-    setOverrideNote(selectedUser.manualNote || '');
+      setOverrideNote(selectedUser.manualNote || '');
   }, [selectedUser]);
+
+  useEffect(() => {
+    if (!actionFeedback) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setActionFeedback(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [actionFeedback]);
 
   const eventsQuery = useQuery({
     queryKey: ['mc', 'dm-conduct', 'events', selectedUser?.platform, selectedUser?.platformUserId],
@@ -193,7 +254,22 @@ export default function MCDMConductPage() {
   const resetMutation = useMutation({
     mutationFn: ({ platform, platformUserId }: { platform: Platform; platformUserId: string }) =>
       conductApi.resetUser(platform, platformUserId),
-    onSuccess: () => invalidateConduct(),
+    onSuccess: (_data, variables) => {
+      invalidateConduct();
+      if (selectedUserKey === userKey(variables.platform, variables.platformUserId)) {
+        setSelectedUserKey(null);
+      }
+      setActionFeedback({
+        type: 'success',
+        message: `${variables.platformUserId} tam reset ile normal davranisa donduruldu.`,
+      });
+    },
+    onError: (error: unknown) => {
+      setActionFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Reset islemi basarisiz oldu.',
+      });
+    },
   });
 
   const overrideMutation = useMutation({
@@ -201,15 +277,27 @@ export default function MCDMConductPage() {
     onSuccess: (data) => {
       invalidateConduct();
       setSelectedUserKey(userKey(data.user.platform, data.user.platformUserId));
+      const modeLabel = manualModeLabels[data.user.manualMode];
+      setActionFeedback({
+        type: 'success',
+        message: `${data.user.platformUserId} icin ${modeLabel} uygulandi.`,
+      });
+    },
+    onError: (error: unknown) => {
+      setActionFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Override islemi basarisiz oldu.',
+      });
     },
   });
 
   const stats = useMemo(() => ({
-    total: users.length,
-    silent: users.filter((user) => user.conductState === 'silent').length,
-    manual: users.filter((user) => user.manualMode !== 'auto').length,
-    testing: users.filter((user) => user.manualMode === 'force_normal').length,
-  }), [users]);
+    total: filteredUsers.length,
+    totalAll: users.length,
+    silent: filteredUsers.filter((user) => user.conductState === 'silent').length,
+    manual: filteredUsers.filter((user) => user.manualMode !== 'auto').length,
+    testing: filteredUsers.filter((user) => user.manualMode === 'force_normal').length,
+  }), [filteredUsers, users]);
 
   const handleQuickOverride = (mode: ManualMode, durationHours: number | null, note: string) => {
     if (!selectedUser) {
@@ -252,14 +340,71 @@ export default function MCDMConductPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mc-fade-up-delay">
-          <StatCard label="Toplam" value={stats.total} hint="Takip edilen kullanicilar" />
+          <StatCard
+            label="Toplam"
+            value={stats.total}
+            hint={stats.total === stats.totalAll ? 'Takip edilen kullanicilar' : `${stats.totalAll} kayittan filtrelenenler`}
+          />
           <StatCard label="Silent" value={stats.silent} hint="Yanitsiz modda olanlar" />
           <StatCard label="Manual" value={stats.manual} hint="Admin override aktif" />
           <StatCard label="Test Lift" value={stats.testing} hint="Force normal ile korunan hesaplar" />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
-          <GlassCard className="p-0 overflow-hidden">
+        <GlassCard className="p-5 mc-fade-up-delay">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="text-sm font-semibold text-gray-100">Durumlar ne anlama geliyor?</div>
+              <div className="mt-2 text-sm text-gray-400">
+                Conduct ladder arka planda calisir. Gorunen cevaplar eski uygunsuz-icerik reddini korur; bu panel ise o kullanicinin
+                bundan sonraki tonunu ve gerekirse sessiz moda dusmesini kontrol eder.
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              Arama: Instagram kullanici adi, Instagram ID, telefon veya neden metni
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {(Object.keys(stateDescriptions) as ConductState[]).map((state) => (
+              <div key={state} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <div className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${stateBadgeClasses[state]}`}>
+                  {stateLabels[state]}
+                </div>
+                <div className="mt-3 text-sm text-gray-300">{stateDescriptions[state]}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Force normal</div>
+              <div className="mt-2">Test hesabi sessize dusmez. Var olan ceza kaydi silinmez, sadece cevap kilidi gecici kalkar.</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Force silent</div>
+              <div className="mt-2">Admin tarafindan cevap tamamen kapatilir. Kullaniciya mesaj gitmez.</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Full reset</div>
+              <div className="mt-2">Kullaniciyi conduct listesinden cikarir, override ve ceza skorunu sifirlar.</div>
+            </div>
+          </div>
+        </GlassCard>
+
+        {actionFeedback && (
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm ${
+              actionFeedback.type === 'success'
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                : 'border-red-500/30 bg-red-500/10 text-red-200'
+            }`}
+          >
+            {actionFeedback.message}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+          <GlassCard className="min-w-0 overflow-hidden p-0">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <div>
                 <div className="text-sm font-semibold text-gray-100">Kullanicilar</div>
@@ -277,7 +422,16 @@ export default function MCDMConductPage() {
             </div>
 
             <div className="px-5 py-4 border-b border-white/10 bg-white/[0.02]">
-              <div className="grid grid-cols-1 md:grid-cols-[120px_1fr_140px_120px_auto] gap-3 items-end">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr_140px_120px_auto]">
+                <div className="md:col-span-5">
+                  <label className="mc-label mb-1.5 block">Ara</label>
+                  <input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    className="mc-input"
+                    placeholder="instagram kullanici adi, id, telefon veya neden"
+                  />
+                </div>
                 <div>
                   <label className="mc-label mb-1.5 block">Platform</label>
                   <select value={newPlatform} onChange={(event) => setNewPlatform(event.target.value as Platform)} className="mc-input">
@@ -301,7 +455,7 @@ export default function MCDMConductPage() {
                   </div>
                 </div>
                 <button onClick={handleCreateOverride} className="mc-btn mc-btn--primary text-xs" disabled={overrideMutation.isPending || !newUserId.trim()}>
-                  Test Lift 24h
+                  {overrideMutation.isPending ? 'Isleniyor...' : 'Test Lift 24h'}
                 </button>
               </div>
             </div>
@@ -319,7 +473,7 @@ export default function MCDMConductPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => {
+                  {filteredUsers.map((user) => {
                     const active = selectedUser && userKey(user.platform, user.platformUserId) === userKey(selectedUser.platform, selectedUser.platformUserId);
                     return (
                       <tr
@@ -366,9 +520,11 @@ export default function MCDMConductPage() {
                       </tr>
                     );
                   })}
-                  {!usersQuery.isLoading && users.length === 0 && (
+                  {!usersQuery.isLoading && filteredUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">Takip edilen conduct kaydi yok.</td>
+                      <td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">
+                        {searchQuery.trim() ? 'Aramayla eslesen conduct kaydi yok.' : 'Takip edilen conduct kaydi yok.'}
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -376,7 +532,7 @@ export default function MCDMConductPage() {
             </div>
           </GlassCard>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <GlassCard className="p-5" hover={false}>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -418,28 +574,28 @@ export default function MCDMConductPage() {
                       className="mc-btn mc-btn--primary text-xs"
                       disabled={overrideMutation.isPending}
                     >
-                      Lift 24h
+                      {overrideMutation.isPending ? 'Isleniyor...' : 'Lift 24h'}
                     </button>
                     <button
                       onClick={() => handleQuickOverride('force_silent', 24, 'manual-silent')}
                       className="mc-btn mc-btn--ghost text-xs"
                       disabled={overrideMutation.isPending}
                     >
-                      Silent 24h
+                      {overrideMutation.isPending ? 'Isleniyor...' : 'Silent 24h'}
                     </button>
                     <button
                       onClick={() => handleQuickOverride('auto', null, 'clear-override')}
                       className="mc-btn mc-btn--ghost text-xs"
                       disabled={overrideMutation.isPending}
                     >
-                      Clear override
+                      {overrideMutation.isPending ? 'Isleniyor...' : 'Clear override'}
                     </button>
                     <button
                       onClick={() => resetMutation.mutate({ platform: selectedUser.platform, platformUserId: selectedUser.platformUserId })}
                       className="mc-btn mc-btn--ghost text-xs text-red-200 border-red-500/25"
                       disabled={resetMutation.isPending}
                     >
-                      Full reset
+                      {resetMutation.isPending ? 'Resetleniyor...' : 'Full reset'}
                     </button>
                   </div>
 
@@ -465,7 +621,7 @@ export default function MCDMConductPage() {
                         className="mc-btn mc-btn--primary text-xs"
                         disabled={overrideMutation.isPending}
                       >
-                        Apply override
+                        {overrideMutation.isPending ? 'Uygulaniyor...' : 'Apply override'}
                       </button>
                     </div>
                     <textarea

@@ -27,7 +27,7 @@ const LOW_THRESHOLD = 0.70;
 const HIGH_THRESHOLD = 0.85;
 const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
-const SEXUAL_BLOCK_REPLY = 'O söylediğiniz şey bizde yoktur. Yalnızca profesyonel spa ve spor hizmetleri veriyoruz.';
+const SEXUAL_BLOCK_REPLY = 'Bizde o dediginiz sey yoktur. Yalnizca profesyonel spa ve spor hizmetleri veriyoruz.';
 const SEXUAL_RETRY_REPLY = 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.';
 const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist)\b/u;
 const SHORT_PROBE_PATTERN = /\b(nasil|oluyor|olur|var|varmi|nedir|ne)\b/u;
@@ -693,3 +693,4 @@ export async function evaluateSexualIntent(messageText: string): Promise<SexualI
 
   return mergeSexualIntentDecisions(modelDecision, boundaryDecision);
 }
+

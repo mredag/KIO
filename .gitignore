@@ -43,6 +43,7 @@ Thumbs.db
 # Uploads
 public/uploads/
 uploads/
+backend/public/
 backend/public/uploads/
 
 # Backups

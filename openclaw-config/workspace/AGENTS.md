@@ -155,9 +155,14 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 3. Include in task: "Do not write before preview and approval."
 4. Include in task: "Never use seed-knowledge.ts, migrate-kb.mjs, sqlite3, or bulk reseed tools for live KB edits."
 5. Include the base URL and `Authorization: Bearer <KIO_API_KEY>` in the task description.
-6. Use `POST /api/integrations/knowledge/change-sets/preview` to create the preview artifact for any live KB edit.
-7. After approval, use `POST /api/integrations/knowledge/change-sets/<id>/apply`. If the owner requests undo, use `POST /api/integrations/knowledge/change-sets/<id>/rollback`.
-8. After apply, refetch the change set, changed row(s), and affected context, then report exactly what changed.
+6. Include in task: "Default to value-only KB edits. Do not change description unless the owner explicitly asked for description changes."
+7. Use `POST /api/integrations/knowledge/change-sets/preview` to create the preview artifact for any live KB edit. Set `allowDescriptionChanges=true` only if the owner explicitly asked for description edits.
+8. After approval, use `POST /api/integrations/knowledge/change-sets/<id>/apply` with:
+   - `approvedChangeSetId` equal to the exact preview id
+   - `approvalText` containing the exact id and an explicit approval phrase such as `Onayliyorum. Change-set <id> uygula.`
+9. Never use `hemen tamamla` or similar shorthand as sufficient approval for live KB writes unless the exact change-set id is quoted back in the approval text.
+10. If the owner requests undo, use `POST /api/integrations/knowledge/change-sets/<id>/rollback`.
+11. After apply, refetch the change set, changed row(s), and affected context, then report exactly what changed.
 
 **Commands:** `/spawn <task>`, `/subagents list|stop|log|send`
 
@@ -258,7 +263,6 @@ curl -s -H "Authorization: Bearer <KIO_API_KEY>" "http://localhost:3001/api/mc/d
 | `/api/integrations/knowledge/change-sets/:id` | GET | Fetch preview/apply/rollback state |
 | `/api/integrations/knowledge/change-sets/:id/apply` | POST | Apply an approved KB change set |
 | `/api/integrations/knowledge/change-sets/:id/rollback` | POST | Roll back an applied KB change set |
-| `/api/integrations/knowledge/entries/:id` | PUT | Legacy direct KB update |
 
 ## WhatsApp API & Data Access
 

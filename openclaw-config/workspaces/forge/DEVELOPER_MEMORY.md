@@ -45,7 +45,8 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
   - `GET /api/integrations/knowledge/change-sets/:id`
   - `POST /api/integrations/knowledge/change-sets/:id/apply`
   - `POST /api/integrations/knowledge/change-sets/:id/rollback`
-  - legacy `PUT /api/integrations/knowledge/entries/:id`
+- KB preview defaults to value-only changes; `description` edits require explicit opt-in with `allowDescriptionChanges=true`
+- KB apply now requires `approvedChangeSetId` and explicit `approvalText` containing the exact change-set id
 - KB updates should use API routes, not direct SQL edits
 
 ## Main Files To Inspect

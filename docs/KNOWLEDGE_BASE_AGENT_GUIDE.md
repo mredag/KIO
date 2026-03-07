@@ -48,7 +48,6 @@ Important:
   - `GET /api/integrations/knowledge/change-sets/:id`
   - `POST /api/integrations/knowledge/change-sets/:id/apply`
   - `POST /api/integrations/knowledge/change-sets/:id/rollback`
-  - `PUT /api/integrations/knowledge/entries/:id`
 - Direct create/delete routes still live in the admin API, but agents can now create, update, and delete safely through integration change sets
 
 ## Protocol V1: Preview-First KB Changes
@@ -96,6 +95,11 @@ The preview must include:
 - Risk note
 - A statement that no write has happened yet
 
+Default policy:
+
+- Change only `value` unless the user explicitly asked to edit `description`
+- If a preview would change `description`, the request must opt in explicitly
+
 ### Required Preview Format
 
 Use this structure:
@@ -112,8 +116,6 @@ KB Preview
 1. UPDATE `<id>` `faq.some_key`
 - Before value: `...`
 - After value: `...`
-- Before description: `...`
-- After description: `...`
 - Why: `...`
 - API:
   - `POST /api/integrations/knowledge/change-sets/preview`
@@ -121,7 +123,7 @@ KB Preview
 
 Approval
 - No write has happened yet.
-- Reply with explicit approval to apply this KB change.
+- Reply with explicit approval that includes the exact `changeSetId`.
 ```
 
 ### Phase 3: Approval Gate
@@ -135,6 +137,10 @@ Rules:
 - For one-row safe edits, preview is still required
 - For multi-row changes, approval is mandatory
 - For delete operations, approval is mandatory
+- `apply` must include:
+  - `approvedChangeSetId`
+  - `approvalText`
+- `approvalText` must include the exact change-set id and an explicit approval phrase such as `Onayliyorum. Change-set <id> uygula.`
 
 ### Phase 4: Apply
 
@@ -196,12 +202,11 @@ Allowed:
 - `GET /api/integrations/knowledge/change-sets/:id`
 - `POST /api/integrations/knowledge/change-sets/:id/apply`
 - `POST /api/integrations/knowledge/change-sets/:id/rollback`
-- `PUT /api/integrations/knowledge/entries/:id`
 
 Meaning:
 
 - Update, create, delete, and rollback flows can all be executed through the change-set API
-- Legacy direct `PUT` still exists, but agents should prefer change sets for all live KB edits
+- Legacy direct `PUT` is disabled for API consumers; agents must use change sets
 
 ### If the agent has admin session access
 
@@ -226,7 +231,9 @@ Current objects:
 Current behavior:
 
 - `preview` reads current KB, computes exact operations, stores the plan, performs no writes
+- `preview` rejects `description` changes unless `allowDescriptionChanges=true`
 - `apply` executes the stored plan in a transaction
+- `apply` requires `approvedChangeSetId` plus explicit `approvalText`
 - `rollback` restores the stored `before` snapshot
 - `apply` fails with a stale-preview error if the live KB changed after preview
 - `history` stores before/after snapshots for each applied operation

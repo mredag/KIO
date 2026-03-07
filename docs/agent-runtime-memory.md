@@ -71,8 +71,11 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - The current KB schema does not expose `topic_slug`.
 - Live KB data is the `knowledge_base` table shown in `/admin/knowledge-base`.
 - Live KB work must follow `scan -> preview -> approval -> apply -> verify -> final report`.
-- Integration KB routes expose `GET /api/integrations/knowledge/entries`, `GET /api/integrations/knowledge/context`, `POST /api/integrations/knowledge/change-sets/preview`, `GET /api/integrations/knowledge/change-sets/:id`, `POST /api/integrations/knowledge/change-sets/:id/apply`, `POST /api/integrations/knowledge/change-sets/:id/rollback`, and legacy `PUT /api/integrations/knowledge/entries/:id`.
-- `/api/integrations/*` uses `Authorization: Bearer <KIO_API_KEY>`; agents should use change sets for live KB edits instead of the legacy direct `PUT`.
+- Integration KB routes expose `GET /api/integrations/knowledge/entries`, `GET /api/integrations/knowledge/context`, `POST /api/integrations/knowledge/change-sets/preview`, `GET /api/integrations/knowledge/change-sets/:id`, `POST /api/integrations/knowledge/change-sets/:id/apply`, and `POST /api/integrations/knowledge/change-sets/:id/rollback`.
+- `/api/integrations/*` uses `Authorization: Bearer <KIO_API_KEY>`.
+- KB preview defaults to value-only changes; `description` edits require explicit opt-in with `allowDescriptionChanges=true`.
+- KB apply now requires `approvedChangeSetId` and explicit `approvalText` containing the exact change-set id.
+- Legacy direct `PUT /api/integrations/knowledge/entries/:id` is disabled for API consumers.
 - KB updates must go through the admin or integration routes, not direct SQL edits.
 - Policy grounding depends on the KB slice loaded into the current execution.
 

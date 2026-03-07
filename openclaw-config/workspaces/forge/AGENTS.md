@@ -167,7 +167,6 @@ curl -s -X POST -H "Content-Type: application/json" \
 | `/api/integrations/knowledge/change-sets/:id` | GET | Fetch preview/apply/rollback state |
 | `/api/integrations/knowledge/change-sets/:id/apply` | POST | Apply an approved KB change set |
 | `/api/integrations/knowledge/change-sets/:id/rollback` | POST | Roll back an applied KB change set |
-| `/api/integrations/knowledge/entries/:id` | PUT | Legacy direct KB update |
 
 ## Critical Bug Patterns (MEMORIZE)
 ```typescript
@@ -282,15 +281,21 @@ curl -s -H "Authorization: Bearer <KIO_API_KEY>" \
 # Preview a KB change set (affects both channels after apply)
 curl -s -X POST -H "Content-Type: application/json" \
   -H "Authorization: Bearer <KIO_API_KEY>" \
-  -d '{"requestedBy":"forge","operations":[{"type":"update","id":"ENTRY_ID","value":"Yeni fiyat: 500 TL","description":"Masaj fiyati guncellendi"}]}' \
+  -d '{"requestedBy":"forge","operations":[{"type":"update","id":"ENTRY_ID","value":"Yeni fiyat: 500 TL"}]}' \
   http://localhost:3001/api/integrations/knowledge/change-sets/preview
 
 # Apply the approved KB change set
 curl -s -X POST -H "Content-Type: application/json" \
   -H "Authorization: Bearer <KIO_API_KEY>" \
-  -d '{"appliedBy":"forge"}' \
+  -d '{"appliedBy":"forge","approvedChangeSetId":"CHANGE_SET_ID","approvalText":"Onayliyorum. Change-set CHANGE_SET_ID uygula."}' \
   http://localhost:3001/api/integrations/knowledge/change-sets/CHANGE_SET_ID/apply
 ```
+
+KB safety rules:
+- Default to value-only updates
+- Do not change `description` unless the owner explicitly asked for it
+- If `description` must change, set `allowDescriptionChanges=true` in preview and show that clearly in the preview report
+- Do not treat `hemen tamamla` or similar shorthand as sufficient unless the approval text includes the exact `CHANGE_SET_ID`
 
 ## Workflow
 1. **FIRST:** cd to project root (detect platform)

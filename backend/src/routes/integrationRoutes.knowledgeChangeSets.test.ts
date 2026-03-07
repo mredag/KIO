@@ -396,7 +396,6 @@ describe('Integration KB change-set routes', () => {
             type: 'update',
             id: targetEntry.id,
             value: 'Yeni test cevabi',
-            description: 'Updated by preview test',
           },
         ],
       })
@@ -410,6 +409,27 @@ describe('Integration KB change-set routes', () => {
     const liveEntry = knowledgeBaseService.getById(targetEntry.id);
     expect(liveEntry?.value).toBe('Eski test cevabi');
     expect(liveEntry?.description).toBe('Preview protocol test entry');
+  });
+
+  it('rejects description changes unless they are explicitly allowed in preview', async () => {
+    const previewRes = await request(app)
+      .post('/api/integrations/knowledge/change-sets/preview')
+      .set('Authorization', `Bearer ${validApiKey}`)
+      .send({
+        requestedBy: 'forge',
+        operations: [
+          {
+            type: 'update',
+            id: targetEntry.id,
+            value: 'Yeni test cevabi',
+            description: 'Yeni aciklama',
+          },
+        ],
+      })
+      .expect(400);
+
+    expect(previewRes.body.code).toBe('DESCRIPTION_CHANGES_REQUIRE_EXPLICIT_OPT_IN');
+    expect(knowledgeBaseService.getById(targetEntry.id)?.description).toBe('Preview protocol test entry');
   });
 
   it('applies a previewed KB change set and returns the final state', async () => {
@@ -433,11 +453,16 @@ describe('Integration KB change-set routes', () => {
     const applyRes = await request(app)
       .post(`/api/integrations/knowledge/change-sets/${changeSetId}/apply`)
       .set('Authorization', `Bearer ${validApiKey}`)
-      .send({ appliedBy: 'forge' })
+      .send({
+        appliedBy: 'forge',
+        approvedChangeSetId: changeSetId,
+        approvalText: `Onayliyorum. Change-set ${changeSetId} uygula.`,
+      })
       .expect(200);
 
     expect(applyRes.body.status).toBe('applied');
     expect(applyRes.body.applyResult.summary.appliedCount).toBe(1);
+    expect(applyRes.body.applyResult.approval.approvedChangeSetId).toBe(changeSetId);
     expect(applyRes.body.applyResult.operations[0].after.value).toBe('Uygulanmis test cevabi');
 
     const liveEntry = knowledgeBaseService.getById(targetEntry.id);
@@ -451,6 +476,60 @@ describe('Integration KB change-set routes', () => {
 
     expect(fetchRes.body.status).toBe('applied');
     expect(fetchRes.body.applyResult.summary.appliedCount).toBe(1);
+  });
+
+  it('rejects apply without explicit approval text and matching change-set id', async () => {
+    const previewRes = await request(app)
+      .post('/api/integrations/knowledge/change-sets/preview')
+      .set('Authorization', `Bearer ${validApiKey}`)
+      .send({
+        requestedBy: 'forge',
+        operations: [
+          {
+            type: 'update',
+            id: targetEntry.id,
+            value: 'Onaysiz cevap',
+          },
+        ],
+      })
+      .expect(201);
+
+    await request(app)
+      .post(`/api/integrations/knowledge/change-sets/${previewRes.body.id}/apply`)
+      .set('Authorization', `Bearer ${validApiKey}`)
+      .send({ appliedBy: 'forge' })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.code).toBe('MISSING_APPROVED_CHANGE_SET_ID');
+      });
+
+    await request(app)
+      .post(`/api/integrations/knowledge/change-sets/${previewRes.body.id}/apply`)
+      .set('Authorization', `Bearer ${validApiKey}`)
+      .send({
+        appliedBy: 'forge',
+        approvedChangeSetId: previewRes.body.id,
+        approvalText: 'Hemen tamamla',
+      })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.code).toBe('APPROVAL_TEXT_MISSING_CHANGE_SET_ID');
+      });
+
+    await request(app)
+      .post(`/api/integrations/knowledge/change-sets/${previewRes.body.id}/apply`)
+      .set('Authorization', `Bearer ${validApiKey}`)
+      .send({
+        appliedBy: 'forge',
+        approvedChangeSetId: previewRes.body.id,
+        approvalText: `Change-set ${previewRes.body.id}`,
+      })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.code).toBe('APPROVAL_TEXT_NOT_EXPLICIT');
+      });
+
+    expect(knowledgeBaseService.getById(targetEntry.id)?.value).toBe('Eski test cevabi');
   });
 
   it('rejects apply when the live KB changed after preview', async () => {
@@ -476,7 +555,11 @@ describe('Integration KB change-set routes', () => {
     const applyRes = await request(app)
       .post(`/api/integrations/knowledge/change-sets/${previewRes.body.id}/apply`)
       .set('Authorization', `Bearer ${validApiKey}`)
-      .send({ appliedBy: 'forge' })
+      .send({
+        appliedBy: 'forge',
+        approvedChangeSetId: previewRes.body.id,
+        approvalText: `Onayliyorum. Change-set ${previewRes.body.id} uygula.`,
+      })
       .expect(409);
 
     expect(applyRes.body.code).toBe('STALE_PREVIEW');
@@ -489,6 +572,7 @@ describe('Integration KB change-set routes', () => {
       .set('Authorization', `Bearer ${validApiKey}`)
       .send({
         requestedBy: 'forge',
+        allowDescriptionChanges: true,
         operations: [
           {
             type: 'update',
@@ -505,7 +589,11 @@ describe('Integration KB change-set routes', () => {
     await request(app)
       .post(`/api/integrations/knowledge/change-sets/${changeSetId}/apply`)
       .set('Authorization', `Bearer ${validApiKey}`)
-      .send({ appliedBy: 'forge' })
+      .send({
+        appliedBy: 'forge',
+        approvedChangeSetId: changeSetId,
+        approvalText: `Onayliyorum. Change-set ${changeSetId} uygula.`,
+      })
       .expect(200);
 
     const rollbackRes = await request(app)
@@ -518,5 +606,16 @@ describe('Integration KB change-set routes', () => {
     expect(rollbackRes.body.rollbackResult.summary.restoredCount).toBe(1);
     expect(knowledgeBaseService.getById(targetEntry.id)?.value).toBe('Eski test cevabi');
     expect(knowledgeBaseService.getById(targetEntry.id)?.description).toBe('Preview protocol test entry');
+  });
+
+  it('disables the legacy direct KB update route', async () => {
+    const res = await request(app)
+      .put(`/api/integrations/knowledge/entries/${targetEntry.id}`)
+      .set('Authorization', `Bearer ${validApiKey}`)
+      .send({ value: 'Legacy update denemesi' })
+      .expect(410);
+
+    expect(res.body.code).toBe('LEGACY_KB_UPDATE_DISABLED');
+    expect(knowledgeBaseService.getById(targetEntry.id)?.value).toBe('Eski test cevabi');
   });
 });

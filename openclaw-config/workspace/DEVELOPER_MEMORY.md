@@ -51,7 +51,8 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
   - `GET /api/integrations/knowledge/change-sets/:id`
   - `POST /api/integrations/knowledge/change-sets/:id/apply`
   - `POST /api/integrations/knowledge/change-sets/:id/rollback`
-  - legacy `PUT /api/integrations/knowledge/entries/:id`
+- KB preview defaults to value-only changes; `description` edits require explicit opt-in with `allowDescriptionChanges=true`
+- KB apply now requires `approvedChangeSetId` and explicit `approvalText` containing the exact change-set id
 - KB changes should go through the API, not direct database edits.
 
 ## Current Cost / Runtime Notes

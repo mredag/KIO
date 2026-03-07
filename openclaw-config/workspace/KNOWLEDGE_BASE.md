@@ -27,6 +27,13 @@ That means:
 6. Refetch and verify
 7. Report exactly what changed
 
+Default change policy:
+
+- Change only `value` unless the owner explicitly asked to edit `description`
+- If a preview would change `description`, set `allowDescriptionChanges=true` only when the owner explicitly requested it
+- `apply` must include `approvedChangeSetId` and `approvalText`
+- `approvalText` must include the exact change-set id and an explicit approval phrase such as `Onayliyorum. Change-set <id> uygula.`
+
 ## Current Data Model
 
 Current KB fields in this repo:
@@ -71,12 +78,11 @@ Base URL: `http://localhost:3001`
 - `GET /api/integrations/knowledge/change-sets/:id`
 - `POST /api/integrations/knowledge/change-sets/:id/apply`
 - `POST /api/integrations/knowledge/change-sets/:id/rollback`
-- legacy `PUT /api/integrations/knowledge/entries/:id`
 
 Meaning:
 
 - Create, update, delete, and rollback flows should use the change-set API
-- The legacy direct `PUT` exists for compatibility, but agents should prefer change sets for all live KB edits
+- Legacy direct `PUT` is disabled for API consumers
 
 ## Preview Requirements
 

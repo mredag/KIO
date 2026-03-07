@@ -76,6 +76,10 @@ export interface KnowledgeChangeApplyOperationResult {
 export interface KnowledgeChangeApplyResult {
   appliedBy: string | null;
   appliedAt: string;
+  approval: {
+    approvedChangeSetId: string;
+    approvalText: string;
+  };
   summary: {
     appliedCount: number;
     skippedNoopCount: number;
@@ -116,7 +120,14 @@ export interface KnowledgeChangeSetPreviewRequest {
   requestedBy?: string | null;
   reason?: string | null;
   summaryText?: string | null;
+  allowDescriptionChanges?: boolean;
   operations: KnowledgeChangeOperationInput[];
+}
+
+export interface KnowledgeChangeSetApplyRequest {
+  appliedBy?: string | null;
+  approvedChangeSetId?: string | null;
+  approvalText?: string | null;
 }
 
 export interface KnowledgeChangeOperationInput {
@@ -176,6 +187,7 @@ export class KnowledgeBaseChangeSetService {
     const previewOperations = operations.map((operation, index) =>
       this.buildPreviewOperation({ operation, index })
     );
+    this.enforcePreviewPolicies(previewOperations, request.allowDescriptionChanges === true);
     const summary = this.buildPreviewSummary(previewOperations, allEntries);
     const id = randomUUID();
     const now = new Date().toISOString();
@@ -209,7 +221,7 @@ export class KnowledgeBaseChangeSetService {
     return row ? this.mapChangeSetRow(row) : null;
   }
 
-  apply(changeSetId: string, appliedBy?: string | null): KnowledgeChangeSetRecord {
+  apply(changeSetId: string, request: KnowledgeChangeSetApplyRequest): KnowledgeChangeSetRecord {
     return this.dbService.transaction(() => {
       const row = this.getChangeSetRow(changeSetId);
       if (row.status !== 'previewed') {
@@ -221,15 +233,25 @@ export class KnowledgeBaseChangeSetService {
         );
       }
 
+      const approval = this.validateApplyApproval(changeSetId, request);
       const preview = this.parsePreviewPayload(row.preview_payload);
+      if (preview.operations.length === 0) {
+        throw new KnowledgeBaseChangeSetError(
+          `Change set ${changeSetId} has no preview operations`,
+          'MISSING_PREVIEW_OPERATIONS',
+          409
+        );
+      }
+
       const now = new Date().toISOString();
       const operations = preview.operations.map((operation) =>
         this.applyPreviewOperation(changeSetId, operation, now)
       );
 
       const applyResult: KnowledgeChangeApplyResult = {
-        appliedBy: this.normalizeOptionalText(appliedBy),
+        appliedBy: this.normalizeOptionalText(request.appliedBy),
         appliedAt: now,
+        approval,
         summary: {
           appliedCount: operations.filter((operation) => !operation.noop).length,
           skippedNoopCount: operations.filter((operation) => operation.noop).length,
@@ -639,6 +661,31 @@ export class KnowledgeBaseChangeSetService {
     };
   }
 
+  private enforcePreviewPolicies(
+    operations: KnowledgeChangePreviewOperation[],
+    allowDescriptionChanges: boolean
+  ) {
+    if (allowDescriptionChanges) {
+      return;
+    }
+
+    const descriptionChangeOperations = operations.filter((operation) =>
+      Object.prototype.hasOwnProperty.call(operation.changes, 'description')
+    );
+
+    if (descriptionChangeOperations.length > 0) {
+      throw new KnowledgeBaseChangeSetError(
+        'Description changes require explicit opt-in',
+        'DESCRIPTION_CHANGES_REQUIRE_EXPLICIT_OPT_IN',
+        400,
+        {
+          affectedEntryIds: descriptionChangeOperations.map((operation) => operation.entryId),
+          operationIndexes: descriptionChangeOperations.map((operation) => operation.index),
+        }
+      );
+    }
+  }
+
   private diffSnapshots(before: KnowledgeEntrySnapshot | null, after: KnowledgeEntrySnapshot | null) {
     const fields: Array<keyof KnowledgeEntrySnapshot> = ['id', 'category', 'key_name', 'value', 'description', 'is_active', 'version'];
     const changes: Record<string, KnowledgeChangeDiffField> = {};
@@ -907,6 +954,70 @@ export class KnowledgeBaseChangeSetService {
     };
   }
 
+  private validateApplyApproval(changeSetId: string, request: KnowledgeChangeSetApplyRequest) {
+    const approvedChangeSetId = this.normalizeOptionalText(request.approvedChangeSetId);
+    if (!approvedChangeSetId) {
+      throw new KnowledgeBaseChangeSetError(
+        'approvedChangeSetId is required to apply a KB change set',
+        'MISSING_APPROVED_CHANGE_SET_ID',
+        400
+      );
+    }
+
+    if (approvedChangeSetId !== changeSetId) {
+      throw new KnowledgeBaseChangeSetError(
+        'approvedChangeSetId must match the requested KB change set',
+        'APPROVED_CHANGE_SET_ID_MISMATCH',
+        409,
+        {
+          approvedChangeSetId,
+          requestedChangeSetId: changeSetId,
+        }
+      );
+    }
+
+    const approvalText = this.normalizeOptionalText(request.approvalText);
+    if (!approvalText) {
+      throw new KnowledgeBaseChangeSetError(
+        'approvalText is required to apply a KB change set',
+        'MISSING_APPROVAL_TEXT',
+        400
+      );
+    }
+
+    if (approvalText.length > 1000) {
+      throw new KnowledgeBaseChangeSetError(
+        'approvalText exceeds 1000 characters',
+        'INVALID_APPROVAL_TEXT',
+        400
+      );
+    }
+
+    if (!approvalText.toLowerCase().includes(changeSetId.toLowerCase())) {
+      throw new KnowledgeBaseChangeSetError(
+        'approvalText must include the exact KB change set id',
+        'APPROVAL_TEXT_MISSING_CHANGE_SET_ID',
+        400,
+        { changeSetId }
+      );
+    }
+
+    const normalizedApprovalText = this.normalizeApprovalText(approvalText);
+    if (!/\b(onay|onayliyorum|approve|approved|uygula|apply)\b/.test(normalizedApprovalText)) {
+      throw new KnowledgeBaseChangeSetError(
+        'approvalText must contain an explicit approval phrase',
+        'APPROVAL_TEXT_NOT_EXPLICIT',
+        400,
+        { approvalText }
+      );
+    }
+
+    return {
+      approvedChangeSetId,
+      approvalText,
+    };
+  }
+
   private getChangeSetRow(changeSetId: string): ChangeSetRow {
     const row = this.rawDb()
       .prepare(`SELECT * FROM knowledge_base_change_sets WHERE id = ?`)
@@ -957,5 +1068,16 @@ export class KnowledgeBaseChangeSetService {
 
     const trimmed = value.trim();
     return trimmed ? trimmed : null;
+  }
+
+  private normalizeApprovalText(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/ı/g, 'i')
+      .replace(/ğ/g, 'g')
+      .replace(/ü/g, 'u')
+      .replace(/ş/g, 's')
+      .replace(/ö/g, 'o')
+      .replace(/ç/g, 'c');
   }
 }

@@ -1,9 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
-import {
-  KnowledgeBaseService,
-  type KnowledgeEntryInput,
-} from '../services/KnowledgeBaseService.js';
+import { KnowledgeBaseService } from '../services/KnowledgeBaseService.js';
 import {
   KnowledgeBaseChangeSetError,
   KnowledgeBaseChangeSetService,
@@ -196,6 +193,7 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
         requestedBy: typeof req.body?.requestedBy === 'string' ? req.body.requestedBy : req.body?.requested_by,
         reason: typeof req.body?.reason === 'string' ? req.body.reason : null,
         summaryText: typeof req.body?.summaryText === 'string' ? req.body.summaryText : req.body?.summary_text,
+        allowDescriptionChanges: req.body?.allowDescriptionChanges === true || req.body?.allow_description_changes === true,
         operations: Array.isArray(req.body?.operations) ? req.body.operations : [],
       });
 
@@ -249,7 +247,17 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
     try {
       const changeSet = knowledgeBaseChangeSetService.apply(
         req.params.id,
-        typeof req.body?.appliedBy === 'string' ? req.body.appliedBy : req.body?.applied_by
+        {
+          appliedBy: typeof req.body?.appliedBy === 'string' ? req.body.appliedBy : req.body?.applied_by,
+          approvedChangeSetId:
+            typeof req.body?.approvedChangeSetId === 'string'
+              ? req.body.approvedChangeSetId
+              : req.body?.approved_change_set_id,
+          approvalText:
+            typeof req.body?.approvalText === 'string'
+              ? req.body.approvalText
+              : req.body?.approval_text,
+        }
       );
 
       db.createLog({
@@ -307,37 +315,13 @@ export function createIntegrationRoutes(db: DatabaseService): Router {
 
   /**
    * PUT /api/integrations/knowledge/entries/:id
-   * Update a knowledge base entry (for agents like Forge)
+   * Legacy direct KB update route
    */
-  router.put('/knowledge/entries/:id', (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
-      const existing = knowledgeBaseService.getById(id);
-      if (!existing) {
-        res.status(404).json({ error: 'Knowledge base entry not found', id });
-        return;
-      }
-
-      const updates: Partial<KnowledgeEntryInput> = {};
-      if (req.body.value !== undefined) updates.value = req.body.value;
-      if (req.body.description !== undefined) updates.description = req.body.description;
-      if (req.body.category !== undefined) updates.category = req.body.category;
-      if (req.body.key_name !== undefined) updates.key_name = req.body.key_name;
-      if (req.body.is_active !== undefined) updates.is_active = req.body.is_active;
-
-      const entry = knowledgeBaseService.update(id, updates);
-
-      db.createLog({
-        level: 'info',
-        message: 'Knowledge base entry updated via API',
-        details: { entryId: id, category: entry.category, keyName: entry.key_name, version: entry.version },
-      });
-
-      res.json(entry);
-    } catch (error) {
-      console.error('[Integration API] Error updating KB entry:', error);
-      res.status(500).json({ error: 'Failed to update knowledge base entry' });
-    }
+  router.put('/knowledge/entries/:id', (_req: Request, res: Response) => {
+    res.status(410).json({
+      error: 'Legacy direct KB update route is disabled. Use preview/apply change sets.',
+      code: 'LEGACY_KB_UPDATE_DISABLED',
+    });
   });
 
   /**

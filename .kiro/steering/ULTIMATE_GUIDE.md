@@ -370,10 +370,10 @@ app.use('/api/mc', createMissionControlRoutes(db));
 ### Model Routing (openclaw.json)
 ```json
 {
-  "agents.defaults.model.primary": "openrouter/moonshotai/kimi-k2",
-  "agents.defaults.model.fallbacks": ["openrouter/openai/gpt-4o-mini", "openrouter/deepseek/deepseek-chat", "openrouter/google/gemini-2.5-flash-lite"],
+  "agents.defaults.model.primary": "openrouter/openai/gpt-4.1",
+  "agents.defaults.model.fallbacks": ["openrouter/openai/gpt-4o-mini", "openrouter/google/gemini-2.5-flash-lite"],
   "agents.defaults.heartbeat.model": "openrouter/google/gemini-2.5-flash-lite",
-  "agents.defaults.subagents.model": "openrouter/deepseek/deepseek-chat",
+  "agents.defaults.subagents.model": "openrouter/openai/gpt-4.1",
   "agents.defaults.imageModel.primary": "openrouter/openai/gpt-4o-mini"
 }
 ```

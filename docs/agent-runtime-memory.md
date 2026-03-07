@@ -112,6 +112,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - For `/api/integrations/*`, use `Authorization: Bearer <N8N_API_KEY>`.
 - On the Pi, `main` now runs on `openai-codex/gpt-5.3-codex` via OpenAI Codex OAuth. Channel agents `instagram` and `whatsapp` continue on `openrouter/openai/gpt-4o-mini`.
 - OpenClaw image handling on the Pi uses the global `agents.defaults.imageModel` route, currently `openrouter/openai/gpt-4o-mini`.
+- The live OpenClaw fallback path no longer uses DeepSeek; default spawned subagents now fall back to `openrouter/openai/gpt-4.1`.
 - After changing `openclaw-config`, verify the live result from the admin panel in `Ajanlar > Protocol`.
 
 ## Working Style

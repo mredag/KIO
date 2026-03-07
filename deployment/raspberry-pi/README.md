@@ -47,6 +47,7 @@ After installation, reboot and the kiosk starts automatically!
 
 #### Maintenance
 - **backup-database.sh** - Backup database manually
+- **sync-openclaw-runtime.sh** - Sync tracked OpenClaw workspace/transform files into `~/.openclaw/`
 
 #### Configuration
 - **ecosystem.config.js** - PM2 configuration
@@ -89,6 +90,12 @@ sudo reboot
 ### Update Application
 ```bash
 ./update-pi.sh
+```
+
+### Sync OpenClaw Runtime
+```bash
+./sync-openclaw-runtime.sh --dry-run
+./sync-openclaw-runtime.sh --restart
 ```
 
 ### Manual Backup

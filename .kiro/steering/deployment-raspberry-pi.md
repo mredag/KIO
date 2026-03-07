@@ -27,6 +27,9 @@ ssh eform-kio@192.168.1.8
 # Pull latest code
 cd ~/kio-new && git pull
 
+# Sync tracked OpenClaw workspace/transform files
+./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart
+
 # Build backend
 cd backend && npx tsc -p tsconfig.build.json
 cp src/database/*.sql dist/database/
@@ -52,15 +55,15 @@ pm2 restart kio-openclaw  # only if openclaw config changed
 
 ## OpenClaw Config (Pi-specific)
 
-Config at `~/.openclaw/openclaw.json` — uses Linux paths (not Windows).
+Config at `~/.openclaw/openclaw.json` — uses Linux paths and local secrets. Keep it machine-local.
 Workspace at `~/.openclaw/workspace/` — all agent files (AGENTS.md, SOUL.md, TOOLS.md, etc.)
+Tracked workspace/transform files should be synced with `deployment/raspberry-pi/sync-openclaw-runtime.sh`.
 
 To update OpenClaw config from dev machine:
 ```powershell
 scp openclaw-config/openclaw.json eform-kio@192.168.1.8:~/.openclaw/openclaw.json
 # IMPORTANT: edit the file to replace Windows paths with Linux paths
-scp -r openclaw-config/workspace/* eform-kio@192.168.1.8:~/.openclaw/workspace/
-ssh eform-kio@192.168.1.8 "pm2 restart kio-openclaw"
+ssh eform-kio@192.168.1.8 "cd ~/kio-new && ./deployment/raspberry-pi/sync-openclaw-runtime.sh --restart"
 ```
 
 ## Cloudflared Split-Brain Warning

@@ -18,6 +18,19 @@ export interface DMStyleProfile {
   };
 }
 
+const CONDUCT_SOFT_CLOSE_PATTERNS = [
+  /\byardimci olabilirim\b/,
+  /\byardimci olabiliriz\b/,
+  /\bbelirtirseniz\b/,
+  /\bpaylasirsaniz\b/,
+  /\bisterseniz\b/,
+  /\bdilerseniz\b/,
+  /\bbizi arayin\b/,
+  /\barayabilirsiniz\b/,
+  /\brandevu icin\b/,
+  /\bdetayli bilgi icin\b/,
+];
+
 function normalizeText(value: string): string {
   return value
     .toLocaleLowerCase('tr-TR')
@@ -52,6 +65,62 @@ function includesPhoneCta(value: string): boolean {
   return normalized.includes('0326 502 58 58')
     || normalized.includes('bizi arayin')
     || normalized.includes('arayabilirsiniz');
+}
+
+function shouldDropConductSegment(normalizedSegment: string): boolean {
+  if (!normalizedSegment) {
+    return true;
+  }
+
+  if (normalizedSegment.startsWith('merhaba') || normalizedSegment.startsWith('selam')) {
+    return true;
+  }
+
+  if (normalizedSegment.startsWith('hangi ')) {
+    return true;
+  }
+
+  return CONDUCT_SOFT_CLOSE_PATTERNS.some(pattern => pattern.test(normalizedSegment));
+}
+
+function sanitizeLineForConduct(line: string): string {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const segments = trimmed
+    .split(/(?<=[.!?])\s+/)
+    .map(segment => segment.trim())
+    .filter(Boolean);
+
+  const keptSegments = segments.filter(segment => !shouldDropConductSegment(normalizeText(segment)));
+
+  if (keptSegments.length === 0) {
+    return '';
+  }
+
+  return keptSegments.join(' ').trim();
+}
+
+export function sanitizeConductResponse(
+  response: string,
+  conductState?: ConductState,
+): string {
+  if (!response || (conductState !== 'guarded' && conductState !== 'final_warning')) {
+    return response;
+  }
+
+  const sanitized = response
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(line => sanitizeLineForConduct(line))
+    .filter(Boolean)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return sanitized || response.trim();
 }
 
 export function buildDMStyleProfile(params: {

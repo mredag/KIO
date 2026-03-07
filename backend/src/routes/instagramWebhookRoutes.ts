@@ -13,7 +13,7 @@ import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
-import { buildDMStyleProfile } from '../services/DMResponseStyleService.js';
+import { buildDMStyleProfile, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
@@ -1374,7 +1374,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // ═══════════════════════════════════════════════════════════════
             const policyService = new ResponsePolicyService();
             const MAX_POLICY_RETRIES = pipelineConfig.policy.maxRetries;
-            let finalResponse = agentResponse;
+            let finalResponse = sanitizeConductResponse(agentResponse, conductStateForReply);
             let policyTotalLatencyMs = 0;
             let policyTotalTokens = 0;
             let policyAttempts = 0;
@@ -1439,7 +1439,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   policyTotalTokens += correction.tokensEstimated;
 
                   if (correction.response) {
-                    finalResponse = correction.response;
+                    finalResponse = sanitizeConductResponse(correction.response, conductStateForReply);
                     console.log('[PolicyAgent] Direct correction ready (attempt %d, %dms), re-validating...', attempt + 1, correction.latencyMs);
                     continue;
                   }
@@ -1454,6 +1454,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 console.warn('[PolicyAgent] All retries exhausted, using safe fallback response');
               }
             }
+
+            finalResponse = sanitizeConductResponse(finalResponse, conductStateForReply);
 
             // Record policy validation in trace
             trace.policyValidation = {

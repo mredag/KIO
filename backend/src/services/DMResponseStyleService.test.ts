@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { buildDMStyleProfile } from './DMResponseStyleService.js';
+import { buildDMStyleProfile, sanitizeConductResponse } from './DMResponseStyleService.js';
 
 describe('DMResponseStyleService', () => {
   it('suppresses repeat greeting and emoji on simple factual follow-ups', () => {
@@ -50,5 +50,23 @@ describe('DMResponseStyleService', () => {
     expect(profile.trace.greetingPolicy).toBe('minimal');
     expect(profile.instructions).toContain('En kisa tamamlanmis yaniti ver; emojisiz, selamlamasiz ve mesafeli yaz.');
     expect(profile.instructions).toContain('Takip sorusu sorma');
+  });
+
+  it('removes follow-up prompts and soft ctas from guarded replies', () => {
+    const response = [
+      'Merhaba, masaj fiyatlarimiz su sekildedir.',
+      '• 30dk -> 800 TL',
+      '• 60dk -> 1300 TL',
+      'Hangi sure ile ilgilendiginizi belirtirseniz daha fazla yardimci olabilirim.',
+      'Detayli bilgi icin bizi arayin.',
+    ].join('\n');
+
+    const sanitized = sanitizeConductResponse(response, 'final_warning');
+
+    expect(sanitized).toContain('• 30dk -> 800 TL');
+    expect(sanitized).toContain('• 60dk -> 1300 TL');
+    expect(sanitized).not.toContain('Merhaba');
+    expect(sanitized).not.toContain('hangi sure');
+    expect(sanitized).not.toContain('bizi arayin');
   });
 });

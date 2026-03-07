@@ -12,7 +12,7 @@ import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../serv
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
-import { buildDMStyleProfile } from '../services/DMResponseStyleService.js';
+import { buildDMStyleProfile, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
@@ -577,7 +577,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         return;
       }
 
-      let finalResponse = directResult.response;
+      let finalResponse = sanitizeConductResponse(directResult.response, conductStateForReply);
       let policyResult = null;
 
       // ═══ STAGE 4: Policy Validation + Faithfulness Check (same as webhook) ═══
@@ -610,7 +610,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             },
           );
           if (correction.response) {
-            finalResponse = correction.response;
+            finalResponse = sanitizeConductResponse(correction.response, conductStateForReply);
             // Re-validate corrected response
             const revalidation = await policyService.validate({
               customerMessage: text,
@@ -641,6 +641,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const responseTime = Date.now() - startTime;
 
       // Build pipeline trace (same structure as real webhook)
+      finalResponse = sanitizeConductResponse(finalResponse, conductStateForReply);
+
       const pipelineTrace = {
         sexualIntent: sexualIntentResult,
         intentCategories: analysis.intentCategories,

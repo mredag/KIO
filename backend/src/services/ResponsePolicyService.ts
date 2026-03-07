@@ -645,6 +645,64 @@ export class ResponsePolicyService {
     return this.uniqueNormalized(matches.map(match => this.normalizeNumericToken(match)));
   }
 
+  private parseNormalizedInteger(value: string): number | null {
+    const digits = value.replace(/[^\d]/g, '');
+    if (!digits) {
+      return null;
+    }
+
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private extractRequestedPartySize(messageText: string): number | null {
+    const normalized = messageText
+      .toLocaleLowerCase('tr-TR')
+      .replace(/\u0131/g, 'i')
+      .replace(/\u0130/g, 'i')
+      .replace(/\u00fc/g, 'u')
+      .replace(/\u00dc/g, 'u')
+      .replace(/\u00f6/g, 'o')
+      .replace(/\u00d6/g, 'o')
+      .replace(/\u015f/g, 's')
+      .replace(/\u015e/g, 's')
+      .replace(/\u00e7/g, 'c')
+      .replace(/\u00c7/g, 'c')
+      .replace(/\u011f/g, 'g')
+      .replace(/\u011e/g, 'g');
+    const numericMatch = normalized.match(/\b(\d+)\s*(?:kisi|kisilik)\b/);
+    if (numericMatch) {
+      const parsed = Number(numericMatch[1]);
+      return Number.isFinite(parsed) && parsed > 1 ? parsed : null;
+    }
+
+    if (/\b(iki kisi|iki kisilik|cift|couple)\b/.test(normalized)) {
+      return 2;
+    }
+
+    return null;
+  }
+
+  private isDerivedPartyTotalPrice(
+    responsePrice: string,
+    allowedPrices: string[],
+    partySize: number | null,
+  ): boolean {
+    if (!partySize || partySize < 2) {
+      return false;
+    }
+
+    const responseValue = this.parseNormalizedInteger(responsePrice);
+    if (!responseValue) {
+      return false;
+    }
+
+    return allowedPrices.some(price => {
+      const baseValue = this.parseNormalizedInteger(price);
+      return !!baseValue && (baseValue * partySize) === responseValue;
+    });
+  }
+
   private extractTimeValues(text: string): string[] {
     const matches = text.match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g) || [];
     return this.uniqueNormalized(matches);
@@ -674,6 +732,7 @@ export class ResponsePolicyService {
     const allowedPrices = this.extractPriceValues(context.knowledgeContext);
     const allowedTimes = this.extractTimeValues(context.knowledgeContext);
     const allowedPhones = this.extractPhoneValues(context.knowledgeContext);
+    const partySize = this.extractRequestedPartySize(context.customerMessage);
 
     const responsePrices = this.extractPriceValues(context.agentResponse);
     const responseTimes = this.extractTimeValues(context.agentResponse);
@@ -681,7 +740,10 @@ export class ResponsePolicyService {
 
     const violations: string[] = [];
 
-    const invalidPrices = responsePrices.filter(value => !allowedPrices.includes(value));
+    const invalidPrices = responsePrices.filter(value =>
+      !allowedPrices.includes(value)
+      && !this.isDerivedPartyTotalPrice(value, allowedPrices, partySize),
+    );
     if (invalidPrices.length > 0) {
       violations.push(this.buildInvalidValueViolation('8. FIYAT TUTARSIZLIGI', invalidPrices, allowedPrices));
     }
@@ -993,3 +1055,5 @@ Kurallara uygun yeni bir yanıt yaz.`;
     }
   }
 }
+
+

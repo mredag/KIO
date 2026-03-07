@@ -60,6 +60,41 @@ describe('ResponsePolicyService deterministic grounding', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('passes valid multi-person totals derived from KB prices', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: '2 kisi 1 saat ne kadar',
+      agentResponse: '1 saat klasik masaj kisi basi 1300 TL, 2 kisi icin toplam 2600 TL.',
+      knowledgeContext: 'Klasik Masaj: 60dk -> 1300 TL\nTelefon: 0326 502 58 58',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(true);
+  });
+
+  it('still rejects unsupported multi-person totals', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: '2 kisi 1 saat ne kadar',
+      agentResponse: '1 saat klasik masaj icin toplam 2700 TL.',
+      knowledgeContext: 'Klasik Masaj: 60dk -> 1300 TL\nTelefon: 0326 502 58 58',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(false);
+    expect(result.violations.join(' ')).toContain('2700');
+  });
+
   it('runs faithfulness for non-price factual replies', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn()

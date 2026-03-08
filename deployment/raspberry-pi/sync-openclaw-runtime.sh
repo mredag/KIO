@@ -140,6 +140,24 @@ is_managed_runtime_path() {
   esac
 }
 
+should_force_refresh_markdown() {
+  local source_path="$1"
+  local runtime_path="$2"
+
+  case "${source_path}" in
+    "${SOURCE_ROOT}/workspace/"*.md | \
+    "${SOURCE_ROOT}/workspace-whatsapp/"*.md | \
+    "${SOURCE_ROOT}/workspaces/"*.md)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  [[ -e "${runtime_path}" ]] || return 1
+  [[ "${source_path}" -nt "${runtime_path}" ]]
+}
+
 sync_file() {
   local source_path="$1"
   local runtime_path="$2"
@@ -147,6 +165,8 @@ sync_file() {
 
   if [[ ! -e "${runtime_path}" ]]; then
     action="ADD"
+  elif should_force_refresh_markdown "${source_path}" "${runtime_path}"; then
+    action="REFRESH"
   elif cmp -s "${source_path}" "${runtime_path}"; then
     return
   else

@@ -62,6 +62,7 @@ cd ~/kio-new
 Rules:
 - `openclaw-config/openclaw.json` stays ignored and machine-local.
 - Do not overwrite `~/.openclaw/openclaw.json` from git.
+- Workspace markdown files (`AGENTS.md`, `DEVELOPER_MEMORY.md`, `KNOWLEDGE_BASE.md`, and similar `*.md` runtime docs) are refreshed when the repo copy is newer, so live agent instructions do not stay stale after docs-only updates.
 
 ## Backups and Restore
 

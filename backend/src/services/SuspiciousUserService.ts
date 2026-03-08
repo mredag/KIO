@@ -5,7 +5,7 @@
  * progressive DM conduct ladder:
  * - guarded
  * - final_warning
- * - silent
+ * - silent (operator-facing label: bad customer)
  *
  * It also supports temporary manual overrides so test accounts can be lifted
  * back to normal behavior without deleting history.
@@ -294,7 +294,7 @@ export class SuspiciousUserService {
   }
 
   private shouldReplyForState(state: ConductState): boolean {
-    return state !== 'silent';
+    return true;
   }
 
   private isTestLikeUser(row: Pick<SuspiciousUserRow, 'platform_user_id' | 'username'>): boolean {

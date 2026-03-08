@@ -73,10 +73,10 @@ For OpenClaw-related changes, compare the docs with the real implementation befo
 - Do not invent speculative early-dispatch heuristics without confirming the deployed code path first.
 - Use compact text menus instead of relying on Instagram buttons or quick replies.
 - Keep generic pricing and topic-selection clarifiers on deterministic lightweight paths when possible.
-- DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent`.
+- DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent` (operator label: `Bad customer`).
 - Human operators manage test-account lifts and manual conduct overrides from `/admin/mc/dm-conduct`.
 - `DMResponseStyleService` now handles anti-repetition tone shaping; do not reintroduce hardcoded `1-2 emoji` behavior when editing prompts.
-- Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation should remain a background control until silence triggers.
+- Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation should remain a background control, and the highest state should answer with the shortest possible factual business reply.
 
 ## Tech Stack
 - **Backend:** Express + TypeScript + SQLite (better-sqlite3, WAL mode)

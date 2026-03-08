@@ -32,11 +32,12 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Use compact text menus for customer choices. Do not assume Instagram buttons render reliably.
 - Keep simple clarifiers deterministic and lightweight when possible.
 - The live webhook and the simulator now share the same conduct ladder wiring before normal DM generation.
-- Conduct states are `normal`, `guarded`, `final_warning`, and `silent`.
+- Conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator label: `Bad customer`).
 - `DMResponseStyleService` now adds anti-repetition tone guidance. Emoji should be optional, not routine.
 - Guarded/final-warning users should not receive the friendly deterministic info template path.
 - For obvious euphemisms like `mutlu son`, the visible reply should stay the legacy rejection wording; conduct escalation happens in the background.
 - Users with obvious prior violations should get shorter, colder business replies with no follow-up question or extra CTA until reset/lift.
+- `silent` no longer means no-reply for Instagram DM. It means bad-customer mode: shortest possible factual reply, no warmth, no CTA, no conversation reopening.
 
 ## Safety and KB Rules
 - Safety is AI-first plus a narrow euphemism guard. Do not replace it with a giant phrase list.
@@ -52,7 +53,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`.
 - The current schema does not expose `topic_slug`.
 - Human conduct overrides now live in `/admin/mc/dm-conduct`.
-- `force_normal` is the correct lift path for test accounts; `reset` clears offense history; `force_silent` manually mutes.
+- `force_normal` is the correct lift path for test accounts; `reset` clears offense history; `force_silent` forces bad-customer mode.
 - The conduct page must remain operator-usable: search by username/ID/phone, explain states, and show success/error feedback after actions.
 - The conduct page is a conduct-managed user list, not the full DM audience; mark test/simulator rows clearly and keep list search/pagination server-side.
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`.

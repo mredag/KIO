@@ -7,10 +7,10 @@ interface ConversationMessageLike {
 }
 
 export interface DMStyleProfile {
-  mode: Exclude<ConductState, 'silent'>;
+  mode: ConductState;
   instructions: string;
   trace: {
-    mode: Exclude<ConductState, 'silent'>;
+    mode: ConductState;
     greetingPolicy: 'normal' | 'skip_repeat_greeting' | 'minimal';
     emojiPolicy: 'none' | 'optional_single';
     ctaPolicy: 'only_when_needed' | 'minimal';
@@ -83,6 +83,23 @@ function shouldDropConductSegment(normalizedSegment: string): boolean {
   return CONDUCT_SOFT_CLOSE_PATTERNS.some(pattern => pattern.test(normalizedSegment));
 }
 
+function stripGreetingPrefix(segment: string): string {
+  return segment
+    .replace(/^\s*(merhaba|selam)\b[\s,:;.!-]*/i, '')
+    .trim();
+}
+
+function sanitizeSegmentForConduct(segment: string): string {
+  const strippedGreeting = stripGreetingPrefix(segment.trim());
+  const normalized = normalizeText(strippedGreeting);
+
+  if (shouldDropConductSegment(normalized)) {
+    return '';
+  }
+
+  return strippedGreeting;
+}
+
 function sanitizeLineForConduct(line: string): string {
   const trimmed = line.trim();
   if (!trimmed) {
@@ -94,7 +111,9 @@ function sanitizeLineForConduct(line: string): string {
     .map(segment => segment.trim())
     .filter(Boolean);
 
-  const keptSegments = segments.filter(segment => !shouldDropConductSegment(normalizeText(segment)));
+  const keptSegments = segments
+    .map(segment => sanitizeSegmentForConduct(segment))
+    .filter(Boolean);
 
   if (keptSegments.length === 0) {
     return '';
@@ -107,7 +126,7 @@ export function sanitizeConductResponse(
   response: string,
   conductState?: ConductState,
 ): string {
-  if (!response || (conductState !== 'guarded' && conductState !== 'final_warning')) {
+  if (!response || (conductState !== 'guarded' && conductState !== 'final_warning' && conductState !== 'silent')) {
     return response;
   }
 
@@ -156,9 +175,29 @@ export function buildDMStyleProfile(params: {
     antiRepeatSignals.push('simple_fact_request');
   }
 
-  const conductMode = params.conductState === 'final_warning' || params.conductState === 'guarded'
+  const conductMode = params.conductState === 'final_warning' || params.conductState === 'guarded' || params.conductState === 'silent'
     ? params.conductState
     : 'normal';
+
+  if (conductMode === 'silent') {
+    return {
+      mode: 'silent',
+      instructions: [
+        'YANIT STILI:',
+        '- Bu musteri bad-customer modunda; yalnizca cekirdek is bilgisini ver.',
+        '- Tek cumle veya mumkun olan en kisa tamamlanmis cevap yaz.',
+        '- Selamlama, emoji, takip sorusu, tesekkur, sicak kapanis, ek yardim veya telefon CTA ekleme.',
+        '- Gerekirse sadece fiyat, saat, adres veya hizmet adini soyle; aciklama ve sohbet acma yok.',
+      ].join('\n'),
+      trace: {
+        mode: 'silent',
+        greetingPolicy: 'minimal',
+        emojiPolicy: 'none',
+        ctaPolicy: 'minimal',
+        antiRepeatSignals,
+      },
+    };
+  }
 
   if (conductMode === 'final_warning') {
     return {

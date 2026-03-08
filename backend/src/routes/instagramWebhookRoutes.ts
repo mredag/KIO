@@ -122,7 +122,7 @@ export interface PipelineTrace {
     reason?: string;
   };
   responseStyle?: {
-    mode: 'normal' | 'guarded' | 'final_warning';
+    mode: 'normal' | 'guarded' | 'final_warning' | 'silent';
     greetingPolicy: 'normal' | 'skip_repeat_greeting' | 'minimal';
     emojiPolicy: 'none' | 'optional_single';
     ctaPolicy: 'only_when_needed' | 'minimal';
@@ -321,7 +321,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     conductState: ConductState,
   ): string | null {
     if (conductState === 'silent') {
-      return null;
+      return action === 'block_message'
+        ? 'Böyle bir hizmet yok.'
+        : 'Sadece profesyonel spa ve spor hizmeti veriyoruz.';
     }
 
     return getSexualIntentReply(action);
@@ -779,7 +781,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
               trace.conductControl = {
                 state: effectiveState,
-                shouldReply: conductAfter?.shouldReply ?? (effectiveState !== 'silent'),
+                shouldReply: conductAfter?.shouldReply ?? true,
                 offenseCount: conductAfter?.offenseCount || 0,
                 manualMode: conductAfter?.manualMode || 'auto',
                 silentUntil: conductAfter?.silentUntil || null,
@@ -850,32 +852,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               return;
             }
 
-            if (conductBefore?.shouldReply === false) {
-              const now = new Date().toISOString();
-              trace.conductControl = {
-                state: conductBefore.conductState || 'silent',
-                shouldReply: false,
-                offenseCount: conductBefore.offenseCount || 0,
-                manualMode: conductBefore.manualMode || 'auto',
-                silentUntil: conductBefore.silentUntil || null,
-                reason: conductBefore.reason,
-              };
-
-              db.prepare(`
-                INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
-                VALUES (?, 0, ?, ?)
-                ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
-              `).run(senderId, now, now);
-
-              const inboundId = randomUUID();
-              db.prepare(`
-                INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
-                VALUES (?, ?, 'inbound', ?, 'blocked_silent', ?, ?)
-              `).run(inboundId, senderId, messageText, executionId, now);
-
-              console.log('[Instagram Webhook] Silent conduct suppression active for sender %s', senderId);
-              return;
-            }
           } catch (intentErr) {
             const sexualIntentLatency = Date.now() - sexualIntentStartTime;
             console.error('[Instagram Webhook] Sexual intent classification failed, continuing normal flow:', intentErr);
@@ -1152,9 +1128,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               : analysis.totalInteractions > 0 && analysis.conversationHistory.length === 0
                 ? `Geri gelen musteri (toplam ${analysis.totalInteractions} mesaj, son 24 saatte mesaj yok)`
                 : `Etkilesim: ${analysis.totalInteractions}`;
-            const conductStateForReply = trace.conductControl?.state && trace.conductControl.state !== 'silent'
-              ? trace.conductControl.state
-              : 'normal';
+            const conductStateForReply = trace.conductControl?.state || 'normal';
             const styleProfile = buildDMStyleProfile({
               customerMessage: messageText,
               conversationHistory: analysis.conversationHistory,

@@ -52,6 +52,21 @@ describe('DMResponseStyleService', () => {
     expect(profile.instructions).toContain('Takip sorusu sorma');
   });
 
+  it('returns bad-customer style when conduct is at the highest state', () => {
+    const profile = buildDMStyleProfile({
+      customerMessage: 'adres nedir',
+      conversationHistory: [],
+      isNewCustomer: false,
+      conductState: 'silent',
+    });
+
+    expect(profile.mode).toBe('silent');
+    expect(profile.trace.emojiPolicy).toBe('none');
+    expect(profile.trace.ctaPolicy).toBe('minimal');
+    expect(profile.instructions).toContain('bad-customer modunda');
+    expect(profile.instructions).toContain('Tek cumle');
+  });
+
   it('removes follow-up prompts and soft ctas from guarded replies', () => {
     const response = [
       'Merhaba, masaj fiyatlarimiz su sekildedir.',
@@ -68,5 +83,20 @@ describe('DMResponseStyleService', () => {
     expect(sanitized).not.toContain('Merhaba');
     expect(sanitized).not.toContain('hangi sure');
     expect(sanitized).not.toContain('bizi arayin');
+  });
+
+  it('strips soft greeting and CTA content from bad-customer replies too', () => {
+    const response = [
+      'Merhaba, adresimiz Haraparasi Mahallesi.',
+      'Detayli bilgi icin bizi arayin.',
+      'Isterseniz konum da atabiliriz.',
+    ].join('\n');
+
+    const sanitized = sanitizeConductResponse(response, 'silent');
+
+    expect(sanitized).toContain('adresimiz Haraparasi Mahallesi');
+    expect(sanitized).not.toContain('Merhaba');
+    expect(sanitized).not.toContain('bizi arayin');
+    expect(sanitized).not.toContain('Isterseniz');
   });
 });

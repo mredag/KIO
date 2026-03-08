@@ -122,10 +122,11 @@ Current live defaults you should keep in mind:
 - Verify inbound timing behavior in the tracked Instagram webhook route before changing it. Do not assume local-only fragment buffering exists on every machine.
 - Do not assume Instagram buttons or quick replies are reliable. Use compact text menus for customer choices.
 - Keep generic pricing and topic-selection clarifiers lightweight when possible.
-- DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent`.
+- DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent` (operator label: `Bad customer`).
 - The live webhook and simulator now share the same conduct ladder before normal DM generation.
 - `DMResponseStyleService` now shapes tone to reduce repetition. Emoji should be optional, not habitual.
 - For obvious euphemisms like `mutlu son`, keep the visible legacy rejection wording; the conduct ladder escalates silently in the background.
+- `silent` is not a friendly state and no longer means no-reply for Instagram DM. It means the shortest possible factual business answer, with no warmth, CTA, or follow-up.
 
 ## Sub-Agent Delegation (MANDATORY for complex tasks)
 You are an ORCHESTRATOR. DELEGATE using `/spawn` or `sessions_spawn` tool.
@@ -172,7 +173,7 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 - The human/operator page for conduct management is `/admin/mc/dm-conduct`.
 - `force_normal` is the correct lift path for test accounts.
 - `reset` clears offense history and returns the user to normal state.
-- `force_silent` is the manual mute path.
+- `force_silent` forces bad-customer mode.
 - The conduct page should offer username/ID/phone search, state explanations, and explicit action feedback.
 - Do not try to change conduct state through KB edits, prompt hacks, or direct SQL.
 

@@ -152,7 +152,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     conductState: ConductState,
   ): string | null {
     if (conductState === 'silent') {
-      return null;
+      return action === 'block_message'
+        ? 'Böyle bir hizmet yok.'
+        : 'Sadece profesyonel spa ve spor hizmeti veriyoruz.';
     }
 
     return getSexualIntentReply(action);
@@ -265,7 +267,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             },
             conductControl: {
               state: effectiveState,
-              shouldReply: conductAfter?.shouldReply ?? (effectiveState !== 'silent'),
+              shouldReply: conductAfter?.shouldReply ?? true,
               offenseCount: conductAfter?.offenseCount || 0,
               manualMode: conductAfter?.manualMode || 'auto',
               silentUntil: conductAfter?.silentUntil || null,
@@ -281,7 +283,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             senderId,
             responseText,
             interactionIntent,
-            effectiveState === 'silent' ? null : responseText,
+            responseText,
             sexualIntentResult.modelUsed,
             executionId,
             new Date().toISOString(),

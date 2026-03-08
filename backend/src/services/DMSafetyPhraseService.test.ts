@@ -290,6 +290,29 @@ describe('DMSafetyPhraseService', () => {
     expect(vi.mocked(evaluateSexualIntent)).not.toHaveBeenCalled();
   });
 
+  it('treats "masaja gelirken birsey getiriyor muyuz" as benign preparation too', async () => {
+    const telegram = {
+      isEnabled: vi.fn().mockReturnValue(true),
+      notifySafetyPhraseReview: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const db = createDb();
+    const service = new DMSafetyPhraseService(db as any, telegram);
+
+    const result = await service.evaluateMessage({
+      messageText: 'masaja gelirken yanimizda birsey getiriyor muyuz ?',
+      channel: 'instagram',
+      senderId: 'ig-2',
+      allowReviewAlerts: true,
+    });
+
+    expect(result.decision.action).toBe('allow');
+    expect(result.decision.modelUsed).toBe('dm-safety-benign-preparation-guard');
+    expect(result.reviewRequest.triggered).toBe(false);
+    expect(telegram.notifySafetyPhraseReview).not.toHaveBeenCalled();
+    expect(vi.mocked(evaluateSexualIntent)).not.toHaveBeenCalled();
+  });
+
   it('creates a Telegram review when AI returns retry_question for a short candidate phrase', async () => {
     vi.mocked(evaluateSexualIntent).mockResolvedValue({
       action: 'retry_question',

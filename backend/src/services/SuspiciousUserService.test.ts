@@ -49,7 +49,7 @@ describe('SuspiciousUserService', () => {
     db.close();
   });
 
-  it('escalates from guarded to final warning to silent', () => {
+  it('escalates from guarded to final warning to bad-customer mode', () => {
     const first = service.flagUser('instagram', 'user-1', 'uygunsuz imada bulundu', {
       action: 'retry_question',
       severity: 'medium',
@@ -77,12 +77,12 @@ describe('SuspiciousUserService', () => {
       messageText: 'happy ending',
     });
     expect(third.conductState).toBe('silent');
-    expect(third.shouldReply).toBe(false);
+    expect(third.shouldReply).toBe(true);
     expect(third.silentUntil).not.toBeNull();
 
     const check = service.checkSuspicious('instagram', 'user-1');
     expect(check.conductState).toBe('silent');
-    expect(check.shouldReply).toBe(false);
+    expect(check.shouldReply).toBe(true);
   });
 
   it('allows creating a force-normal override for a test account before any violation', () => {

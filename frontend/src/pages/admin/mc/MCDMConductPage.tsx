@@ -87,20 +87,20 @@ const stateLabels: Record<ConductState, string> = {
   normal: 'Normal',
   guarded: 'Guarded',
   final_warning: 'Final warning',
-  silent: 'Silent',
+  silent: 'Bad customer',
 };
 
 const stateDescriptions: Record<ConductState, string> = {
   normal: 'Normal hizmet tonu. Ek kisit yok.',
   guarded: 'Kisa ve mesafeli cevap. Emoji, yumusak acilis ve gereksiz yardim azaltilir.',
   final_warning: 'Son sert uyari seviyesi. Takip sorusu, sicak kapanis ve ek yardim yok.',
-  silent: 'Yanitsiz mod. Kullaniciya cevap gitmez; sadece log tutulur.',
+  silent: 'En sert is modu. Cevap gider ama yalnizca cok kisa, duz ve is odakli bilgi verilir.',
 };
 
 const manualModeLabels: Record<ManualMode, string> = {
   auto: 'Auto',
   force_normal: 'Force normal',
-  force_silent: 'Force silent',
+  force_silent: 'Force bad customer',
 };
 
 const platformLabels: Record<Platform, string> = {
@@ -370,7 +370,7 @@ export default function MCDMConductPage() {
             <h1 className="mc-page-title">DM Davranis Kontrolu</h1>
             <p className="mt-2 text-sm text-gray-400 max-w-3xl">
               Uygunsuz mesajlar icin conduct ladder durumlarini izleyin, test hesaplari icin force normal override verin,
-              gerekirse kullaniciyi sessiz moddan cikarip tam reset uygulayin.
+              gerekirse kullaniciyi bad-customer modundan cikarip tam reset uygulayin.
             </p>
           </div>
         </div>
@@ -383,8 +383,8 @@ export default function MCDMConductPage() {
           />
           <StatCard label="Normal" value={stats.normal} hint="Su anda normal tonda cevap alanlar" />
           <StatCard label="Guarded" value={stats.guarded} hint="Kisa ve mesafeli moda alinmis kullanicilar" />
-          <StatCard label="Final/Silent" value={stats.finalWarning + stats.silent} hint="Sert uyarida veya sessiz modda olanlar" />
-          <StatCard label="Silent" value={stats.silent} hint="Yanitsiz modda olanlar" />
+          <StatCard label="Final/Bad" value={stats.finalWarning + stats.silent} hint="Sert uyarida veya bad-customer modunda olanlar" />
+          <StatCard label="Bad customer" value={stats.silent} hint="En kisa ve en duz cevap modunda olanlar" />
           <StatCard label="Test / Sim" value={stats.testLike} hint="Test veya simulator olarak gorunen kayitlar" />
         </div>
 
@@ -412,7 +412,7 @@ export default function MCDMConductPage() {
               <div className="text-sm font-semibold text-gray-100">Durumlar ne anlama geliyor?</div>
               <div className="mt-2 text-sm text-gray-400">
                 Conduct ladder arka planda calisir. Gorunen cevaplar eski uygunsuz-icerik reddini korur; bu panel ise o kullanicinin
-                bundan sonraki tonunu ve gerekirse sessiz moda dusmesini kontrol eder.
+                bundan sonraki tonunu ve gerekirse bad-customer moduna gecmesini kontrol eder.
               </div>
             </div>
             <div className="text-xs text-gray-500">
@@ -434,11 +434,11 @@ export default function MCDMConductPage() {
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
               <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Force normal</div>
-              <div className="mt-2">Test hesabi sessize dusmez. Var olan ceza kaydi silinmez, sadece cevap kilidi gecici kalkar.</div>
+              <div className="mt-2">Test hesabi bad-customer moduna dusmez. Var olan ceza kaydi silinmez, sadece cevap tonu gecici normale cekilir.</div>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
-              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Force silent</div>
-              <div className="mt-2">Admin tarafindan cevap tamamen kapatilir. Kullaniciya mesaj gitmez.</div>
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Force bad customer</div>
+              <div className="mt-2">En sert cevap modu. Kullaniciya sadece cok kisa ve duz is cevabi gider; sohbet acilmaz.</div>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
               <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Full reset</div>
@@ -507,7 +507,7 @@ export default function MCDMConductPage() {
                 <div className="md:col-span-2">
                   <label className="mc-label mb-1.5 block">Ne yapar?</label>
                   <div className="text-xs text-gray-400 leading-5">
-                    Bu buton kullaniciyi 24 saat force normal yapar. Test hesabiniz sessize dusmeden canli akista denenebilir.
+                    Bu buton kullaniciyi 24 saat force normal yapar. Test hesabiniz bad-customer moduna dusmeden canli akista denenebilir.
                   </div>
                 </div>
                 <button onClick={handleCreateOverride} className="mc-btn mc-btn--primary text-xs" disabled={overrideMutation.isPending || !newUserId.trim()}>
@@ -564,8 +564,8 @@ export default function MCDMConductPage() {
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${stateBadgeClasses[user.conductState]}`}>
                             {stateLabels[user.conductState]}
                           </span>
-                          {!user.shouldReply && (
-                            <div className="mt-2 text-xs text-red-300">Reply disabled</div>
+                          {user.conductState === 'silent' && (
+                            <div className="mt-2 text-xs text-red-300">Minimal reply mode</div>
                           )}
                         </td>
                         <td className="px-5 py-4 align-top">
@@ -582,7 +582,7 @@ export default function MCDMConductPage() {
                           <div>{formatRelativeTime(new Date(user.lastOffenseAt))}</div>
                           <div className="mt-1">{formatDateTime(new Date(user.lastOffenseAt))}</div>
                           {user.silentUntil && (
-                            <div className="mt-2 text-red-300">silent until {formatDateTime(new Date(user.silentUntil))}</div>
+                            <div className="mt-2 text-red-300">bad customer until {formatDateTime(new Date(user.silentUntil))}</div>
                           )}
                         </td>
                         <td className="px-5 py-4 align-top text-xs text-gray-300 max-w-sm">
@@ -667,9 +667,9 @@ export default function MCDMConductPage() {
                       <div className="mt-1 text-xs text-gray-400">{selectedUser.manualNote || 'No note'}</div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Silent window</div>
-                      <div className="mt-2 text-gray-100">{selectedUser.silentUntil ? formatDateTime(new Date(selectedUser.silentUntil)) : 'Not silent'}</div>
-                      <div className="mt-1 text-xs text-gray-400">reply {selectedUser.shouldReply ? 'enabled' : 'disabled'}</div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Bad customer window</div>
+                      <div className="mt-2 text-gray-100">{selectedUser.silentUntil ? formatDateTime(new Date(selectedUser.silentUntil)) : 'Not active'}</div>
+                      <div className="mt-1 text-xs text-gray-400">reply style {selectedUser.conductState === 'silent' ? 'minimal' : 'normal'}</div>
                     </div>
                   </div>
 
@@ -688,7 +688,7 @@ export default function MCDMConductPage() {
                         className="mc-btn mc-btn--ghost text-xs justify-center"
                         disabled={overrideMutation.isPending}
                       >
-                        {overrideMutation.isPending ? 'Isleniyor...' : 'Silent 24h'}
+                        {overrideMutation.isPending ? 'Isleniyor...' : 'Bad customer 24h'}
                       </button>
                       <button
                         onClick={() => handleQuickOverride('auto', null, 'clear-override')}
@@ -713,7 +713,7 @@ export default function MCDMConductPage() {
                       <select value={overrideMode} onChange={(event) => setOverrideMode(event.target.value as ManualMode)} className="mc-input">
                         <option value="auto">Auto</option>
                         <option value="force_normal">Force normal</option>
-                        <option value="force_silent">Force silent</option>
+                        <option value="force_silent">Force bad customer</option>
                       </select>
                       <input
                         type="number"

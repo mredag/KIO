@@ -31,7 +31,7 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - Use compact text menus instead of relying on Instagram buttons
 - Keep generic pricing and topic clarifiers deterministic and cheap when possible
 - The live webhook and simulator now share the same conduct ladder before normal DM generation
-- Conduct states are `normal`, `guarded`, `final_warning`, and `silent`
+- Conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator label: `Bad customer`)
 - `DMResponseStyleService` now injects anti-repetition style instructions; avoid reintroducing hardcoded emoji habits
 - Guarded/final-warning users should not get the friendly deterministic info template path
 - Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation must stay in the background
@@ -42,12 +42,13 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - Shared Telegram-bot callback buttons are disabled for operator actions. Use `/dmphr block|allow|detail <reviewId>` and `/esc approve|reject|detail|analyst <jobId>` instead of Telegram action buttons
 - Treat what-to-bring / visit-preparation questions (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) as normal logistics; they must not trigger DM safety phrase review
 - Jarvis/Forge must not claim a Telegram review or escalation action succeeded unless the backend API response confirms success
+- `silent` is no longer a pure no-reply state for Instagram DM. It is bad-customer mode: shortest possible factual reply, no warmth, no CTA
 - Policy price checks derive allowed numbers from the current KB context
 - `knowledge_base.id` must stay non-null and durable
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`
 - The current schema does not expose `topic_slug`
 - Human conduct overrides live in `/admin/mc/dm-conduct`
-- `force_normal` lifts a test account, `reset` clears offense history, and `force_silent` is the manual mute path
+- `force_normal` lifts a test account, `reset` clears offense history, and `force_silent` forces bad-customer mode
 - The conduct UI must support search by username/ID/phone, state explanations, and explicit success/error feedback after actions
 - The conduct page is a conduct-managed user list, not the full DM audience; mark test/simulator rows clearly and keep list search/pagination server-side
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`

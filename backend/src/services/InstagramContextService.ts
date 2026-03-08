@@ -802,9 +802,10 @@ export class InstagramContextService {
     }
 
     const hasDurationSignal = /\b(?:uzun|kisa)\s*sure(?:li)?\b/.test(normalizedMessage)
-      || /\b(?:sure|sureli|dakika|dk|seans)\b/.test(normalizedMessage)
+      || /\b(?:sure|sureli|dakika|dk|seans|saat)\b/.test(normalizedMessage)
       || /\b\d+\s*(?:dk|dakika)\b/.test(normalizedMessage)
-      || plan.keywords.includes('duration_specific');
+      || plan.keywords.includes('duration_specific')
+      || plan.keywords.includes('duration_preference');
     if (!hasDurationSignal) {
       return;
     }
@@ -818,13 +819,21 @@ export class InstagramContextService {
     }
 
     const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
+    const instructionParts = [plan.responseDirective.instruction.trim()];
+
     if (!normalizedInstruction.includes('fiyat')) {
-      plan.responseDirective = {
-        ...plan.responseDirective,
-        instruction: `${plan.responseDirective.instruction} Masaj suresi veya uzun/kisa secenek soruluyorsa ilgili fiyat bilgisini de kullan; fiyat listesi varsa sure seceneklerini onunla eslestir.`.trim(),
-        rationale: `${plan.responseDirective.rationale} Masaj sure/sureli sinyali fiyat bilgisini gerektiriyor.`,
-      };
+      instructionParts.push('Masaj suresi veya uzun/kisa secenek soruluyorsa ilgili fiyat bilgisini de kullan; fiyat listesi varsa sure seceneklerini onunla eslestir.');
     }
+
+    if (!normalizedInstruction.includes('listede olmayan') && !normalizedInstruction.includes('uydurma')) {
+      instructionParts.push('Listede acikca gecmeyen yeni sure veya fiyat secenegi uydurma. Musteri 1 saat gibi bir beklenti soyluyorsa, sadece verilen sureleri yaz; 60dk bilgisi listede yoksa varmis gibi anlatma.');
+    }
+
+    plan.responseDirective = {
+      ...plan.responseDirective,
+      instruction: instructionParts.join(' ').trim(),
+      rationale: `${plan.responseDirective.rationale} Masaj sure/sureli sinyali fiyat bilgisini gerektiriyor; listede olmayan sure/fiyat uydurulmamali.`,
+    };
   }
 
   private applyRoomAvailabilitySignals(plan: AIContextPlan, messageText: string): void {

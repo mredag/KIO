@@ -149,6 +149,13 @@ interface DeterministicGroundingResult {
   latencyMs: number;
 }
 
+interface ServiceDurationPriceTuple {
+  serviceKey: string;
+  durationKey: string;
+  priceValue: string;
+  display: string;
+}
+
 export class ResponsePolicyService {
   private apiKey: string;
   private openAiKey: string;
@@ -681,8 +688,99 @@ export class ResponsePolicyService {
   }
 
   private extractPriceValues(text: string): string[] {
-    const matches = text.match(/\d[\d.,]*\s*(?:₺|TL|tl|Tl|tL|lira)/g) || [];
+    const matches = text.match(/\d[\d.,]*\s*(?:\u20BA|TL|tl|Tl|tL|lira)/g) || [];
     return this.uniqueNormalized(matches.map(match => this.normalizeNumericToken(match)));
+  }
+
+  private normalizeServiceKey(rawValue: string): string {
+    return this.normalizePolicyText(rawValue)
+      .replace(/\b(?:masaj|massage|paketlerimizde|paketimizde|paketleri|paketi|paket|hizmetlerimizde|hizmetlerimiz|hizmeti|hizmetleri|hizmet|programlari|programlar|programi|program|ekstralari|ekstralar|ekstra|secenegi|secenekleri|secenek|fiyatlarimiz|fiyatlari|fiyat)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private normalizeDurationKey(rawValue: string): string | null {
+    const normalized = this.normalizePolicyText(rawValue);
+    const match = normalized.match(/\b(\d{1,3})\s*(dk|dakika|saat)\b/);
+    if (!match) {
+      return null;
+    }
+
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    return match[2] === 'saat'
+      ? `${amount * 60}dk`
+      : `${amount}dk`;
+  }
+
+  private normalizeHeadingServiceLabel(rawLine: string): string | null {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const headingMatch = trimmed.match(/^[^\p{L}\p{N}]*(.+?):\s*$/u);
+    if (!headingMatch) {
+      return null;
+    }
+
+    const serviceKey = this.normalizeServiceKey(headingMatch[1]);
+    return serviceKey || null;
+  }
+
+  private extractServiceDurationPriceTuples(text: string): ServiceDurationPriceTuple[] {
+    const tuples: ServiceDurationPriceTuple[] = [];
+    let currentSectionService: string | null = null;
+
+    for (const rawLine of (text || '').split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('[')) {
+        continue;
+      }
+
+      const headingService = this.normalizeHeadingServiceLabel(line);
+      if (headingService) {
+        currentSectionService = headingService;
+        continue;
+      }
+
+      const priceMatch = line.match(/(\d[\d.,]*)\s*(?:\u20BA|TL|tl|Tl|tL|lira)\b/);
+      const durationMatch = line.match(/(\d{1,3}\s*(?:dk|dakika|saat))/i);
+      if (!priceMatch || !durationMatch) {
+        continue;
+      }
+
+      const priceValue = this.normalizeNumericToken(priceMatch[0]);
+      const durationKey = this.normalizeDurationKey(durationMatch[1]);
+      if (!priceValue || !durationKey) {
+        continue;
+      }
+
+      const prefix = line.slice(0, durationMatch.index || 0)
+        .replace(/^[^\p{L}\p{N}]+/u, '')
+        .trim();
+      const prefixService = this.normalizeServiceKey(prefix);
+      const serviceKey = prefixService || currentSectionService;
+      if (!serviceKey) {
+        continue;
+      }
+
+      tuples.push({
+        serviceKey,
+        durationKey,
+        priceValue,
+        display: `${serviceKey} ${durationKey} -> ${priceValue}`,
+      });
+    }
+
+    return tuples;
+  }
+
+  private buildTupleKey(tuple: Pick<ServiceDurationPriceTuple, 'serviceKey' | 'durationKey' | 'priceValue'>): string {
+    return `${tuple.serviceKey}|${tuple.durationKey}|${tuple.priceValue}`;
   }
 
   private parseNormalizedInteger(value: string): number | null {
@@ -767,6 +865,19 @@ export class ResponsePolicyService {
     return `${rulePrefix}: Yanitta KB'de olmayan deger var (${invalidSummary}). Izinli degerler: ${allowedSummary}`;
   }
 
+  private buildInvalidTupleViolation(
+    invalidTuples: ServiceDurationPriceTuple[],
+    allowedTuples: ServiceDurationPriceTuple[],
+  ): string {
+    const invalidSummary = invalidTuples.slice(0, 3).map(tuple => tuple.display).join(', ');
+    if (allowedTuples.length === 0) {
+      return `8. FIYAT TUTARSIZLIGI: Yanitta KB'de olmayan hizmet/sure/fiyat eslesmesi var (${invalidSummary}).`;
+    }
+
+    const allowedSummary = allowedTuples.slice(0, 6).map(tuple => tuple.display).join(', ');
+    return `8. FIYAT TUTARSIZLIGI: Yanitta KB'de olmayan hizmet/sure/fiyat eslesmesi var (${invalidSummary}). Izinli eslesmeler: ${allowedSummary}`;
+  }
+
   private getRelevantAgePolicyLines(context: PolicyValidationContext): string[] {
     if (!hasAgePolicySignals(
       context.customerMessage,
@@ -844,11 +955,13 @@ export class ResponsePolicyService {
     const allowedPrices = this.extractPriceValues(context.knowledgeContext);
     const allowedTimes = this.extractTimeValues(context.knowledgeContext);
     const allowedPhones = this.extractPhoneValues(context.knowledgeContext);
+    const allowedServiceTuples = this.extractServiceDurationPriceTuples(context.knowledgeContext);
     const partySize = this.extractRequestedPartySize(context.customerMessage);
 
     const responsePrices = this.extractPriceValues(context.agentResponse);
     const responseTimes = this.extractTimeValues(context.agentResponse);
     const responsePhones = this.extractPhoneValues(context.agentResponse);
+    const responseServiceTuples = this.extractServiceDurationPriceTuples(context.agentResponse);
 
     const violations: string[] = [];
 
@@ -858,6 +971,14 @@ export class ResponsePolicyService {
     );
     if (invalidPrices.length > 0) {
       violations.push(this.buildInvalidValueViolation('8. FIYAT TUTARSIZLIGI', invalidPrices, allowedPrices));
+    }
+
+    const allowedTupleKeys = new Set(allowedServiceTuples.map(tuple => this.buildTupleKey(tuple)));
+    const invalidServiceTuples = responseServiceTuples.filter(
+      tuple => !allowedTupleKeys.has(this.buildTupleKey(tuple)),
+    );
+    if (invalidServiceTuples.length > 0) {
+      violations.push(this.buildInvalidTupleViolation(invalidServiceTuples, allowedServiceTuples));
     }
 
     const invalidTimes = responseTimes.filter(value => !allowedTimes.includes(value));

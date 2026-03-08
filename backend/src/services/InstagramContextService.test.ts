@@ -180,6 +180,41 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('fiyat bilgisini de kullan');
   });
 
+  it('adds a do-not-invent warning for massage duration follow-ups that mention one hour expectations', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['pricing', 'services'],
+      semanticSignals: ['duration_preference', 'pricing_inquiry'],
+      followUpHint: {
+        topicLabel: 'medical masaj paketleri',
+        rewrittenQuestion: 'medical masaj paketleri icin normal de bi saat olmasi lazim',
+        sourceMessage: 'Medical masaj paketiniz fiyati nekadar',
+      },
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Aktif konu: medical masaj paketleri. Mevcut mesajda belirtilen bir saat beklentisini dikkate alarak, medikal masaj paketlerinin sure seceneklerini ve fiyatlarini tekrar belirt.',
+        rationale: 'Musteri medikal sure seceneklerini yeniden anlamak istiyor.',
+      },
+      tier: 'standard',
+      tierReason: 'Baglamli sure sorusu',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'Normal de bi saat olmasi lazim',
+      createHistory([
+        { text: 'Medical masaj paketiniz fiyati nekadar', minutesAgo: 2 },
+        { direction: 'outbound', text: 'Medikal 30dk ve 50dk seceneklerimiz var.', minutesAgo: 1 },
+      ]),
+    );
+
+    expect(result.categories).toContain('pricing');
+    expect(result.keywords).toContain('massage_duration_pricing_signal');
+    expect(result.responseDirective.instruction).toContain('Listede acikca gecmeyen yeni sure veya fiyat secenegi uydurma');
+    expect(result.responseDirective.instruction).toContain('60dk bilgisi listede yoksa varmis gibi anlatma');
+  });
+
   it('forces faq grounding and a direct answer for room-availability questions', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue(createAiResponse({

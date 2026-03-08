@@ -95,6 +95,52 @@ describe('ResponsePolicyService deterministic grounding', () => {
     expect(result.violations.join(' ')).toContain('2700');
   });
 
+  it('rejects service-duration-price combinations that do not exist in KB even when the price exists elsewhere', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: 'medikal masajda 1 saat var mi',
+      agentResponse: 'Medikal masaj paketlerimizde 60dk -> 1300 TL secenegi vardir.',
+      knowledgeContext: [
+        'KLASIK MASAJ:',
+        '• 60dk -> 1300 TL',
+        'OZEL MASAJLAR:',
+        '• Medikal 30dk -> 1200 TL',
+        '• Medikal 50dk -> 1800 TL',
+      ].join('\n'),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(false);
+    expect(result.violations.join(' ')).toContain('hizmet/sure/fiyat eslesmesi');
+    expect(result.violations.join(' ')).toContain('medikal 60dk -> 1300');
+  });
+
+  it('passes exact service-duration-price tuples that exist in KB', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: 'medikal masaj fiyatlari nedir',
+      agentResponse: 'Medikal 30dk -> 1200 TL, Medikal 50dk -> 1800 TL.',
+      knowledgeContext: [
+        'OZEL MASAJLAR:',
+        '• Medikal 30dk -> 1200 TL',
+        '• Medikal 50dk -> 1800 TL',
+      ].join('\n'),
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(true);
+  });
+
   it('rejects no-age-restriction claims when KB contains an age policy', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn()

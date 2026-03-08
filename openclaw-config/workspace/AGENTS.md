@@ -171,6 +171,10 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 9. Never use `hemen tamamla` or similar shorthand as sufficient approval for live KB writes unless the exact change-set id is quoted back in the approval text.
 10. If the owner requests undo, use `POST /api/integrations/knowledge/change-sets/<id>/rollback`.
 11. After apply, refetch the change set, changed row(s), and affected context, then report exactly what changed.
+12. For price updates, scan `category=pricing` first. Do not start by editing `faq` or `services` unless the preview proves those rows repeat the same price fact.
+13. For massage pricing, start with `pricing.complete_massage_pricing`. The generic `bilgi almak istiyorum` reply reads that live row dynamically, so changing it updates the customer-facing template automatically.
+14. If the owner sends a screenshot or image, extract a structured price list first, flag unreadable lines, then build the preview from that extracted list.
+15. In the preview, explicitly list related rows that were reviewed but intentionally left unchanged.
 
 **DM Conduct Controls:**
 - The human/operator page for conduct management is `/admin/mc/dm-conduct`.

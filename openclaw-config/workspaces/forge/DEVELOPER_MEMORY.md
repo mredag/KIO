@@ -67,6 +67,9 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - KB preview defaults to value-only changes; `description` edits require explicit opt-in with `allowDescriptionChanges=true`
 - KB apply now requires `approvedChangeSetId` and explicit `approvalText` containing the exact change-set id
 - KB updates should use API routes, not direct SQL edits
+- Price updates must scan `pricing` first, then inspect `faq` / `services` only if those rows repeat the same price fact. Do not widen scope silently.
+- For massage pricing, start with `pricing.complete_massage_pricing`. The generic `bilgi almak istiyorum` template reads that live row dynamically.
+- If the owner sends a price image, extract a structured list first, mark unreadable lines, then build the preview from that extracted list.
 
 ## Main Files To Inspect
 - `backend/src/routes/instagramWebhookRoutes.ts`

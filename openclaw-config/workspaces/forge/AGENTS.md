@@ -78,6 +78,17 @@ For OpenClaw-related changes, compare the docs with the real implementation befo
 - `DMResponseStyleService` now handles anti-repetition tone shaping; do not reintroduce hardcoded `1-2 emoji` behavior when editing prompts.
 - Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation should remain a background control, and the highest state should answer with the shortest possible factual business reply.
 
+## Live KB Price Update Rules
+- Read `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` and workspace `KNOWLEDGE_BASE.md` before changing live KB data.
+- Use `GET /api/integrations/knowledge/entries` to scan live KB first.
+- For price updates, scan `category=pricing` first. Do not start by editing `faq` or `services` unless those rows repeat the same fact.
+- For massage pricing, start with `pricing.complete_massage_pricing`. The generic `bilgi almak istiyorum` reply reads that live row dynamically.
+- If the owner sends an image, extract a structured price list first, mark unreadable lines, then build a preview.
+- Use `POST /api/integrations/knowledge/change-sets/preview` before any write.
+- Do not change `description` unless the owner explicitly asked for it.
+- Apply only after explicit approval text that includes the exact change-set id.
+- In the final report, list changed rows and also related rows you checked but intentionally left unchanged.
+
 ## Tech Stack
 - **Backend:** Express + TypeScript + SQLite (better-sqlite3, WAL mode)
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS (dark glassmorphism theme)

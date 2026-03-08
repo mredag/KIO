@@ -101,6 +101,9 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Legacy direct `PUT /api/integrations/knowledge/entries/:id` is disabled for API consumers.
 - KB updates must go through the admin or integration routes, not direct SQL edits.
 - Policy grounding depends on the KB slice loaded into the current execution.
+- Price updates must scan `pricing` first, then review related `faq` / `services` rows only if those rows repeat the same fact. Do not widen scope silently.
+- For massage price changes, start with `pricing.complete_massage_pricing`. The generic `bilgi almak istiyorum` reply uses that live row dynamically, so changing it updates the template automatically.
+- If the owner sends an image with new prices, extract a structured list first, mark unreadable items, then build the KB preview from that list.
 
 ## Where To Look First
 - DM planner and follow-up logic: `backend/src/services/InstagramContextService.ts`

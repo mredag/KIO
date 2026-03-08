@@ -254,6 +254,76 @@ For this repo, agents should follow these defaults:
 - When the request is "change one thing", the agent must keep scope to one KB row unless preview says otherwise
 - If the requested fact does not fit any existing row, the agent should propose `create_new` in preview instead of mutating unrelated rows
 
+## Price Update Playbook
+
+When the owner asks to update prices, do not treat it as a generic KB write. Use this tighter workflow.
+
+### Default price-update scan order
+
+1. Scan `category=pricing` first
+2. Find the canonical price row that should carry the change
+3. Search for related rows in `faq` and `services` that repeat the same numeric facts
+4. Preview all candidate rows, but only change the rows that are truly part of the requested price change
+
+### Massage pricing specifics
+
+For massage pricing requests, start with:
+
+- `pricing.complete_massage_pricing`
+
+Important:
+
+- The generic Instagram info reply for `bilgi almak istiyorum` is built from the live `pricing.complete_massage_pricing` row
+- If that row changes, the customer-facing template changes automatically
+- Do not assume this means every massage-related row must change
+
+Related rows may need review only when the requested change affects duplicated facts, especially add-ons or bundled wording, for example:
+
+- `faq.kese_kopuk_fiyat`
+- `faq.kese_kopuk_personel`
+- `services.massage_kese_kopuk`
+
+Rule:
+
+- Standard duration price changes usually start in `pricing`
+- Add-on price changes may require a small, explicit multi-row preview
+- Do not expand scope silently just because multiple rows mention similar numbers
+
+### Image-based price updates
+
+If the owner sends an image:
+
+1. Extract the price list into a structured text table first
+2. Mark any unreadable or ambiguous lines
+3. Build the KB preview from the extracted structure
+4. Do not write until the preview is approved
+
+If any image line is unclear, stop at preview and call out the exact unclear item.
+
+### Required price-update preview content
+
+For price changes, preview must also say:
+
+- which row is the canonical source of truth
+- which rows are related but intentionally unchanged
+- whether the generic pricing template will change automatically after apply
+- whether the change affects a single numeric fact or a full list
+
+### Required approval wording
+
+For live price writes, the safe approval remains:
+
+- `Onayliyorum. Change-set <id> uygula.`
+
+Not sufficient on its own:
+
+- `tamam`
+- `hemen yap`
+- `hemen islemi tamamla`
+- `devam`
+
+Those phrases can acknowledge intent, but they are not enough to satisfy the live apply gate unless the exact change-set id is included in the approval text.
+
 ## Non-Negotiable Rule
 
 For live KB work, the minimum workflow is:

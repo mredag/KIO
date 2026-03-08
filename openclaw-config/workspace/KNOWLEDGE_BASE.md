@@ -97,6 +97,16 @@ Before any write, the agent must show:
 - exact API call plan
 - statement that no write has happened yet
 
+## Price Update Notes
+
+- Scan `pricing` first for any price-change request.
+- For massage pricing, start with `pricing.complete_massage_pricing`.
+- The generic `bilgi almak istiyorum` reply uses that live row dynamically, so changing that row updates the template automatically.
+- Only inspect related `faq` / `services` rows when they repeat the same price fact.
+- Do not widen scope silently just because multiple rows contain similar numbers.
+- If the owner sends an image, extract a structured price list first, flag unreadable lines, then preview from the extracted list.
+- Approval for live price writes still requires the exact change-set id in the approval text.
+
 ## Safety Rules
 
 - Prefer update over duplicate create

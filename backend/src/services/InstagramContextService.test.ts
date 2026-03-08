@@ -208,6 +208,31 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Musterinin hangi bolgede oldugunu');
   });
 
+  it('forces direct answers for plain location questions even when the planner suggests answer-then-clarify', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['contact', 'general'],
+      semanticSignals: ['location_inquiry'],
+      followUpHint: null,
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Mevcut mesajda konum bilgisi soruluyor. Genel bir konum bilgisi ver; eger spesifik bir adres veya tarif gerekiyorsa, bunu netlestirmek icin ek bir soru sor.',
+        rationale: 'Musteri konum bilgisi soruyor, bu bilgi genellikle genel olarak verilebilir ancak detay gerekebilir.',
+      },
+      tier: 'light',
+      tierReason: 'Basit bir konum bilgisi talebi.',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI('adresiniz nerede', []);
+
+    expect(result.categories).toContain('contact');
+    expect(result.keywords).toContain('direct_location_answer_signal');
+    expect(result.responseDirective.mode).toBe('answer_directly');
+    expect(result.responseDirective.instruction).toContain('contact bilgisini dogrudan kullan');
+  });
+
   it('forces policies into age-related follow-ups even when the planner anchors to a service topic', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue(createAiResponse({

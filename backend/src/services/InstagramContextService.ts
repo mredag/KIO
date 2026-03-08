@@ -871,10 +871,9 @@ export class InstagramContextService {
 
   private applyDirectContactLocationSignals(plan: AIContextPlan, messageText: string): void {
     const normalizedMessage = normalizeTurkish(messageText.toLowerCase());
-    const asksDirectLocation = /\b(?:adres|konum|nerede|neredesiniz|neresindesiniz|ulasim|yol tarifi|harita|maps)\b/.test(
-      normalizedMessage,
-    );
-    if (!asksDirectLocation || !plan.categories.includes('contact')) {
+    const asksDirectAddress = /\b(?:adres|konum|nerede|neredesiniz|neresindesiniz)\b/.test(normalizedMessage);
+    const asksTransport = /\b(?:ulasim|yol tarifi|harita|maps)\b/.test(normalizedMessage);
+    if ((!asksDirectAddress && !asksTransport) || !plan.categories.includes('contact')) {
       return;
     }
 
@@ -883,7 +882,8 @@ export class InstagramContextService {
     }
 
     const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
-    const isUnnecessaryClarifier = plan.responseDirective.mode === 'clarify_only'
+    const isUnnecessaryClarifier = asksDirectAddress
+      || plan.responseDirective.mode === 'clarify_only'
       || normalizedInstruction.includes('konum bilgisi soran bir soru')
       || normalizedInstruction.includes('ek bilgiye ihtiyac')
       || normalizedInstruction.includes('hangi bolgeye yakin');

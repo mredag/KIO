@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import Database from 'better-sqlite3';
-import { InstagramContextService } from '../services/InstagramContextService.js';
+import { InstagramContextService, type AIUsageTrace } from '../services/InstagramContextService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
@@ -19,7 +19,16 @@ import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
-import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
+import {
+  aggregateUsageByModel,
+  splitEstimatedTokens,
+  type ModelUsageEntry,
+} from '../services/CostEstimationService.js';
+import {
+  evaluateSexualIntent,
+  getSexualIntentReply,
+  shouldEscalateConductForSexualDecision,
+} from '../middleware/sexualIntentFilter.js';
 import type { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import type { ConductState, SuspiciousUserService } from '../services/SuspiciousUserService.js';
 
@@ -39,6 +48,33 @@ export function setDMConductService(svc: SuspiciousUserService | null): void {
   _dmConductService = svc;
 }
 
+function addModelUsageEntry(
+  entries: ModelUsageEntry[],
+  modelId: string | null | undefined,
+  inputTokens: number | null | undefined,
+  outputTokens: number | null | undefined,
+): void {
+  const normalizedModelId = String(modelId || '').trim();
+  const safeInputTokens = Math.max(0, Math.round(inputTokens || 0));
+  const safeOutputTokens = Math.max(0, Math.round(outputTokens || 0));
+
+  if (!normalizedModelId || (safeInputTokens === 0 && safeOutputTokens === 0)) {
+    return;
+  }
+
+  entries.push({
+    modelId: normalizedModelId,
+    inputTokens: safeInputTokens,
+    outputTokens: safeOutputTokens,
+  });
+}
+
+function addAIUsageTraceEntries(entries: ModelUsageEntry[], usageTrace: AIUsageTrace[] | undefined): void {
+  for (const traceEntry of usageTrace || []) {
+    addModelUsageEntry(entries, traceEntry.modelId, traceEntry.inputTokens, traceEntry.outputTokens);
+  }
+}
+
 export interface PipelineTrace {
   // Sexual intent filter (pre-processing safety check)
   sexualIntent?: {
@@ -47,6 +83,9 @@ export interface PipelineTrace {
     reason: string;
     modelUsed: string;
     latencyMs: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
   };
   intentCategories: string[];
   matchedKeywords: string[];
@@ -112,6 +151,9 @@ export interface PipelineTrace {
     latencyMs: number;
     skippedReason: string | null;
     rationale: string | null;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
   };
   conductControl?: {
     state: ConductState;
@@ -164,6 +206,9 @@ export interface PipelineTrace {
     uncategorizedMs: number;
   };
   tokenBreakdown?: {
+    safetyTokens?: number;
+    contextTokens?: number;
+    rerankTokens?: number;
     directTokens?: number;
     directInputTokens?: number;
     directOutputTokens?: number;
@@ -755,6 +800,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           let knowledgeAssemblyMs = 0;
           let openclawDispatchMs = 0;
           let metaSendDurationMs = 0;
+          let estimatedPrimaryInputTokens = 0;
           
           // Generate unique execution ID for this DM pipeline run
           const executionId = `EXE-${randomUUID().substring(0, 8)}`;
@@ -788,6 +834,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               reason: sexualDecision.reason,
               modelUsed: sexualDecision.modelUsed,
               latencyMs: sexualIntentLatency,
+              inputTokens: sexualDecision.usage?.inputTokens,
+              outputTokens: sexualDecision.usage?.outputTokens,
+              totalTokens: sexualDecision.usage?.totalTokens,
             };
             if (conductBefore) {
               trace.conductControl = {
@@ -801,13 +850,16 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
 
             if (sexualDecision.action !== 'allow') {
-              const conductAfter = _dmConductService?.flagUser('instagram', senderId, sexualDecision.reason, {
-                action: sexualDecision.action,
-                severity: sexualDecision.action === 'block_message' ? 'high' : 'medium',
-                source: sexualDecision.modelUsed,
-                messageText,
-              });
-              const effectiveState = conductAfter?.conductState || 'guarded';
+              const shouldEscalateConduct = shouldEscalateConductForSexualDecision(sexualDecision.action);
+              const conductAfter = shouldEscalateConduct
+                ? _dmConductService?.flagUser('instagram', senderId, sexualDecision.reason, {
+                    action: sexualDecision.action,
+                    severity: 'high',
+                    source: sexualDecision.modelUsed,
+                    messageText,
+                  })
+                : conductBefore;
+              const effectiveState = conductAfter?.conductState || 'normal';
               const replyText = buildConductReply(sexualDecision.action, effectiveState);
               const now = new Date().toISOString();
               const interactionIntent = effectiveState === 'silent'
@@ -860,6 +912,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               console.log('[Instagram Webhook] Safety/conduct triggered:', {
                 senderId,
                 action: sexualDecision.action,
+                escalatedConduct: shouldEscalateConduct,
                 effectiveState,
                 confidence: Number((sexualDecision.confidence * 100).toFixed(1)),
                 reason: sexualDecision.reason,
@@ -896,6 +949,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               reason: `Classification error: ${intentErr instanceof Error ? intentErr.message : String(intentErr)}`,
               modelUsed: 'error',
               latencyMs: sexualIntentLatency,
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
             };
           }
 
@@ -949,6 +1005,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               modelId: 'openai/gpt-4o-mini',
               isNewCustomer: true,
               totalInteractions: 0,
+              usageTrace: [],
             };
             trace.intentCategories = analysis.intentCategories;
             trace.matchedKeywords = [];
@@ -1213,7 +1270,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               skipPolicy = true;
             }
 
-            if (!agentResponse && conductStateForReply === 'normal' && isGenericInfoRequest(messageText)) {
+            if (!agentResponse && conductStateForReply !== 'silent' && isGenericInfoRequest(messageText)) {
               const deterministicInfoResponse = buildGenericInfoTemplateFromKnowledge();
               if (deterministicInfoResponse) {
                 console.log('[Instagram Webhook] Using deterministic info template response');
@@ -1336,6 +1393,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 `MUSTERI: ${customerSummary}`,
                 analysis.formattedHistory ? `\nSON KONUSMA:\n${analysis.formattedHistory}` : '',
               ].filter(Boolean).join('\n');
+              estimatedPrimaryInputTokens = estimateTokens(enrichedMessage);
 
               // Send to OpenClaw /hooks/instagram (matches hook mapping)
               const sessionKey = `hook:instagram:${senderId}`;
@@ -1427,6 +1485,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             let policyStatus: 'pass' | 'fail' | 'corrected' | 'fallback' | 'skipped' = skipPolicy ? 'skipped' : 'pass';
             let lastValidation: PolicyValidationResult | null = null;
             let firstRejection: { violations: string[]; reason: string } | null = null;
+            const policyUsageEntries: ModelUsageEntry[] = [];
+            const validationModelId = pipelineConfig.policy.validationModel;
 
             if (skipPolicy) {
               console.log('[PolicyAgent] Skipped for tier=%s (config)', analysis.modelTier);
@@ -1442,10 +1502,16 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   followUpHint: analysis.followUpHint,
                   activeTopic: analysis.activeTopicLabel,
                   responseDirective: analysis.responseDirective,
-                }, attempt);
+                }, validationModelId, attempt);
                 lastValidation = validation;
                 policyTotalLatencyMs += validation.latencyMs;
                 policyTotalTokens += validation.tokensEstimated;
+                addModelUsageEntry(
+                  policyUsageEntries,
+                  validation.usageModelUsed || validation.modelUsed,
+                  validation.usage?.inputTokens,
+                  validation.usage?.outputTokens,
+                );
 
                 if (validation.valid) {
                   policyStatus = attempt === 1 ? 'pass' : 'corrected';
@@ -1483,6 +1549,12 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   );
                   policyTotalLatencyMs += correction.latencyMs;
                   policyTotalTokens += correction.tokensEstimated;
+                  addModelUsageEntry(
+                    policyUsageEntries,
+                    correction.modelUsed,
+                    correction.usage?.inputTokens,
+                    correction.usage?.outputTokens,
+                  );
 
                   if (correction.response) {
                     finalResponse = sanitizeConductResponse(correction.response, conductStateForReply);
@@ -1511,7 +1583,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               totalTokens: policyTotalTokens,
               violations: lastValidation?.violations,
               reason: lastValidation?.reason,
-              modelUsed: lastValidation?.modelUsed,
+              modelUsed: lastValidation?.usageModelUsed || lastValidation?.modelUsed,
               originalViolations: firstRejection?.violations,
               originalReason: firstRejection?.reason,
             };
@@ -1562,15 +1634,43 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
 
             // Compute tokens and finalize trace
+            const safetyTokens = trace.sexualIntent?.totalTokens || 0;
+            const contextTokens = (analysis.usageTrace || []).reduce(
+              (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+              0,
+            );
+            const rerankTokens = trace.semanticRerank?.totalTokens || 0;
             const directTokens = trace.directResponse?.tokensEstimated || 0;
+            let directInputTokens = trace.directResponse?.inputTokens;
+            let directOutputTokens = trace.directResponse?.outputTokens;
             let estimatedInputTokens = 0;
             let estimatedOutputTokens = 0;
+
+            if (trace.directResponse?.used && directTokens > 0 && (directInputTokens == null || directOutputTokens == null)) {
+              const splitDirectTokens = splitEstimatedTokens(directTokens);
+              directInputTokens = splitDirectTokens.inputTokens;
+              directOutputTokens = splitDirectTokens.outputTokens;
+            }
+
             if (trace.directResponse?.used) {
-              trace.tokensEstimated = directTokens + policyTotalTokens;
+              trace.tokensEstimated = safetyTokens + contextTokens + rerankTokens + directTokens + policyTotalTokens;
             } else {
               estimatedOutputTokens = estimateTokens(finalResponse);
-              estimatedInputTokens = estimateTokens(messageText + knowledgeContext);
-              trace.tokensEstimated = estimatedInputTokens + estimatedOutputTokens + policyTotalTokens;
+              estimatedInputTokens = estimatedPrimaryInputTokens > 0
+                ? estimatedPrimaryInputTokens
+                : estimateTokens([
+                    messageText,
+                    formattedKnowledge,
+                    selectedEvidence,
+                    styleProfile.instructions,
+                  ].filter(Boolean).join('\n'));
+              trace.tokensEstimated =
+                safetyTokens +
+                contextTokens +
+                rerankTokens +
+                estimatedInputTokens +
+                estimatedOutputTokens +
+                policyTotalTokens;
             }
             trace.totalResponseTimeMs = Date.now() - startTime;
             const safetyFilterMs = trace.sexualIntent?.latencyMs || 0;
@@ -1600,13 +1700,19 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             };
             trace.tokenBreakdown = trace.directResponse?.used
               ? {
+                  safetyTokens,
+                  contextTokens,
+                  rerankTokens,
                   directTokens,
-                  directInputTokens: trace.directResponse.inputTokens,
-                  directOutputTokens: trace.directResponse.outputTokens,
+                  directInputTokens,
+                  directOutputTokens,
                   policyTokens: policyTotalTokens,
                   totalTokens: trace.tokensEstimated,
                 }
               : {
+                  safetyTokens,
+                  contextTokens,
+                  rerankTokens,
                   estimatedInputTokens,
                   estimatedOutputTokens,
                   policyTokens: policyTotalTokens,
@@ -1652,8 +1758,58 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // MC Integration — fire-and-forget
             try {
               const totalTokensForCost = trace.tokensEstimated || 0;
-              const estimatedCost = totalTokensForCost * 0.000001;
               const actualModelUsedMC = trace.directResponse?.used ? trace.directResponse.modelId : analysis.modelId;
+              const costUsageEntries: ModelUsageEntry[] = [];
+
+              addAIUsageTraceEntries(costUsageEntries, analysis.usageTrace);
+              addModelUsageEntry(
+                costUsageEntries,
+                trace.sexualIntent?.modelUsed,
+                trace.sexualIntent?.inputTokens,
+                trace.sexualIntent?.outputTokens,
+              );
+              addModelUsageEntry(
+                costUsageEntries,
+                trace.semanticRerank?.modelId,
+                trace.semanticRerank?.inputTokens,
+                trace.semanticRerank?.outputTokens,
+              );
+
+              if (trace.directResponse?.used) {
+                addModelUsageEntry(
+                  costUsageEntries,
+                  trace.directResponse.modelId,
+                  directInputTokens,
+                  directOutputTokens,
+                );
+              } else {
+                addModelUsageEntry(
+                  costUsageEntries,
+                  analysis.modelId,
+                  estimatedInputTokens,
+                  estimatedOutputTokens,
+                );
+              }
+
+              for (const usageEntry of policyUsageEntries) {
+                costUsageEntries.push(usageEntry);
+              }
+
+              if (costUsageEntries.length === 0 && totalTokensForCost > 0) {
+                const fallbackSplit = splitEstimatedTokens(totalTokensForCost);
+                addModelUsageEntry(
+                  costUsageEntries,
+                  actualModelUsedMC,
+                  fallbackSplit.inputTokens,
+                  fallbackSplit.outputTokens,
+                );
+              }
+
+              const costLedgerEntries = aggregateUsageByModel(costUsageEntries);
+              const totalEstimatedCostUsd = costLedgerEntries.reduce(
+                (sum, entry) => sum + entry.estimatedCostUsd,
+                0,
+              );
 
               const convId = `ig_${senderId}_${Date.now()}`;
 
@@ -1673,11 +1829,18 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               `).get(senderId) as { id: string } | undefined;
               const actualConvId = conv?.id || convId;
 
-              // INSERT mc_cost_ledger
-              db.prepare(`
+              const insertCostLedger = db.prepare(`
                 INSERT INTO mc_cost_ledger (agent_id, model, provider, input_tokens, output_tokens, cost, job_source, created_at)
                 VALUES ('instagram-dm', ?, 'openrouter', ?, ?, ?, 'instagram', datetime('now'))
-              `).run(actualModelUsedMC, Math.round(totalTokensForCost * 0.6), Math.round(totalTokensForCost * 0.4), estimatedCost);
+              `);
+              for (const costEntry of costLedgerEntries) {
+                insertCostLedger.run(
+                  costEntry.modelId,
+                  costEntry.inputTokens,
+                  costEntry.outputTokens,
+                  costEntry.estimatedCostUsd,
+                );
+              }
 
               // INSERT mc_events
               db.prepare(`
@@ -1692,6 +1855,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   model_tier: analysis.modelTier,
                   intent_categories: analysis.intentCategories,
                   tokens_estimated: totalTokensForCost,
+                  estimated_cost_usd: Number(totalEstimatedCostUsd.toFixed(10)),
                   policy_status: policyStatus,
                   direct_response: !!trace.directResponse?.used,
                 })

@@ -3,6 +3,7 @@ import { ConversationStateService } from './ConversationStateService.js';
 import type { ConversationStateRecord } from './ConversationStateService.js';
 import { hasAgePolicySignals } from './PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from './RoomAvailabilitySignalService.js';
+import { extractUsageMetrics } from './UsageMetrics.js';
 
 /**
  * Normalize Turkish diacritical characters to ASCII equivalents.
@@ -116,6 +117,15 @@ export interface MessageAnalysis {
   modelId: string;
   isNewCustomer: boolean;
   totalInteractions: number;  // all-time count for customer summary
+  usageTrace?: AIUsageTrace[];
+}
+
+export interface AIUsageTrace {
+  stage: 'context_planner' | 'context_repair_history' | 'context_repair_state';
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
 }
 
 interface AIContextPlan extends ContextualIntentResult {
@@ -123,6 +133,7 @@ interface AIContextPlan extends ContextualIntentResult {
   tierReason: string;
   topicSummary: string | null;
   stateRepairApplied: boolean;
+  usageTrace?: AIUsageTrace[];
 }
 
 interface ContextDependency {
@@ -130,6 +141,11 @@ interface ContextDependency {
   topicLabel: string | null;
   sourceMessage: string | null;
   rationale: string;
+}
+
+interface ContextDependencyWithUsage {
+  dependency: ContextDependency;
+  usageTrace: AIUsageTrace | null;
 }
 
 const VALID_INTENT_CATEGORIES = new Set(['services', 'pricing', 'hours', 'policies', 'contact', 'faq', 'general']);
@@ -194,6 +210,23 @@ export class InstagramContextService {
     this.conversationStateService = new ConversationStateService(db);
   }
 
+  private buildUsageTrace(
+    stage: AIUsageTrace['stage'],
+    modelId: string,
+    payload: { usage?: Record<string, unknown>; cost?: unknown } | null | undefined,
+    promptText: string,
+    content: string,
+  ): AIUsageTrace {
+    const usage = extractUsageMetrics(payload, promptText, content);
+    return {
+      stage,
+      modelId,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+    };
+  }
+
   async analyzeMessage(senderId: string, messageText: string): Promise<MessageAnalysis> {
       try {
         const conversationHistory = this.getRecentContextWindow(this.getConversationHistory(senderId));
@@ -229,6 +262,7 @@ export class InstagramContextService {
           modelId,
           isNewCustomer,
           totalInteractions,
+          usageTrace: contextPlan.usageTrace || [],
         };
       } catch (error) {
         console.error('[InstagramContextService] analyzeMessage error:', error);
@@ -966,11 +1000,14 @@ export class InstagramContextService {
     };
   }
 
-  private async repairImplicitFollowUpAI(messageText: string, history: ConversationEntry[]): Promise<ContextDependency> {
+  private async repairImplicitFollowUpAI(messageText: string, history: ConversationEntry[]): Promise<ContextDependencyWithUsage> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     const latestCustomerEntry = this.getLatestCustomerEntry(history);
     if (!apiKey || !latestCustomerEntry) {
-      return DEFAULT_CONTEXT_DEPENDENCY;
+      return {
+        dependency: DEFAULT_CONTEXT_DEPENDENCY,
+        usageTrace: null,
+      };
     }
 
     const latestAssistantEntry = this.getLatestAssistantEntry(history);
@@ -1020,28 +1057,51 @@ export class InstagramContextService {
       });
 
       if (!response.ok) {
-        return DEFAULT_CONTEXT_DEPENDENCY;
+        return {
+          dependency: DEFAULT_CONTEXT_DEPENDENCY,
+          usageTrace: null,
+        };
       }
 
-      const data = await response.json() as any;
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
       const content = data?.choices?.[0]?.message?.content?.trim();
       if (!content) {
-        return DEFAULT_CONTEXT_DEPENDENCY;
+        return {
+          dependency: DEFAULT_CONTEXT_DEPENDENCY,
+          usageTrace: null,
+        };
       }
 
-      return this.normalizeContextDependency(JSON.parse(this.extractJsonText(content)));
+      return {
+        dependency: this.normalizeContextDependency(JSON.parse(this.extractJsonText(content))),
+        usageTrace: this.buildUsageTrace('context_repair_history', 'google/gemini-2.5-flash-lite', data, `Only return valid JSON.\n${prompt}`, content),
+      };
     } catch {
-      return DEFAULT_CONTEXT_DEPENDENCY;
+      return {
+        dependency: DEFAULT_CONTEXT_DEPENDENCY,
+        usageTrace: null,
+      };
     }
   }
 
   private async repairImplicitFollowUpFromStateAI(
     messageText: string,
     conversationState: ConversationStateRecord,
-  ): Promise<ContextDependency> {
+  ): Promise<ContextDependencyWithUsage> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey || !conversationState.activeTopic) {
-      return DEFAULT_CONTEXT_DEPENDENCY;
+      return {
+        dependency: DEFAULT_CONTEXT_DEPENDENCY,
+        usageTrace: null,
+      };
     }
 
     const prompt = [
@@ -1097,18 +1157,38 @@ export class InstagramContextService {
       });
 
       if (!response.ok) {
-        return DEFAULT_CONTEXT_DEPENDENCY;
+        return {
+          dependency: DEFAULT_CONTEXT_DEPENDENCY,
+          usageTrace: null,
+        };
       }
 
-      const data = await response.json() as any;
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+          };
+        }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
+      };
       const content = data?.choices?.[0]?.message?.content?.trim();
       if (!content) {
-        return DEFAULT_CONTEXT_DEPENDENCY;
+        return {
+          dependency: DEFAULT_CONTEXT_DEPENDENCY,
+          usageTrace: null,
+        };
       }
 
-      return this.normalizeContextDependency(JSON.parse(this.extractJsonText(content)));
+      return {
+        dependency: this.normalizeContextDependency(JSON.parse(this.extractJsonText(content))),
+        usageTrace: this.buildUsageTrace('context_repair_state', 'google/gemini-2.5-flash-lite', data, `Only return valid JSON.\n${prompt}`, content),
+      };
     } catch {
-      return DEFAULT_CONTEXT_DEPENDENCY;
+      return {
+        dependency: DEFAULT_CONTEXT_DEPENDENCY,
+        usageTrace: null,
+      };
     }
   }
 
@@ -1298,6 +1378,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       tier: tier.tier,
       tierReason: `${tier.reason} (legacy fallback)`,
       stateRepairApplied: false,
+      usageTrace: [],
     };
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
@@ -1379,26 +1460,35 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       }
 
       const plan = this.parseAIContextPlan(content, messageText);
+      plan.usageTrace = [
+        this.buildUsageTrace('context_planner', 'google/gemini-2.5-flash-lite', data, `Only return valid JSON.\n${prompt}`, content),
+      ];
       if (this.shouldAttemptContextRepair(plan, history)) {
-        const repairedDependency = await this.repairImplicitFollowUpAI(messageText, history);
-        const repairedFollowUpHint = this.buildDerivedFollowUpHint(messageText, repairedDependency);
+        const repairResult = await this.repairImplicitFollowUpAI(messageText, history);
+        if (repairResult.usageTrace) {
+          plan.usageTrace.push(repairResult.usageTrace);
+        }
+        const repairedFollowUpHint = this.buildDerivedFollowUpHint(messageText, repairResult.dependency);
         if (repairedFollowUpHint) {
           plan.followUpHint = repairedFollowUpHint;
-          plan.categories = this.applyContextDependencyToCategories(plan.categories, repairedDependency);
-          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairedDependency);
+          plan.categories = this.applyContextDependencyToCategories(plan.categories, repairResult.dependency);
+          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairResult.dependency);
           console.log('[InstagramContextService] AI context repair resolved: "%s" -> "%s"',
             repairedFollowUpHint.sourceMessage,
             repairedFollowUpHint.rewrittenQuestion);
         }
       }
       if (this.shouldAttemptStateRepair(plan, messageText, conversationState)) {
-        const repairedDependency = await this.repairImplicitFollowUpFromStateAI(messageText, conversationState!);
-        const repairedFollowUpHint = this.buildDerivedFollowUpHint(messageText, repairedDependency);
+        const repairResult = await this.repairImplicitFollowUpFromStateAI(messageText, conversationState!);
+        if (repairResult.usageTrace) {
+          plan.usageTrace.push(repairResult.usageTrace);
+        }
+        const repairedFollowUpHint = this.buildDerivedFollowUpHint(messageText, repairResult.dependency);
         if (repairedFollowUpHint) {
           plan.followUpHint = repairedFollowUpHint;
           plan.topicSummary = plan.topicSummary || repairedFollowUpHint.topicLabel;
-          plan.categories = this.applyContextDependencyToCategories(plan.categories, repairedDependency);
-          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairedDependency);
+          plan.categories = this.applyContextDependencyToCategories(plan.categories, repairResult.dependency);
+          plan.responseDirective = this.applyContextDependencyToDirective(plan.responseDirective, repairResult.dependency);
           plan.stateRepairApplied = true;
           console.log('[InstagramContextService] State context repair resolved: "%s" -> "%s"',
             repairedFollowUpHint.sourceMessage,

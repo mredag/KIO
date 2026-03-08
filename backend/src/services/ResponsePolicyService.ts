@@ -33,7 +33,12 @@
  */
 
 import type { FollowUpContextHint, ResponseDirective } from './InstagramContextService.js';
-import { extractUsageMetrics } from './UsageMetrics.js';
+import {
+  addUsageMetrics,
+  extractUsageMetrics,
+  ZERO_USAGE_METRICS,
+  type UsageMetrics,
+} from './UsageMetrics.js';
 import {
   hasAgePolicySignals,
   hasAgeRestrictionEvidenceLine,
@@ -119,9 +124,11 @@ export interface PolicyValidationResult {
   violations: string[];
   reason: string;
   modelUsed: string;
+  usageModelUsed?: string;
   latencyMs: number;
   tokensEstimated: number;
   attempt: number;
+  usage?: UsageMetrics;
 }
 
 export interface PolicyValidationContext {
@@ -149,6 +156,18 @@ export class ResponsePolicyService {
   constructor() {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
     this.openAiKey = process.env.OPENAI_API_KEY || '';
+  }
+
+  private combineUsage(...usages: Array<UsageMetrics | undefined>): UsageMetrics | undefined {
+    const present = usages.filter((usage): usage is UsageMetrics => !!usage);
+    if (present.length === 0) {
+      return undefined;
+    }
+
+    return present.reduce(
+      (acc, usage) => addUsageMetrics(acc, usage),
+      ZERO_USAGE_METRICS,
+    );
   }
 
   private async checkModerationAPI(text: string): Promise<{ valid: boolean, violations: string[] }> {
@@ -450,7 +469,7 @@ export class ResponsePolicyService {
     }
     if (!this.apiKey) {
       console.warn('[PolicyAgent] No OPENROUTER_API_KEY — failing validation');
-      return { valid: false, violations: ['Missing OPENROUTER_API_KEY (fail-closed)'], reason: 'skipped (no API key)', modelUsed: validationModel, latencyMs: 0, tokensEstimated: 0, attempt };
+      return { valid: false, violations: ['Missing OPENROUTER_API_KEY (fail-closed)'], reason: 'skipped (no API key)', modelUsed: validationModel, usageModelUsed: validationModel, latencyMs: 0, tokensEstimated: 0, attempt, usage: undefined };
     }
 
     // Layer 1: Safety (Moderation API)
@@ -468,9 +487,11 @@ export class ResponsePolicyService {
         violations: modResult.violations,
         reason: 'OpenAI Moderation blocked the response',
         modelUsed: 'omni-moderation-latest',
+        usageModelUsed: undefined,
         latencyMs: Date.now() - modStart,
         tokensEstimated: 0,
         attempt,
+        usage: undefined,
       };
       }
     }
@@ -488,9 +509,11 @@ export class ResponsePolicyService {
         violations: deterministicResult.violations,
         reason: deterministicResult.reason,
         modelUsed: 'deterministic-grounding',
+        usageModelUsed: validationModel,
         latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs,
         tokensEstimated: ruleResult.tokensEstimated,
         attempt,
+        usage: ruleResult.usage,
       };
     }
 
@@ -521,6 +544,7 @@ export class ResponsePolicyService {
         violations: [],
         reason: ruleResult.valid ? ruleResult.reason : 'policy pass after deterministic verification',
         latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs,
+        usage: ruleResult.usage,
       };
     }
 
@@ -531,9 +555,11 @@ export class ResponsePolicyService {
         violations: [...ruleResult.violations, ...faithResult.violations],
         reason: faithResult.reason,
         modelUsed: faithResult.modelUsed,
+        usageModelUsed: faithResult.usageModelUsed || ruleResult.usageModelUsed,
         latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs + faithResult.latencyMs,
         tokensEstimated: ruleResult.tokensEstimated + faithResult.tokensEstimated,
         attempt,
+        usage: this.combineUsage(ruleResult.usage, faithResult.usage),
       };
     }
 
@@ -544,6 +570,8 @@ export class ResponsePolicyService {
       reason: ruleResult.valid ? ruleResult.reason : 'policy pass after deterministic verification',
       latencyMs: ruleResult.latencyMs + deterministicResult.latencyMs + faithResult.latencyMs,
       tokensEstimated: ruleResult.tokensEstimated + faithResult.tokensEstimated,
+      usageModelUsed: ruleResult.usageModelUsed || faithResult.usageModelUsed,
+      usage: this.combineUsage(ruleResult.usage, faithResult.usage),
     };
   }
 
@@ -553,7 +581,7 @@ export class ResponsePolicyService {
   private async validateRules(context: PolicyValidationContext, validationModel: string, attempt: number): Promise<PolicyValidationResult> {
     if (!this.apiKey) {
       console.warn('[PolicyAgent] No OPENROUTER_API_KEY — failing rule validation');
-      return { valid: false, violations: ['Missing OPENROUTER_API_KEY (fail-closed)'], reason: 'skipped (no API key)', modelUsed: validationModel, latencyMs: 0, tokensEstimated: 0, attempt };
+      return { valid: false, violations: ['Missing OPENROUTER_API_KEY (fail-closed)'], reason: 'skipped (no API key)', modelUsed: validationModel, usageModelUsed: validationModel, latencyMs: 0, tokensEstimated: 0, attempt, usage: undefined };
     }
 
     const startTime = Date.now();
@@ -598,7 +626,7 @@ export class ResponsePolicyService {
       if (!response.ok) {
         const errBody = await response.text();
         console.error('[PolicyAgent] OpenRouter error:', response.status, errBody);
-        return { valid: false, violations: [`API error ${response.status} (fail-closed)`], reason: `API error ${response.status}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
+        return { valid: false, violations: [`API error ${response.status} (fail-closed)`], reason: `API error ${response.status}`, modelUsed: validationModel, usageModelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
       }
 
       const data = await response.json() as {
@@ -611,11 +639,12 @@ export class ResponsePolicyService {
         cost?: unknown;
       };
       const content = data.choices?.[0]?.message?.content?.trim() || '';
-      const tokensEstimated = extractUsageMetrics(
+      const usage = extractUsageMetrics(
         data,
         VALIDATION_SYSTEM_PROMPT_SIMPLE + userPrompt,
         content,
-      ).totalTokens;
+      );
+      const tokensEstimated = usage.totalTokens;
 
       try {
         const cleaned = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();
@@ -626,18 +655,20 @@ export class ResponsePolicyService {
           violations: Array.isArray(result.violations) ? result.violations : [],
           reason: result.reason || (result.valid ? 'passed' : 'failed'),
           modelUsed: validationModel,
+          usageModelUsed: validationModel,
           latencyMs,
           tokensEstimated,
           attempt,
+          usage,
         };
       } catch (parseErr) {
         console.error('[PolicyAgent] Failed to parse LLM response:', content);
-        return { valid: false, violations: ['Parse error (fail-closed)'], reason: `parse error: ${content.substring(0, 100)}`, modelUsed: validationModel, latencyMs, tokensEstimated, attempt };
+        return { valid: false, violations: ['Parse error (fail-closed)'], reason: `parse error: ${content.substring(0, 100)}`, modelUsed: validationModel, usageModelUsed: validationModel, latencyMs, tokensEstimated, attempt, usage };
       }
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
       console.error('[PolicyAgent] Network error:', err?.message);
-      return { valid: false, violations: ['Network error (fail-closed)'], reason: `network error: ${err?.message}`, modelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
+      return { valid: false, violations: ['Network error (fail-closed)'], reason: `network error: ${err?.message}`, modelUsed: validationModel, usageModelUsed: validationModel, latencyMs, tokensEstimated: 0, attempt };
     }
   }
 
@@ -982,7 +1013,8 @@ YANITINI SADECE JSON OLARAK VER:
         cost?: unknown;
       };
       const content = data.choices?.[0]?.message?.content?.trim() || '';
-      const tokensEstimated = extractUsageMetrics(data, faithfulnessPrompt, content).totalTokens;
+      const usage = extractUsageMetrics(data, faithfulnessPrompt, content);
+      const tokensEstimated = usage.totalTokens;
 
       try {
         const cleaned = content.replace(/```json\\s*/g, '').replace(/```\\s*/g, '').trim();
@@ -990,7 +1022,7 @@ YANITINI SADECE JSON OLARAK VER:
 
         if (result.faithful === true) {
           console.log('[PolicyAgent:Faithfulness] All claims grounded (%dms)', latencyMs);
-          return { valid: true, violations: [], reason: 'faithfulness: all claims grounded', modelUsed: validationModel, latencyMs, tokensEstimated, attempt };
+          return { valid: true, violations: [], reason: 'faithfulness: all claims grounded', modelUsed: validationModel, latencyMs, tokensEstimated, attempt, usage };
         }
 
         // Extract ungrounded claims as violations
@@ -1009,10 +1041,11 @@ YANITINI SADECE JSON OLARAK VER:
           latencyMs,
           tokensEstimated,
           attempt,
+          usage,
         };
       } catch (parseErr) {
         console.error('[PolicyAgent:Faithfulness] Parse error:', content.substring(0, 200));
-        return { valid: false, violations: ['Faithfulness parse error (fail-closed)'], reason: `faithfulness parse error: ${content.substring(0, 100)}`, modelUsed: validationModel, latencyMs, tokensEstimated, attempt };
+        return { valid: false, violations: ['Faithfulness parse error (fail-closed)'], reason: `faithfulness parse error: ${content.substring(0, 100)}`, modelUsed: validationModel, latencyMs, tokensEstimated, attempt, usage };
       }
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
@@ -1032,10 +1065,10 @@ YANITINI SADECE JSON OLARAK VER:
     knowledgeContext: string,
     modelId: string = 'openai/gpt-4o-mini',
     context: Pick<PolicyValidationContext, 'selectedEvidence' | 'followUpHint' | 'activeTopic' | 'responseDirective'> = {},
-  ): Promise<{ response: string | null; latencyMs: number; tokensEstimated: number }> {
+  ): Promise<{ response: string | null; latencyMs: number; tokensEstimated: number; modelUsed: string; usage?: UsageMetrics }> {
     if (!this.apiKey) {
       console.warn('[PolicyAgent] No OPENROUTER_API_KEY — failing correction');
-      return { response: null, latencyMs: 0, tokensEstimated: 0 };
+      return { response: null, latencyMs: 0, tokensEstimated: 0, modelUsed: modelId };
     }
 
     const startTime = Date.now();
@@ -1127,7 +1160,7 @@ Kurallara uygun yeni bir yanıt yaz.`;
 
       if (!response.ok) {
         console.error('[PolicyAgent] Correction API error:', response.status);
-        return { response: null, latencyMs, tokensEstimated: 0 };
+        return { response: null, latencyMs, tokensEstimated: 0, modelUsed: modelId };
       }
 
       const data = await response.json() as {
@@ -1140,14 +1173,15 @@ Kurallara uygun yeni bir yanıt yaz.`;
         cost?: unknown;
       };
       const content = data.choices?.[0]?.message?.content?.trim() || '';
-      const tokensEstimated = extractUsageMetrics(data, systemPrompt + userPrompt, content).totalTokens;
+      const usage = extractUsageMetrics(data, systemPrompt + userPrompt, content);
+      const tokensEstimated = usage.totalTokens;
 
       console.log('[PolicyAgent] Direct correction generated in %dms (%d chars)', latencyMs, content.length);
-      return { response: content || null, latencyMs, tokensEstimated };
+      return { response: content || null, latencyMs, tokensEstimated, modelUsed: modelId, usage };
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
       console.error('[PolicyAgent] Correction network error:', err?.message);
-      return { response: null, latencyMs, tokensEstimated: 0 };
+      return { response: null, latencyMs, tokensEstimated: 0, modelUsed: modelId };
     }
   }
 }

@@ -265,10 +265,10 @@ export function buildDMStyleProfile(params: {
       mode: 'final_warning',
       instructions: [
         'YANIT STILI:',
-        '- En kisa tamamlanmis yaniti ver; emojisiz, selamlamasiz ve mesafeli yaz.',
+        '- Kisa, net ve profesyonel yaz; emojisiz ve gereksiz sohbet olmadan cevap ver.',
         '- Takip sorusu sorma, sohbet acma, tesekkur veya sicak kapanis ekleme.',
         '- Telefon, randevu veya ek yardim cagrisi ekleme; musteri acikca istemediyse yonlendirme yapma.',
-        '- Eger mesru bir fiyat/saat/adres bilgisi verilecekse sadece cekirdek bilgiyi ver, ekstra aciklama ekleme.',
+        '- Eger mesru bir fiyat/saat/adres bilgisi verilecekse onu dogrudan ve dogru sekilde ver; gereksiz yumusatma ekleme.',
       ].join('\n'),
       trace: {
         mode: 'final_warning',
@@ -285,15 +285,16 @@ export function buildDMStyleProfile(params: {
       mode: 'guarded',
       instructions: [
         'YANIT STILI:',
-        '- Kisa, mesafeli ve emojisiz yaz.',
-        '- Uzun acilis, yumusak sohbet tonu, tesekkur veya davetkar kapanis kullanma.',
-        '- Sadece gereken bilgiyi ver; takip sorusu sorma ve gereksiz telefon/iletisim yonlendirmesi ekleme.',
+        '- Kisa, net ve profesyonel yaz.',
+        '- Uzun acilis, gereksiz emoji, tesekkur veya davetkar kapanis kullanma.',
+        '- Sadece gereken bilgiyi ver; fakat mesru soruyu normal bicimde cevaplamaya devam et.',
+        '- Takip sorusu ve telefon/iletisim yonlendirmesi sadece cevap icin gercekten gerekliyse kullan.',
       ].join('\n'),
       trace: {
         mode: 'guarded',
         greetingPolicy: 'minimal',
         emojiPolicy: 'none',
-        ctaPolicy: 'minimal',
+        ctaPolicy: 'only_when_needed',
         antiRepeatSignals,
       },
     };

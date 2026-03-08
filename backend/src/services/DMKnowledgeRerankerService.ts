@@ -2,6 +2,7 @@ import type { FollowUpContextHint } from './InstagramContextService.js';
 import type { SemanticRetrievalCandidate } from './DMKnowledgeRetrievalService.js';
 import { hasAgePolicySignals, normalizePolicySignalText } from './PolicySignalService.js';
 import { hasRoomAvailabilitySignals, normalizeRoomAvailabilitySignalText } from './RoomAvailabilitySignalService.js';
+import { extractUsageMetrics } from './UsageMetrics.js';
 
 const RERANK_MODEL = 'google/gemini-2.5-flash-lite';
 
@@ -18,6 +19,9 @@ export interface SemanticRerankTrace {
   latencyMs: number;
   skippedReason: string | null;
   rationale: string | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
 }
 
 export interface SemanticRerankResult {
@@ -70,6 +74,9 @@ export class DMKnowledgeRerankerService {
       latencyMs: 0,
       skippedReason: null,
       rationale: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
     };
 
     if (params.candidates.length === 0 || maxSelections === 0) {
@@ -115,6 +122,7 @@ export class DMKnowledgeRerankerService {
     }
 
     try {
+      const prompt = this.buildPrompt(params, maxSelections);
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -127,7 +135,7 @@ export class DMKnowledgeRerankerService {
           model: RERANK_MODEL,
           messages: [
             { role: 'system', content: 'Only return valid JSON.' },
-            { role: 'user', content: this.buildPrompt(params, maxSelections) },
+            { role: 'user', content: prompt },
           ],
           temperature: 0,
           max_tokens: 250,
@@ -159,8 +167,11 @@ export class DMKnowledgeRerankerService {
             content?: string;
           };
         }>;
+        usage?: Record<string, unknown>;
+        cost?: unknown;
       };
       const content = data.choices?.[0]?.message?.content?.trim() || '';
+      const usage = extractUsageMetrics(data, `Only return valid JSON.${prompt}`, content);
       const parsed = JSON.parse(this.extractJsonText(content)) as {
         selectedIds?: unknown;
         rationale?: unknown;
@@ -188,6 +199,9 @@ export class DMKnowledgeRerankerService {
           latencyMs: Date.now() - startedAt,
           rationale: String(parsed.rationale ?? '').trim() || null,
           skippedReason: null,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
         },
       };
     } catch {

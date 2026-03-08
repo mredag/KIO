@@ -4,6 +4,7 @@ import {
   decideSexualIntent,
   evaluateSexualIntent,
   getSexualIntentReply,
+  shouldEscalateConductForSexualDecision,
 } from './sexualIntentFilter.js';
 
 describe('sexualIntentFilter', () => {
@@ -416,6 +417,35 @@ describe('sexualIntentFilter', () => {
     expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
     expect(decision.reason).toContain('what-to-bring question');
     expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows pricing-difference questions with multiple price anchors without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('1800 deginiz nedir mesela bi de 1300 yani sadece ara daki farki anlamadim ben');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('pricing/package differences');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows price-difference follow-ups even when they mention only pricing words', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('Anladim tesekkurler sadece fiyatlari alamadim fark nedir aralarindaki');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('pricing/package differences');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('does not escalate conduct for retry-question decisions', () => {
+    expect(shouldEscalateConductForSexualDecision('retry_question')).toBe(false);
+    expect(shouldEscalateConductForSexualDecision('block_message')).toBe(true);
   });
 
   it('allows legitimate spouse same-room massage requests without hitting the model', async () => {

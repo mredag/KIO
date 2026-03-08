@@ -1,4 +1,10 @@
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
+import {
+  addUsageMetrics,
+  extractUsageMetrics,
+  ZERO_USAGE_METRICS,
+  type UsageMetrics,
+} from '../services/UsageMetrics.js';
 
 export interface SexualIntentClassification {
   confidence: number; // 0-1
@@ -6,15 +12,20 @@ export interface SexualIntentClassification {
   reason: string;
   rawLabel?: string;
   modelUsed: string;
+  usage?: UsageMetrics;
 }
 
 export type SexualIntentDecision =
-  | { action: 'allow'; confidence: number; reason: string; modelUsed: string }
-  | { action: 'retry_question'; confidence: number; reason: string; modelUsed: string }
-  | { action: 'block_message'; confidence: number; reason: string; modelUsed: string };
+  | { action: 'allow'; confidence: number; reason: string; modelUsed: string; usage?: UsageMetrics }
+  | { action: 'retry_question'; confidence: number; reason: string; modelUsed: string; usage?: UsageMetrics }
+  | { action: 'block_message'; confidence: number; reason: string; modelUsed: string; usage?: UsageMetrics };
 
 type SexualIntentPass = 'primary' | 'review';
 type SexualIntentAction = SexualIntentDecision['action'];
+
+export function shouldEscalateConductForSexualDecision(action: SexualIntentAction): boolean {
+  return action === 'block_message';
+}
 
 interface BoundaryProbeContext {
   normalized: string;
@@ -33,7 +44,8 @@ const SEXUAL_BLOCK_REPLY = 'Bizde o dediginiz sey yoktur. Yalnizca profesyonel s
 const SEXUAL_RETRY_REPLY = 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.';
 const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist)\b/u;
 const SHORT_PROBE_PATTERN = /\b(nasil|oluyor|olur|var|varmi|nedir|ne)\b/u;
-const PRICE_QUESTION_PATTERN = /\b(fiyat|ucret|price|ne\s*kadar|kac\s*(tl|lira))\b/u;
+const PRICE_QUESTION_PATTERN = /\b(fiyat\w*|ucret\w*|price|ne\s*kadar|kac\s*(tl|lira))\b/u;
+const PRICE_COMPARISON_PATTERN = /\b(fark|farki|farkli|aradaki|ara\s*daki|arasindaki|arasinda|difference|karsilastir|anlamadim)\b/u;
 const DURATION_PATTERN = /\b\d{1,3}\s*(dk|dak|daka|dakika|min|minute)\b/u;
 const LOCATION_QUESTION_PATTERN = /\b(nerede|neredesiniz|neresindesiniz|adres|konum|lokasyon|harita|yol\s*tarifi)\b/u;
 const CONTACT_QUESTION_PATTERN = /\b(telefon|numara|iletisim|ulasim|ulasabilir|whatsapp)\b/u;
@@ -93,7 +105,19 @@ function extractJsonRecord(content: string): Record<string, unknown> | null {
   return parsed;
 }
 
-function extractClassification(content: string, modelUsed: string): SexualIntentClassification {
+function combineUsage(...usages: Array<UsageMetrics | undefined>): UsageMetrics | undefined {
+  const present = usages.filter((usage): usage is UsageMetrics => !!usage);
+  if (present.length === 0) {
+    return undefined;
+  }
+
+  return present.reduce(
+    (acc, usage) => addUsageMetrics(acc, usage),
+    ZERO_USAGE_METRICS,
+  );
+}
+
+function extractClassification(content: string, modelUsed: string, usage?: UsageMetrics): SexualIntentClassification {
   const parsed = extractJsonRecord(content);
 
   if (!parsed) {
@@ -104,6 +128,7 @@ function extractClassification(content: string, modelUsed: string): SexualIntent
       isSexual: likelySexual,
       reason: 'Model response was not valid JSON',
       modelUsed,
+      usage,
     };
   }
 
@@ -122,6 +147,7 @@ function extractClassification(content: string, modelUsed: string): SexualIntent
     reason: reason || 'No reason provided',
     rawLabel: label || undefined,
     modelUsed,
+    usage,
   };
 }
 
@@ -197,8 +223,11 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
 
   const hasBusinessAnchor = SAFE_BUSINESS_ANCHOR_PATTERN.test(spaced);
   const hasPriceQuestion = PRICE_QUESTION_PATTERN.test(spaced);
+  const hasPriceComparisonCue = PRICE_COMPARISON_PATTERN.test(spaced);
   const hasDurationToken = DURATION_PATTERN.test(spaced);
   const hasNumericToken = /\b\d{1,4}\b/.test(spaced);
+  const numericTokens = spaced.match(/\b\d{3,4}\b/g) || [];
+  const hasMultipleNumericTokens = new Set(numericTokens).size >= 2;
   const hasLocationQuestion = LOCATION_QUESTION_PATTERN.test(spaced);
   const hasContactQuestion = CONTACT_QUESTION_PATTERN.test(spaced);
   const hasBenignInfoRequest = BENIGN_INFO_REQUEST_PATTERN.test(spaced);
@@ -224,12 +253,17 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
   // Covers compact typo forms like "30daka ne kadar".
   const looksLikeDurationPriceQuestion = hasDurationToken && (hasPriceQuestion || hasNumericToken);
   const looksLikeConcreteBusinessPriceQuestion = hasPriceQuestion && (hasBusinessAnchor || hasNumericToken);
+  const looksLikeBusinessComparisonQuestion = !hasBoundarySuspiciousCue
+    && hasPriceComparisonCue
+    && (hasPriceQuestion || hasBusinessAnchor || hasMultipleNumericTokens);
 
-  if (looksLikeDurationPriceQuestion || looksLikeConcreteBusinessPriceQuestion) {
+  if (looksLikeDurationPriceQuestion || looksLikeConcreteBusinessPriceQuestion || looksLikeBusinessComparisonQuestion) {
     return {
       action: 'allow',
       confidence: 0,
-      reason: 'Detected clear business pricing question with concrete duration/number anchor.',
+      reason: looksLikeBusinessComparisonQuestion
+        ? 'Detected business comparison question about pricing/package differences.'
+        : 'Detected clear business pricing question with concrete duration/number anchor.',
       modelUsed: 'heuristic-clear-business-guard',
     };
   }
@@ -392,6 +426,7 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
       confidence: sexualScore,
       reason: classification.reason,
       modelUsed: classification.modelUsed,
+      usage: classification.usage,
     };
   }
 
@@ -401,6 +436,7 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
       confidence: sexualScore,
       reason: classification.reason,
       modelUsed: classification.modelUsed,
+      usage: classification.usage,
     };
   }
 
@@ -410,6 +446,7 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
       confidence: sexualScore,
       reason: classification.reason,
       modelUsed: classification.modelUsed,
+      usage: classification.usage,
     };
   }
 
@@ -418,6 +455,7 @@ export function decideSexualIntent(classification: SexualIntentClassification): 
     confidence: sexualScore,
     reason: classification.reason,
     modelUsed: classification.modelUsed,
+    usage: classification.usage,
   };
 }
 
@@ -479,14 +517,24 @@ function mergeSexualIntentDecisions(
   } as const;
 
   if (severity[review.action] > severity[primary.action]) {
-    return review;
+    return {
+      ...review,
+      usage: combineUsage(primary.usage, review.usage),
+    };
   }
 
   if (severity[review.action] < severity[primary.action]) {
-    return primary;
+    return {
+      ...primary,
+      usage: combineUsage(primary.usage, review.usage),
+    };
   }
 
-  return review.confidence > primary.confidence ? review : primary;
+  const winner = review.confidence > primary.confidence ? review : primary;
+  return {
+    ...winner,
+    usage: combineUsage(primary.usage, review.usage),
+  };
 }
 
 function normalizeDecisionAction(value: unknown): SexualIntentAction {
@@ -503,7 +551,7 @@ function normalizeDecisionAction(value: unknown): SexualIntentAction {
   return 'allow';
 }
 
-function extractBoundaryProbeDecision(content: string, modelUsed: string): SexualIntentDecision {
+function extractBoundaryProbeDecision(content: string, modelUsed: string, usage?: UsageMetrics): SexualIntentDecision {
   const parsed = extractJsonRecord(content);
 
   if (!parsed) {
@@ -513,6 +561,7 @@ function extractBoundaryProbeDecision(content: string, modelUsed: string): Sexua
       confidence: lowered.includes('block') || lowered.includes('retry') ? 0.6 : 0,
       reason: 'Boundary review response was not valid JSON',
       modelUsed,
+      usage,
     };
   }
 
@@ -530,6 +579,7 @@ function extractBoundaryProbeDecision(content: string, modelUsed: string): Sexua
     confidence,
     reason,
     modelUsed,
+    usage,
   };
 }
 
@@ -628,11 +678,14 @@ async function evaluateBoundaryProbeIntent(messageText: string): Promise<SexualI
         };
       }>;
       model?: string;
+      usage?: Record<string, unknown>;
+      cost?: unknown;
     };
 
     const content = data.choices?.[0]?.message?.content ?? '';
     const modelUsed = data.model || model;
-    return extractBoundaryProbeDecision(content, modelUsed);
+    const usage = extractUsageMetrics(data, `${systemPrompt}\n${userPrompt}`, content);
+    return extractBoundaryProbeDecision(content, modelUsed, usage);
   } catch (error) {
     return {
       action: 'allow',
@@ -697,11 +750,14 @@ export async function classifySexualIntent(
       };
     }>;
     model?: string;
+    usage?: Record<string, unknown>;
+    cost?: unknown;
   };
 
   const content = data.choices?.[0]?.message?.content ?? '';
   const modelUsed = data.model || model;
-  return extractClassification(content, modelUsed);
+  const usage = extractUsageMetrics(data, `${systemPrompt}\n${userPrompt}`, content);
+  return extractClassification(content, modelUsed, usage);
 }
 
 export async function evaluateSexualIntent(messageText: string): Promise<SexualIntentDecision> {

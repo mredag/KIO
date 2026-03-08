@@ -16,7 +16,11 @@ import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductRe
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
-import { evaluateSexualIntent, getSexualIntentReply } from '../middleware/sexualIntentFilter.js';
+import {
+  evaluateSexualIntent,
+  getSexualIntentReply,
+  shouldEscalateConductForSexualDecision,
+} from '../middleware/sexualIntentFilter.js';
 import type { DMSafetyPhraseService } from '../services/DMSafetyPhraseService.js';
 import type { ConductState, SuspiciousUserService } from '../services/SuspiciousUserService.js';
 import { randomUUID } from 'crypto';
@@ -244,13 +248,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
 
         if (sexualIntentResult.action !== 'allow') {
-          const conductAfter = _dmConductService?.flagUser('instagram', senderId, sexualIntentResult.reason, {
-            action: sexualIntentResult.action,
-            severity: sexualIntentResult.action === 'block_message' ? 'high' : 'medium',
-            source: sexualIntentResult.modelUsed,
-            messageText: text,
-          });
-          const effectiveState = conductAfter?.conductState || 'guarded';
+          const shouldEscalateConduct = shouldEscalateConductForSexualDecision(sexualIntentResult.action);
+          const conductAfter = shouldEscalateConduct
+            ? _dmConductService?.flagUser('instagram', senderId, sexualIntentResult.reason, {
+                action: sexualIntentResult.action,
+                severity: 'high',
+                source: sexualIntentResult.modelUsed,
+                messageText: text,
+              })
+            : conductBefore;
+          const effectiveState = conductAfter?.conductState || 'normal';
           const responseText = buildConductReply(sexualIntentResult.action, effectiveState) || '[sessiz engel]';
           const interactionIntent = effectiveState === 'silent'
             ? 'blocked_silent'
@@ -526,7 +533,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         matchedKeywords: analysis.matchedKeywords,
         intentCategories: analysis.intentCategories,
       });
-      const deterministicInfoResponse = conductStateForReply === 'normal' && isGenericInfoRequest(text)
+      const deterministicInfoResponse = conductStateForReply !== 'silent' && isGenericInfoRequest(text)
         ? buildGenericInfoTemplateFromKnowledge()
         : null;
       const deterministicClarifier = deterministicConductResponse || deterministicInfoResponse || conductStateForReply !== 'normal'

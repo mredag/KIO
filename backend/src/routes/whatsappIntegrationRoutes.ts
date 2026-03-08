@@ -14,6 +14,7 @@ import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { normalizeTurkish } from '../services/InstagramContextService.js';
+import { estimateModelCostUsd, splitEstimatedTokens } from '../services/CostEstimationService.js';
 
 let _db: Database.Database;
 
@@ -540,12 +541,26 @@ function mcIntegration(phone: string, interactionId: string, modelUsed?: string,
   ).get(phone) as { id: string } | undefined;
   const actualConvId = conv?.id || convId;
 
-  // INSERT mc_cost_ledger (id is AUTOINCREMENT, omit it)
   const tokenCount = tokensEstimated || 0;
-  _db.prepare(`
-    INSERT INTO mc_cost_ledger (agent_id, model, provider, input_tokens, output_tokens, cost, job_source, created_at)
-    VALUES ('whatsapp-dm', ?, 'openrouter', ?, ?, 0, 'whatsapp', ?)
-  `).run(modelUsed || 'unknown', Math.round(tokenCount * 0.6), Math.round(tokenCount * 0.4), ts);
+  const tokenSplit = splitEstimatedTokens(tokenCount);
+  const estimatedCostUsd = estimateModelCostUsd(
+    modelUsed,
+    tokenSplit.inputTokens,
+    tokenSplit.outputTokens,
+  );
+
+  if (estimatedCostUsd > 0) {
+    _db.prepare(`
+      INSERT INTO mc_cost_ledger (agent_id, model, provider, input_tokens, output_tokens, cost, job_source, created_at)
+      VALUES ('whatsapp-dm', ?, 'openrouter', ?, ?, ?, 'whatsapp', ?)
+    `).run(
+      modelUsed || 'unknown',
+      tokenSplit.inputTokens,
+      tokenSplit.outputTokens,
+      estimatedCostUsd,
+      ts,
+    );
+  }
 
   // INSERT mc_events
   _db.prepare(`
@@ -554,7 +569,13 @@ function mcIntegration(phone: string, interactionId: string, modelUsed?: string,
   `).run(
     actualConvId,
     `WhatsApp DM yanıt: ${phone}`,
-    JSON.stringify({ channel: 'whatsapp', phone, model: modelUsed || null }),
+    JSON.stringify({
+      channel: 'whatsapp',
+      phone,
+      model: modelUsed || null,
+      tokens_estimated: tokenCount,
+      estimated_cost_usd: Number(estimatedCostUsd.toFixed(10)),
+    }),
   );
 }
 

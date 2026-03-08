@@ -34,8 +34,9 @@ describe('DMResponseStyleService', () => {
 
     expect(profile.mode).toBe('guarded');
     expect(profile.trace.emojiPolicy).toBe('none');
-    expect(profile.trace.ctaPolicy).toBe('minimal');
-    expect(profile.instructions).toContain('Kisa, mesafeli ve emojisiz yaz.');
+    expect(profile.trace.ctaPolicy).toBe('only_when_needed');
+    expect(profile.instructions).toContain('Kisa, net ve profesyonel yaz.');
+    expect(profile.instructions).toContain('mesru soruyu normal bicimde cevaplamaya devam et');
   });
 
   it('returns final warning style when conduct requires it', () => {
@@ -48,7 +49,7 @@ describe('DMResponseStyleService', () => {
 
     expect(profile.mode).toBe('final_warning');
     expect(profile.trace.greetingPolicy).toBe('minimal');
-    expect(profile.instructions).toContain('En kisa tamamlanmis yaniti ver; emojisiz, selamlamasiz ve mesafeli yaz.');
+    expect(profile.instructions).toContain('Kisa, net ve profesyonel yaz; emojisiz ve gereksiz sohbet olmadan cevap ver.');
     expect(profile.instructions).toContain('Takip sorusu sorma');
   });
 

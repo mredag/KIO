@@ -33,6 +33,7 @@ import { createAdminKnowledgeBaseRoutes } from './routes/adminKnowledgeBaseRoute
 import { createAdminServiceControlRoutes } from './routes/adminServiceControlRoutes.js';
 import { createAdminInteractionsRoutes } from './routes/adminInteractionsRoutes.js';
 import { createIntegrationRoutes } from './routes/integrationRoutes.js';
+import { createIntegrationDMSafetyRoutes, setIntegrationDMSafetyPhraseService } from './routes/integrationDMSafetyRoutes.js';
 import { createAIPromptsRoutes } from './routes/aiPromptsRoutes.js';
 import { createIntegrationAIPromptsRoutes } from './routes/integrationAIPromptsRoutes.js';
 import { createWorkflowTestRoutes, setSimulatorConductService, setSimulatorDMSafety, setSimulatorEscalation } from './routes/workflowTestRoutes.js';
@@ -292,6 +293,7 @@ app.use('/api/admin/ai-prompts', createAIPromptsRoutes(db));
 app.use('/api/integrations/coupons', createIntegrationCouponRoutes(db, dbService, couponService));
 app.use('/api/integrations/ai', createIntegrationAIPromptsRoutes(db));
 app.use('/api/integrations', createIntegrationRoutes(dbService));
+app.use('/api/integrations/dm-safety', createIntegrationDMSafetyRoutes());
 app.use('/api/intent', createIntentRoutes());
 app.use('/api/kiosk', createKioskRoutes(dbService, qrCodeService));
 app.use('/webhook/whatsapp', createWhatsappWebhookRoutes());
@@ -346,6 +348,7 @@ setSimulatorEscalation(escalationService);
 setSimulatorDMSafety(dmSafetyPhraseService);
 setSimulatorConductService(dmConductService);
 setIntentDMSafety(dmSafetyPhraseService);
+setIntegrationDMSafetyPhraseService(dmSafetyPhraseService);
 setEscalationActionService(escalationService);
 setTelegramWebhookDeps(escalationService, telegramNotifier, dmSafetyPhraseService);
 

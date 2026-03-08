@@ -1,12 +1,12 @@
 /**
  * TelegramNotificationService — Sends actionable alerts to admin via Telegram Bot API.
  *
- * Uses inline_keyboard buttons for quick actions (approve/reject/assign).
- * Button presses come back as callback_query via Telegram webhook.
+ * Uses inline_keyboard buttons only where they are actually reliable.
  *
  * Shares the same bot as OpenClaw's Telegram channel (same bot token).
- * OpenClaw uses long-polling for conversations — we set a webhook for callback_query only.
- * No conflict: webhook receives button callbacks, OpenClaw polls for chat messages.
+ * Because OpenClaw uses getUpdates long-polling, callback_query buttons are not
+ * reliable on the shared bot. Phrase-review notifications should use text-command
+ * fallback instead of inline callback buttons.
  */
 import Database from 'better-sqlite3';
 
@@ -179,6 +179,11 @@ export class TelegramNotificationService {
       `<b>Confidence:</b> ${(msg.confidence * 100).toFixed(1)}%`,
       '',
       this.escapeHtml(this.truncateText(msg.reason, 240)),
+      '',
+      '<b>Telegram command fallback:</b>',
+      `<code>/dmphr block ${this.escapeHtml(msg.reviewId)}</code>`,
+      `<code>/dmphr allow ${this.escapeHtml(msg.reviewId)}</code>`,
+      `<code>/dmphr detail ${this.escapeHtml(msg.reviewId)}</code>`,
     ];
 
     if (msg.customerId) {
@@ -190,17 +195,6 @@ export class TelegramNotificationService {
     }
 
     const text = lines.join('\n');
-    const keyboard = {
-      inline_keyboard: [
-        [
-          { text: 'Yes - hard block', callback_data: `dmphr:block:${msg.reviewId}` },
-          { text: 'No - keep safe', callback_data: `dmphr:allow:${msg.reviewId}` },
-        ],
-        [
-          { text: 'Detail', callback_data: `dmphr:detail:${msg.reviewId}` },
-        ],
-      ],
-    };
 
     try {
       const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
@@ -211,7 +205,6 @@ export class TelegramNotificationService {
           chat_id: this.config.adminChatId,
           text,
           parse_mode: 'HTML',
-          reply_markup: JSON.stringify(keyboard),
         }),
         signal: AbortSignal.timeout(10000),
       });

@@ -404,6 +404,27 @@ curl -H "Authorization: Bearer <KIO_API_KEY>" \
 
 Respond with the result in Turkish. Example: "Ã¢Å“â€¦ Job abc12345 onaylandÃ„Â± ve scheduled durumuna alÃ„Â±ndÃ„Â±."
 
+## Telegram DM Safety Review Commands
+
+DM safety phrase review messages use text-command fallback on the shared Telegram bot. Do not rely on inline callback buttons.
+
+**Admin can use text commands instead of buttons:**
+```
+/dmphr block <reviewId>   - Bu ifadeyi hard-block listesine al
+/dmphr allow <reviewId>   - Bu ifadeyi güvenli kabul et
+/dmphr detail <reviewId>  - Phrase review detayını göster
+```
+
+When you receive one of these commands, call the KIO API:
+```bash
+curl -X POST -H "Authorization: Bearer <KIO_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"decision":"block"}' \
+  "http://localhost:3001/api/integrations/dm-safety/reviews/<reviewId>/decision"
+```
+
+Replace `block` with `allow` or `detail` as needed, then reply in Turkish with the API result.
+
 ## Git Workflow (Pi Production Ã¢â‚¬â€ MANDATORY)
 
 All code changes on Pi MUST be committed and pushed to GitHub.

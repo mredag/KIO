@@ -1,5 +1,5 @@
 /**
- * TelegramCallbackPoller - handles Telegram callback_query buttons when OpenClaw is down.
+ * TelegramCallbackPoller - handles Telegram callback_query buttons only when OpenClaw is down.
  */
 import { EscalationService } from './EscalationService.js';
 import { DMSafetyPhraseService } from './DMSafetyPhraseService.js';
@@ -41,7 +41,7 @@ export class TelegramCallbackPoller {
 
     if (ocUp) {
       this.openclawRunning = true;
-      console.log('[TG Poller] OpenClaw detected - gateway handles Telegram callbacks');
+      console.log('[TG Poller] OpenClaw detected - callback polling paused; use /esc or /dmphr text commands on the shared bot');
     } else {
       await this.startPolling();
     }
@@ -66,7 +66,7 @@ export class TelegramCallbackPoller {
     if (ocUp && !this.openclawRunning) {
       this.openclawRunning = true;
       this.stopPolling();
-      console.log('[TG Poller] OpenClaw came online - stopped polling');
+      console.log('[TG Poller] OpenClaw came online - stopped polling; shared-bot callback buttons are unavailable');
     } else if (!ocUp && this.openclawRunning) {
       this.openclawRunning = false;
       console.log('[TG Poller] OpenClaw went offline - resuming callback polling');

@@ -70,6 +70,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop ahead of the AI gate.
 - Persistent safety config lives in `mc_policies.id='dm_safety_phrase_config'` with `hardBlockPhrases` and `reviewedSafePhrases`.
 - Short ambiguous phrases that land in `retry_question` can create a `dm_safety_phrase_reviews` row and send a Telegram `Yes / No / Detail` review prompt.
+- On the shared Telegram bot, inline callback buttons are not reliable while OpenClaw is running. DM safety review fallback is text command plus API: `/dmphr block|allow|detail <reviewId>` -> `POST /api/integrations/dm-safety/reviews/:reviewId/decision`.
 - `Yes` adds the normalized phrase to the instant hard-block list. `No` adds it to the reviewed-safe list so the exact phrase stops re-alerting.
 - Telegram callback actions for `dmphr:*` and `esc:*` are handled by the backend callback poller; they must not be treated as normal Jarvis chat.
 - `ResponsePolicyService` price guards are not hardcoded. Allowed price values are extracted from the current formatted KB context for that execution.

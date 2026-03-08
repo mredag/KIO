@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { ConversationStateService } from './ConversationStateService.js';
 import type { ConversationStateRecord } from './ConversationStateService.js';
 import { hasAgePolicySignals } from './PolicySignalService.js';
+import { hasRoomAvailabilitySignals } from './RoomAvailabilitySignalService.js';
 
 /**
  * Normalize Turkish diacritical characters to ASCII equivalents.
@@ -792,6 +793,39 @@ export class InstagramContextService {
     }
   }
 
+  private applyRoomAvailabilitySignals(plan: AIContextPlan, messageText: string): void {
+    const shouldPrioritizeRoomFaq = hasRoomAvailabilitySignals(
+      messageText,
+      plan.followUpHint?.rewrittenQuestion,
+      plan.followUpHint?.topicLabel,
+      plan.topicSummary,
+    ) || plan.keywords.includes('room_availability_inquiry');
+
+    if (!shouldPrioritizeRoomFaq) {
+      return;
+    }
+
+    if (!plan.categories.includes('faq')) {
+      plan.categories = ['faq', ...plan.categories];
+    }
+
+    if (!plan.keywords.includes('room_availability_signal')) {
+      plan.keywords.push('room_availability_signal');
+    }
+
+    const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
+    if (plan.responseDirective.mode === 'clarify_only'
+      || normalizedInstruction.includes('netlestir')
+      || normalizedInstruction.includes('bilgi iste')
+      || normalizedInstruction.includes('var mi diye sor')) {
+      plan.responseDirective = {
+        mode: 'answer_directly',
+        instruction: 'Masaj odasi secenekleri soruluyorsa verilen FAQ bilgisini dogrudan kullan. Tek kisilik ve iki kisilik oda oldugunu net soyle. Cift olarak masaj yaptirmak isteyenler icin iki kisilik oda oldugunu acikca belirt. Bu soruyu musteriye geri sorma.',
+        rationale: 'Oda secenegi sorusu mevcut FAQ bilgisiyle dogrudan cevaplanabilir.',
+      };
+    }
+  }
+
   private isModifierOnlyRequest(categories: string[]): boolean {
     if (categories.length === 0) {
       return false;
@@ -1231,6 +1265,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     };
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
+    this.applyRoomAvailabilitySignals(plan, messageText);
     return plan;
   }
 
@@ -1266,6 +1301,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     };
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
+    this.applyRoomAvailabilitySignals(plan, messageText);
     return plan;
   }
 
@@ -1399,6 +1435,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
 
       this.applyPolicyPrioritySignals(plan, messageText);
       this.applyMassagePricingSignals(plan, messageText);
+      this.applyRoomAvailabilitySignals(plan, messageText);
       this.applyGroundedFollowUpGuard(plan);
 
       return plan;
@@ -1438,6 +1475,13 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       matchedCategories.add('policies');
       if (!matchedKeywords.includes('policy_age_signal')) {
         matchedKeywords.push('policy_age_signal');
+      }
+    }
+
+    if (hasRoomAvailabilitySignals(messageText)) {
+      matchedCategories.add('faq');
+      if (!matchedKeywords.includes('room_availability_signal')) {
+        matchedKeywords.push('room_availability_signal');
       }
     }
 

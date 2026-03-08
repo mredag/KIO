@@ -1,6 +1,7 @@
 import type { FollowUpContextHint } from './InstagramContextService.js';
 import type { SemanticRetrievalCandidate } from './DMKnowledgeRetrievalService.js';
 import { hasAgePolicySignals, normalizePolicySignalText } from './PolicySignalService.js';
+import { hasRoomAvailabilitySignals, normalizeRoomAvailabilitySignalText } from './RoomAvailabilitySignalService.js';
 
 const RERANK_MODEL = 'google/gemini-2.5-flash-lite';
 
@@ -206,11 +207,21 @@ export class DMKnowledgeRerankerService {
   }
 
   private shouldRunRerank(params: {
+    messageText: string;
     followUpHint: FollowUpContextHint | null;
     activeTopic: string | null;
     requestedCategories: string[];
     candidates: SemanticRetrievalCandidate[];
   }): boolean {
+    if (params.candidates.length === 1 && hasRoomAvailabilitySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    )) {
+      return false;
+    }
+
     if (params.candidates.length > 1) {
       return true;
     }
@@ -239,6 +250,11 @@ export class DMKnowledgeRerankerService {
       params.followUpHint?.rewrittenQuestion,
       activeTopic,
     );
+    const prioritizeRoomAvailability = hasRoomAvailabilitySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      activeTopic,
+    );
 
     return [
       'Sen bir bilgi secim reranker ajanisin.',
@@ -258,6 +274,8 @@ export class DMKnowledgeRerankerService {
       '- Yalnizca musteri sorusuna cevap kurmaya yardim eden destek bilgileri sec.',
       prioritizeAgePolicies
         ? '- Mesaj yas, 18+, cocuk, veli veya ebeveyn izni soruyorsa ilgili policies adaylarini ONCELIKLE sec; aktif konu fiyat olsa bile yas kurali alakasiz sayilmaz.'
+        : prioritizeRoomAvailability
+          ? '- Mesaj oda secenegi, cift oda, tek kisilik/iki kisilik oda veya couple masaj soruyorsa ilgili faq adaylarini ONCELIKLE sec; aktif konu daha once fiyat olsa bile oda secenegi alakasiz sayilmaz.'
         : '- Soru fiyat/saat odakliysa, sadece konu kapsaminda aciklayici destek girisleri sec; alakasiz politika metinlerini secme.',
       '- Emin degilsen bos liste daha iyidir.',
       '',
@@ -294,12 +312,20 @@ export class DMKnowledgeRerankerService {
       params.followUpHint?.topicLabel,
       params.activeTopic,
     );
-    if (!prioritizeAgePolicies) {
+    const prioritizeRoomAvailability = hasRoomAvailabilitySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
+
+    if (!prioritizeAgePolicies && !prioritizeRoomAvailability) {
       return params.candidates.slice(0, maxSelections);
     }
 
+    const normalizeFn = prioritizeAgePolicies ? normalizePolicySignalText : normalizeRoomAvailabilitySignalText;
     const topicTokens = new Set(
-      normalizePolicySignalText([
+      normalizeFn([
         params.messageText,
         params.followUpHint?.rewrittenQuestion || '',
         params.followUpHint?.topicLabel || '',
@@ -311,8 +337,12 @@ export class DMKnowledgeRerankerService {
 
     return [...params.candidates]
       .sort((left, right) => {
-        const leftBoost = this.getAgePolicyCandidateBoost(left, topicTokens);
-        const rightBoost = this.getAgePolicyCandidateBoost(right, topicTokens);
+        const leftBoost = prioritizeAgePolicies
+          ? this.getAgePolicyCandidateBoost(left, topicTokens)
+          : this.getRoomAvailabilityCandidateBoost(left, topicTokens);
+        const rightBoost = prioritizeAgePolicies
+          ? this.getAgePolicyCandidateBoost(right, topicTokens)
+          : this.getRoomAvailabilityCandidateBoost(right, topicTokens);
         return (rightBoost - leftBoost) || (right.score - left.score);
       })
       .slice(0, maxSelections);
@@ -327,6 +357,25 @@ export class DMKnowledgeRerankerService {
     ].join(' '));
     let score = candidate.category === 'policies' ? 5 : 0;
     if (/\b(?:yas|18|ebeveyn|veli|cocuk)\b/.test(candidateText)) {
+      score += 4;
+    }
+    for (const token of topicTokens) {
+      if (candidateText.includes(token)) {
+        score += 1;
+      }
+    }
+    return score;
+  }
+
+  private getRoomAvailabilityCandidateBoost(candidate: SemanticRetrievalCandidate, topicTokens: Set<string>): number {
+    const candidateText = normalizeRoomAvailabilitySignalText([
+      candidate.category,
+      candidate.keyName,
+      candidate.value,
+      candidate.description || '',
+    ].join(' '));
+    let score = candidate.category === 'faq' ? 5 : 0;
+    if (/\b(?:oda|room|cift|couple|iki kisilik|tek kisilik)\b/.test(candidateText)) {
       score += 4;
     }
     for (const token of topicTokens) {

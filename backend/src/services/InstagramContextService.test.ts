@@ -180,6 +180,32 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('fiyat bilgisini de kullan');
   });
 
+  it('forces faq grounding and a direct answer for room-availability questions', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services'],
+      semanticSignals: ['room_availability_inquiry'],
+      followUpHint: null,
+      responseDirective: {
+        mode: 'clarify_only',
+        instruction: 'Cift odasi olup olmadigini sor. Eger varsa, detaylarini iste.',
+        rationale: 'Mesaj kisa ve planner yetersiz bilgi varsaydi.',
+      },
+      tier: 'light',
+      tierReason: 'Kisa hizmet sorusu',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI('çift odanız varmı', []);
+
+    expect(result.categories).toContain('faq');
+    expect(result.keywords).toContain('room_availability_signal');
+    expect(result.responseDirective.mode).toBe('answer_directly');
+    expect(result.responseDirective.instruction).toContain('Tek kisilik ve iki kisilik oda');
+    expect(result.responseDirective.instruction).toContain('Bu soruyu musteriye geri sorma');
+  });
+
   it('normalizes fenced JSON replies from the planner', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue({

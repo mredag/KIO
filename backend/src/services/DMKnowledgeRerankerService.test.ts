@@ -119,6 +119,29 @@ describe('DMKnowledgeRerankerService', () => {
     expect(result.trace.rationale).toContain('dogrudan yardim etmiyor');
   });
 
+  it('keeps a single room-availability faq candidate without calling the reranker model', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'cift odaniz varmi',
+      followUpHint: null,
+      activeTopic: 'spa hizmetleri',
+      requestedCategories: ['services'],
+      candidates: [
+        createCandidate('c1', 'faq', 'massage_room_options', 0.2357, 'Tek kisilik ve iki kisilik odalarimiz vardir.'),
+      ],
+      maxSelections: 3,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.selectedCandidates).toHaveLength(1);
+    expect(result.selectedCandidates[0].id).toBe('c1');
+    expect(result.trace.skippedReason).toBe('simple_case');
+  });
+
   it('prioritizes age-policy candidates in fallback mode for age-related follow-ups', async () => {
     delete process.env.OPENROUTER_API_KEY;
 

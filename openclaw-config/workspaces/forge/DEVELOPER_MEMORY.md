@@ -32,17 +32,21 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - Keep generic pricing and topic clarifiers deterministic and cheap when possible
 - The live webhook and simulator now share the same conduct ladder before normal DM generation
 - Conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator label: `Bad customer`)
+- Use `Bad customer` in operator-facing language; keep `silent` only for DB/API/internal references
 - `DMResponseStyleService` now injects anti-repetition style instructions; avoid reintroducing hardcoded emoji habits
 - Guarded/final-warning users should not get the friendly deterministic info template path
 - Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation must stay in the background
+- Legitimate couple / same-room massage requests (`esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, `cift odaniz var mi`) are normal business questions. They must stay `allow` and route to room-availability grounding.
 - Obvious violators should continue to receive shorter, colder business replies with no follow-up question or extra CTA until reset/lift
 
 ## Safety and KB Rules
 - The safety layer is AI-first plus a narrow euphemism guard
 - Shared Telegram-bot callback buttons are disabled for operator actions. Use `/dmphr block|allow|detail <reviewId>` and `/esc approve|reject|detail|analyst <jobId>` instead of Telegram action buttons
 - Treat what-to-bring / visit-preparation questions (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) as normal logistics; they must not trigger DM safety phrase review
+- Couple-room and same-room massage requests must stay on the business-safe path. Do not let spouse/partner wording cause DM safety escalation or conduct strikes.
 - Jarvis/Forge must not claim a Telegram review or escalation action succeeded unless the backend API response confirms success
 - `silent` is no longer a pure no-reply state for Instagram DM. It is bad-customer mode: shortest possible factual reply, no warmth, no CTA
+- Room / couple-room questions should keep FAQ grounding and answer directly from `faq.massage_room_options`; do not bounce the question back to the customer
 - Policy price checks derive allowed numbers from the current KB context
 - `knowledge_base.id` must stay non-null and durable
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`
@@ -51,6 +55,7 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - `force_normal` lifts a test account, `reset` clears offense history, and `force_silent` forces bad-customer mode
 - The conduct UI must support search by username/ID/phone, state explanations, and explicit success/error feedback after actions
 - The conduct page is a conduct-managed user list, not the full DM audience; mark test/simulator rows clearly and keep list search/pagination server-side
+- DM Kontrol now surfaces `Davranis / Ton`, customer wait vs processing time, and token breakdown. Keep the corresponding `pipelineTrace` fields populated when changing the DM pipeline.
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`

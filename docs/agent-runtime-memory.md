@@ -51,9 +51,11 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).
+- Operator-facing UI, reports, and agent messages should say `Bad customer`; keep `silent` only for DB/API/internal references.
 - `DMResponseStyleService` now injects anti-repetition style guidance into direct-response prompts and OpenClaw fallback prompts. Emoji should be optional, not habitual.
 - Guarded/final-warning users should not get the friendly deterministic info/clarifier templates; those stay normal-only.
 - For obvious sexual/euphemistic asks such as `mutlu son`, the visible customer-facing reply should stay the legacy rejection copy; the conduct ladder should escalate in the background.
+- Legitimate couple / same-room massage requests such as `esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, or `cift odaniz var mi` are normal business questions. They must stay `allow`, must not create conduct strikes, and should route to room-availability grounding.
 - Users with prior obvious violations should keep receiving colder, shorter business replies with no follow-up question or extra CTA until they are reset or lifted.
 - The highest conduct state is no longer true no-reply behavior for Instagram DM. `silent` now means bad-customer mode: reply with the shortest possible factual business answer and no conversational padding.
 
@@ -61,17 +63,20 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `sexualIntentFilter.ts` is AI-first, with a narrow euphemism guard for phrases like `mutlu son`, `extra hizmet`, and `premium paket`.
 - `sexualIntentFilter.ts` includes a clear-business guard for concrete pricing asks (including compact typo forms like `30daka ne kadar`) so they bypass boundary-probe hard blocks.
 - Normal visit-preparation questions such as `sort getiriyor muyuz`, `yanimizda bir sey getiriyor muyuz`, `havlu/terlik/bornoz gerekli mi` must stay `allow` and must not trigger DM safety phrase review.
+- Couple-room and same-room massage questions must stay on the business-safe path. Do not let spouse/partner wording push them into conduct escalation or DM safety review.
 - The first sexual-intent gate now receives bounded conversation context from `instagram_interactions`: last 24 hours only, capped to at most 6 short lines and ~600 chars before model prompts.
 - `ResponsePolicyService` now receives a compact conversation snippet for rule/faithfulness checks (max 4 lines, ~600 chars) so follow-up turns are judged with context without large token bloat.
 - Age and minor signals (`yas`, `18`, `cocuk`, `ebeveyn`, `veli`) must keep `policies` in the fetched KB slice even inside follow-up pricing/service context.
 - `ResponsePolicyService` now has a deterministic age-policy contradiction guard. Replies like `yasa bakmiyoruz` must fail when KB evidence says massage/spa is `18+` or otherwise age-restricted.
 - Duration-led massage follow-ups (`uzun sureli masaj`, `kisa sureli`, `60 dk`, `90dk`, `seans`) must force `pricing` alongside `services`; otherwise policy repair can ground on unrelated package prices.
+- Room / couple-room questions must preserve FAQ grounding and answer directly from `faq.massage_room_options`; do not ask the customer the same room-availability question back.
 - Rule-stage style/format failures are treated as soft signals; hard blocking should come from moderation, explicit hard-rule violations, or deterministic grounding mismatches.
 - Do not turn the safety layer into a long brittle banned-word list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop ahead of the AI gate.
 - Persistent safety config lives in `mc_policies.id='dm_safety_phrase_config'` with `hardBlockPhrases` and `reviewedSafePhrases`.
 - Short ambiguous phrases that land in `retry_question` can create a `dm_safety_phrase_reviews` row and send a Telegram review prompt with text commands, not callback buttons.
-- On the shared Telegram bot, operator callback buttons are disabled. DM safety review fallback is text command plus API: `/dmphr block|allow|detail <reviewId>` -> `POST /api/integrations/dm-safety/reviews/:reviewId/decision`.
+- On the shared Telegram bot, operator callbacks are not part of the reliable runbook. Use command/API flow instead: `/dmphr block|allow|detail <reviewId>` -> `POST /api/integrations/dm-safety/reviews/:reviewId/decision`.
+- Escalation actions follow the same rule: use `/esc approve|reject|detail|analyst <jobId>` plus API confirmation. Panel URL buttons are fine; approval/review callback buttons are not trusted.
 - `block` adds the normalized phrase to the instant hard-block list. `allow` adds it to the reviewed-safe list so the exact phrase stops re-alerting.
 - Jarvis must not treat `dmphr:*`, `/esc`, button labels, or callback-like text as a completed action unless the backend API confirms success for that exact id.
 - `ResponsePolicyService` price guards are not hardcoded. Allowed price values are extracted from the current formatted KB context for that execution.
@@ -79,8 +84,9 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Human overrides for conduct state live in `/admin/mc/dm-conduct`.
 - `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` now means force bad-customer mode.
 - Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
-- The DM conduct page now needs to support: search by Instagram username/ID/phone, explicit success-error feedback after actions, and visible explanations of all conduct states.
-- The DM conduct page is not an all-users inbox; it lists only conduct-managed users, marks test/simulator-looking rows, and must keep search/pagination server-side so large tables do not load in one shot.
+- The DM conduct page supports search by Instagram username/ID/phone, explicit success-error feedback after actions, visible explanations of all conduct states, and a dedicated detail panel for the selected user.
+- The DM conduct page is not an all-users inbox; it lists only conduct-managed users, marks test/simulator-like rows, and keeps list search/pagination server-side so large tables do not load in one shot.
+- DM Kontrol now surfaces `Davranis / Ton`, conduct state, customer-perceived wait vs processing time, and token breakdown from `pipelineTrace`. Keep `conductControl`, `responseStyle`, `timingBreakdown`, and `tokenBreakdown` populated when changing the pipeline.
 
 ## Knowledge Base Rules
 - `knowledge_base.id` must be non-null and durable.

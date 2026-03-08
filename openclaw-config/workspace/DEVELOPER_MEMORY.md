@@ -33,9 +33,11 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Keep simple clarifiers deterministic and lightweight when possible.
 - The live webhook and the simulator now share the same conduct ladder wiring before normal DM generation.
 - Conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator label: `Bad customer`).
+- Operator-facing language should use `Bad customer`; keep `silent` only for DB/API/internal references.
 - `DMResponseStyleService` now adds anti-repetition tone guidance. Emoji should be optional, not routine.
 - Guarded/final-warning users should not receive the friendly deterministic info template path.
 - For obvious euphemisms like `mutlu son`, the visible reply should stay the legacy rejection wording; conduct escalation happens in the background.
+- Legitimate couple / same-room massage requests (`esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, `cift odaniz var mi`) are normal business questions. They must stay `allow` and route to room-availability grounding, not conduct escalation.
 - Users with obvious prior violations should get shorter, colder business replies with no follow-up question or extra CTA until reset/lift.
 - `silent` no longer means no-reply for Instagram DM. It means bad-customer mode: shortest possible factual reply, no warmth, no CTA, no conversation reopening.
 
@@ -44,10 +46,12 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop before the normal AI safety decision.
 - Shared Telegram-bot callback buttons are disabled for operator actions. Use `/dmphr block|allow|detail <reviewId>` and `/esc approve|reject|detail|analyst <jobId>` instead of Telegram action buttons.
 - Questions about what to bring or wear for a visit (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) are normal logistics, not safety-review candidates.
+- Couple-room and same-room massage questions must stay on the business-safe path. Do not let spouse/partner wording turn them into DM safety reviews or conduct strikes.
 - Persistent safety config lives in `mc_policies.id='dm_safety_phrase_config'` with `hardBlockPhrases` and `reviewedSafePhrases`.
 - Short ambiguous phrases that return `retry_question` can create `dm_safety_phrase_reviews` records and send Telegram review prompts with text commands, not callback buttons.
 - `block` promotes the normalized phrase into the instant hard-block list. `allow` marks the exact phrase safe so it stops re-alerting.
 - Jarvis must never claim a Telegram review or escalation action succeeded unless the backend API call returns success.
+- Room / couple-room questions should keep FAQ grounding and answer directly from `faq.massage_room_options`; do not ask the customer the same question back.
 - Policy price checks read allowed values from the current KB context, not hardcoded constants.
 - `knowledge_base.id` must stay non-null and durable.
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`.
@@ -56,6 +60,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - `force_normal` is the correct lift path for test accounts; `reset` clears offense history; `force_silent` forces bad-customer mode.
 - The conduct page must remain operator-usable: search by username/ID/phone, explain states, and show success/error feedback after actions.
 - The conduct page is a conduct-managed user list, not the full DM audience; mark test/simulator rows clearly and keep list search/pagination server-side.
+- DM Kontrol now exposes `Davranis / Ton`, customer wait vs processing time, and token breakdown. Keep `pipelineTrace.conductControl`, `responseStyle`, `timingBreakdown`, and `tokenBreakdown` intact when editing DM flow.
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`.
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`

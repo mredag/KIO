@@ -123,10 +123,13 @@ Current live defaults you should keep in mind:
 - Do not assume Instagram buttons or quick replies are reliable. Use compact text menus for customer choices.
 - Keep generic pricing and topic-selection clarifiers lightweight when possible.
 - DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent` (operator label: `Bad customer`).
+- Use `Bad customer` in operator-facing language; keep `silent` for DB/API/internal references only.
 - The live webhook and simulator now share the same conduct ladder before normal DM generation.
 - `DMResponseStyleService` now shapes tone to reduce repetition. Emoji should be optional, not habitual.
 - For obvious euphemisms like `mutlu son`, keep the visible legacy rejection wording; the conduct ladder escalates silently in the background.
+- Legitimate couple / same-room massage requests (`esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, `cift odaniz var mi`) are normal business questions. They must stay `allow` and route to room-availability grounding.
 - `silent` is not a friendly state and no longer means no-reply for Instagram DM. It means the shortest possible factual business answer, with no warmth, CTA, or follow-up.
+- Shared Telegram operator actions are command/API based. Do not trust callback buttons or plain button-label text as proof that an action succeeded.
 
 ## Sub-Agent Delegation (MANDATORY for complex tasks)
 You are an ORCHESTRATOR. DELEGATE using `/spawn` or `sessions_spawn` tool.

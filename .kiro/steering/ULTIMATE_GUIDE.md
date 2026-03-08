@@ -106,9 +106,13 @@ Backend is `"type": "module"` (ESM). TypeScript compiles `.ts` → `.js` but doe
 | Telegram 409 getUpdates conflict | OpenClaw + backend both polling same bot | Start OpenClaw first — `TelegramCallbackPoller` auto-detects and defers (30s reconciliation loop) |
 | Jarvis subagent tries sqlite3 directly | Subagent has no DB access | `buildSystemContext()` pre-injects last 20 DMs + pipeline health; subagents must use HTTP API |
 | DM forgets user after 40s | Inbound messages not stored in DB | Fixed: webhook now INSERTs inbound to instagram_interactions before AI processing |
-| Policy flags phone as hallucination | contact KB category not fetched | Fixed: contact category ALWAYS included in KB fetch (phone/address always visible to policy agent) |
+| Policy flags a correct phone number as hallucination | KB slice or phone normalization in validation is incomplete | Inspect the execution trace, fetched KB entries, and normalized phone evidence before changing prompts |
 | AI says `yasa bakmiyoruz` even though spa is 18+ | Age/minor signal got reranked behind service/pricing context | Preserve `policies` for `yas/18/cocuk/ebeveyn/veli` signals and let deterministic policy grounding reject age contradictions |
 | `Uzun sureli masaj` gets corrected into unrelated package prices | Planner fetched `services` without massage `pricing` | Force `pricing` together with `services` for duration-led massage follow-ups (`uzun/kisa/dk/seans`) |
+| Visit-preparation question gets sent to DM safety review | Benign logistics phrasing got mistaken for euphemistic probing | Keep `sort/havlu/terlik/bornoz/yanimizda bir sey getiriyor muyuz` on the benign-preparation allow path |
+| Couple / same-room massage request gets blocked as inappropriate | Sexual-intent layer overreacted to spouse/partner wording | Allow legitimate `esimle/beraber/ayni odada/iki kisilik oda/cift oda` massage requests before model safety review |
+| Telegram operator button says success but backend state did not change | Shared-bot callback path is unreliable | Use `/dmphr ...` or `/esc ...` command/API flow and confirm success only after backend response |
+| DM Kontrol shows 10-15s when the customer waited longer | Page is showing processing segments without enough context | Inspect `timingBreakdown.customerPerceivedTotalMs`, `ingestDelayMs`, and per-stage timings together |
 | MC integration points at raw OpenClaw agent id | OpenClaw ids differ from MC ids | Normalize through `resolveMissionControlAgentId()` (`instagram` -> `instagram-dm`, `whatsapp` -> `whatsapp-dm`) |
 | WhatsApp session not connecting | QR code expired or Baileys auth issue | Re-scan QR code in OpenClaw, check `openclaw.json` channel config |
 | WhatsApp messages not processed | Agent not bound to channel | Check `agents.bindings` in `openclaw.json` for `channel: "whatsapp"` match |
@@ -425,7 +429,7 @@ Official docs: https://openrouter.ai/docs/guides/guides/openclaw-integration
 
 ## Instagram AI — OpenClaw Flow (Active)
 
-**Status:** ✅ Full pipeline working (dev) with DM Intelligence + DM Kontrol Merkezi. Meta Graph API connected via `graph.instagram.com` (IGAA tokens).
+**Status:** Active hybrid Instagram DM pipeline. Direct OpenRouter is default for light/standard tiers; OpenClaw is fallback/advanced only.
 **Toggle:** `USE_OPENCLAW=true` in `backend/.env`
 **Model:** Dynamic — light/standard/advanced tier routing via `InstagramContextService`
 **Test Mode:** `INSTAGRAM_TEST_MODE=true` + `INSTAGRAM_TEST_SENDER_IDS=id1,id2` — only whitelisted senders get AI responses. Toggleable from DM Kontrol UI.
@@ -723,7 +727,7 @@ if (!sessionInfo?.sessionId) {
 
 ## WhatsApp AI — OpenClaw Flow (Active)
 
-**Status:** ✅ Full pipeline working. OpenClaw Baileys channel (QR code login, no Cloud API). Agent calls backend APIs via HTTP tools.
+**Status:** Active. OpenClaw Baileys channel with backend HTTP tools and shared KB/policy surfaces.
 **Agent:** `whatsapp` with workspace `~/.openclaw/workspace-whatsapp`
 **Model:** Dynamic — light/standard/advanced tier routing via `WhatsAppContextService`
 **Channel:** Baileys (`dmPolicy: "open"`, `groupPolicy: "disabled"`)
@@ -774,7 +778,7 @@ Stored in `mc_policies` as `wa_pipeline_config` (same pattern as Instagram's `dm
 
 ## Jarvis Data Bridge — OpenClaw Integration
 
-**Status:** ✅ Full pipeline working (dev). WebSocket auth + session creation + chat.send + JSONL polling all verified.
+**Status:** Active. WebSocket auth, JSONL polling, planning chat, and execution monitoring are working.
 **Toggle:** `OPENCLAW_JARVIS_ENABLED=true` in `backend/.env`
 **WhatsApp data:** `buildSystemContext()` injects WhatsApp stats + last 20 messages for `whatsapp|wa|mesaj` keywords, auto-detects Turkish phone numbers and fetches full conversation history
 
@@ -871,7 +875,7 @@ const response = await pollJarvisResponse(sessionKey, maxWaitMs);
 
 ## Closed-Loop DM Quality System (Escalation + Telegram)
 
-**Status:** ✅ Built and wired into all pipeline components.
+**Status:** Built and wired. Operator actions use command/API flow, not shared-bot callback buttons.
 
 ### Architecture
 ```
@@ -887,25 +891,30 @@ AutoPilot scans → AutoPilotService
   ├── DM failures (3+/hr) → EscalationService → Telegram notification
   └── Cost spikes → EscalationService → Telegram notification
 
-Telegram Admin Actions (3 methods, any works):
-  1. callback_query buttons → TelegramCallbackPoller (when OpenClaw is NOT running)
-  2. 🌐 Panel URL button → opens Workshop in admin panel (always works)
-  3. /esc text commands → Jarvis processes via API (when OpenClaw IS running)
+Telegram Admin Actions (reliable operator paths):
+1. /esc text commands -> Jarvis processes via API
+2. Panel URL button -> opens Workshop in admin panel
+3. Admin panel actions -> session-authenticated web UI
 ```
 
 ### Telegram Bot Coexistence (OpenClaw + Backend)
 OpenClaw and the backend share the same Telegram bot token. Only one can use `getUpdates` at a time.
 
-**`TelegramCallbackPoller`** handles this automatically:
+**`TelegramCallbackPoller`** still handles legacy callback reconciliation automatically:
 - On startup, checks if OpenClaw gateway is running on port 18789
-- If OpenClaw is up → defers polling, logs "OpenClaw detected — deferring"
-- If OpenClaw is down → starts `getUpdates` polling for `callback_query` only
-- Every 30s, reconciles: if OpenClaw came up → stops polling; if it went down → resumes
-- **Start order matters:** Start OpenClaw FIRST, then backend, for cleanest startup
+- If OpenClaw is up -> defers polling and leaves operator actions to commands/panel
+- If OpenClaw is down -> can poll `getUpdates` for legacy callback traffic
+- Every 30s, reconciles: if OpenClaw came up -> stops polling; if it went down -> resumes
+- Start order still matters: start OpenClaw first, then backend, for the cleanest startup
 
-**When OpenClaw IS running** (callback buttons won't work):
-- Every notification includes a "🌐 Panel" URL button → opens Workshop in admin panel
-- Admin can type `/esc approve <jobId>` to Jarvis in Telegram (AGENTS.md has instructions)
+**Operator runbook:**
+- Do not rely on callback approval/review buttons on the shared bot.
+- Use `/esc ...` and `/dmphr ...` commands or the admin panel.
+- Panel URL buttons are fine because they only open the web UI.
+
+**When OpenClaw is running:**
+- Every notification includes a Panel URL button -> opens Workshop in admin panel
+- Admin can type `/esc approve <jobId>` to Jarvis in Telegram
 - Admin can manage jobs directly from the web UI at `/admin/mc/workshop`
 
 ### Escalation Rules
@@ -922,10 +931,10 @@ OpenClaw and the backend share the same Telegram bot token. Only one can use `ge
 ### Key Files
 | File | Purpose |
 |------|---------|
-| `backend/src/services/EscalationService.ts` | Decision engine — routes issues to agent/Telegram/log |
-| `backend/src/services/TelegramNotificationService.ts` | Telegram Bot API — sends alerts with inline + URL buttons |
-| `backend/src/services/TelegramCallbackPoller.ts` | Polls callback_query when OpenClaw is down, auto-defers when up (30s reconciliation) |
-| `backend/src/routes/telegramWebhookRoutes.ts` | Receives admin decisions from Telegram callback_query (webhook mode) |
+| `backend/src/services/EscalationService.ts` | Decision engine -> routes issues to agent/Telegram/log |
+| `backend/src/services/TelegramNotificationService.ts` | Telegram Bot API -> sends alerts with command hints + safe URL buttons |
+| `backend/src/services/TelegramCallbackPoller.ts` | Legacy callback reconciliation when OpenClaw is down; not the primary operator flow |
+| `backend/src/routes/telegramWebhookRoutes.ts` | Legacy callback-query receive path; text-command/API flow stays primary |
 
 ### Env Vars
 ```
@@ -976,5 +985,6 @@ cd ~/kio-new/deployment/raspberry-pi
 
 ---
 
-**Last Updated:** 2026-03-07
-**Status:** ✅ Full system deployed to Pi 5 (192.168.1.8) with OpenClaw gateway + backend + cloudflared + kiosk display. Node 22, PM2 managed, Instagram DM Intelligence (context service, model routing, Turkish char normalization, context-aware follow-ups, MC integration), Direct Response Pipeline (light+standard tiers bypass OpenClaw, ~5-7s total, standard tier on GPT-4o-mini for better Turkish quality), Pipeline Config Service (dynamic config in mc_policies, runtime-editable via API), Policy Agent (ResponsePolicyService — 11-rule validation including system term prevention + faithfulness scoring + direct OpenRouter correction, fallback creates Workshop jobs), Execution ID Tracking (unique EXE-* IDs for debugging bad responses, full pipeline trace via API), PriceFormatterService (mobile-optimized price formatting from KB data with category-specific templates), Meta Graph API connected via graph.instagram.com (IGAA token valid, v25.0), DM Kontrol Merkezi (live feed with execution IDs, pipeline health, errors, model routing, test mode toggle, policy badges per message), DM Simulator (`/api/workflow-test/simulate-agent` — full pipeline without Meta/OpenClaw, results in DM Kontrol feed), Mission Control UI (glassmorphism dark theme, 10 active MC pages — cleaned up from 17), Jarvis Data Bridge working (JSONL polling with heartbeat filter, DM quality review, planning chat, task execution, `buildSystemContext` injects last 20 DMs + pipeline health), AutoPilot autonomous agent engine (4 triggers, cron scanner, AgentDispatchService), Real-Time Activity Feed, Agent Lifecycle Orchestrator, Enhanced Dashboard with comparison metrics, live KB managed in `knowledge_base` with preview-first change protocol for agent edits, anti-hallucination architecture (formatted KB, faithfulness scoring, "SADECE BİLGİ BANKASINI KULLAN" framing, system term prevention), age-policy grounding hardening (age/minor signals preserve `policies`, deterministic contradiction guard for 18+ rules), massage duration follow-up grounding hardening (duration-led massage turns force `pricing` with `services`), full backend build via tsconfig.build.json, heartbeat target set to "none". UI cleanup (2026-02-26): removed Approvals, Comms, Documents, Gateways, Skills, Tags, AI Prompts, Blocked/Suspicious Users from sidebar (backend routes preserved). Closed-Loop DM Quality System (2026-02-27): EscalationService + TelegramNotificationService + Telegram webhook — routes policy violations/audit findings/DM failures to analyst agent or Telegram admin with inline approve/reject buttons + 🌐 Panel URL fallback. TelegramCallbackPoller auto-reconciles with OpenClaw (30s check, defers when gateway is up, resumes when down). Jarvis subagent fix: AGENTS.md updated to enforce HTTP API access (no direct SQLite), buildSystemContext enriched with recent DMs + health stats. OpenClaw AGENTS.md: added `/esc` text commands for escalation handling via Telegram chat. WhatsApp OpenClaw Integration (2026-03-02): WhatsApp agent via Baileys channel (no Meta Cloud API), dedicated workspace at `openclaw-config/workspace-whatsapp/`, WhatsAppContextService (intent detection, model routing, coupon/appointment detection), WhatsAppPipelineConfigService (dynamic config in mc_policies as `wa_pipeline_config`), 12 WhatsApp API endpoints (ignore list CRUD, interaction logging, policy validation, appointment requests, stats, conversation history), lifecycle webhook at `/webhook/openclaw/whatsapp`, DM Kontrol unified feed across Instagram + WhatsApp with channel filter, buildSystemContext WhatsApp data injection + phone number auto-detection, nightly audit per-channel config.
+**Last Updated:** 2026-03-08
+**Status:** Current baseline: Pi live runtime uses hybrid Instagram DM routing, conduct ladder + anti-repetition style shaping, command-only Telegram operator actions (`/dmphr`, `/esc`), KB change-set approval hardening, room/couple-massage grounding, visit-preparation false-positive protection, and DM Kontrol behavior/timing/token breakdown visibility.
+

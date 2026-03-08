@@ -125,4 +125,56 @@ describe('SuspiciousUserService', () => {
     const events = service.getConductEvents('instagram', 'user-2', 10);
     expect(events.map((event) => event.eventType).sort()).toEqual(['manual_override', 'manual_reset', 'violation'].sort());
   });
+
+  it('lists conduct users with server-side search, pagination, and test-like markers', () => {
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO instagram_customers (instagram_id, name, interaction_count, created_at, updated_at)
+      VALUES
+        ('conduct_demo', 'DM Simulator', 1, ?, ?),
+        ('real_user', 'Bahtyar', 1, ?, ?)
+    `).run(now, now, now, now);
+
+    service.flagUser('instagram', 'conduct_demo', 'test conduct row', {
+      action: 'block_message',
+      severity: 'high',
+      source: 'test',
+    });
+    service.flagUser('instagram', 'real_user', 'real conduct row', {
+      action: 'retry_question',
+      severity: 'medium',
+      source: 'test',
+    });
+    service.setManualMode('instagram', 'lifted_test', {
+      mode: 'force_normal',
+      durationHours: 24,
+      note: 'test account',
+    });
+
+    const usernameResult = service.listSuspiciousUsers({
+      searchQuery: 'bahtyar',
+      limit: 10,
+      offset: 0,
+    });
+    expect(usernameResult.total).toBe(1);
+    expect(usernameResult.users[0]?.platformUserId).toBe('real_user');
+    expect(usernameResult.users[0]?.isTestLike).toBe(false);
+
+    const testResult = service.listSuspiciousUsers({
+      searchQuery: 'conduct',
+      limit: 10,
+      offset: 0,
+    });
+    expect(testResult.stats.testLike).toBeGreaterThanOrEqual(1);
+    expect(testResult.users.some((user) => user.isTestLike)).toBe(true);
+
+    const pagedResult = service.listSuspiciousUsers({
+      limit: 1,
+      offset: 1,
+    });
+    expect(pagedResult.limit).toBe(1);
+    expect(pagedResult.offset).toBe(1);
+    expect(pagedResult.total).toBe(3);
+    expect(pagedResult.users).toHaveLength(1);
+  });
 });

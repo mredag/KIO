@@ -46,6 +46,7 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 - Human conduct overrides live in `/admin/mc/dm-conduct`
 - `force_normal` lifts a test account, `reset` clears offense history, and `force_silent` is the manual mute path
 - The conduct UI must support search by username/ID/phone, state explanations, and explicit success/error feedback after actions
+- The conduct page is a conduct-managed user list, not the full DM audience; mark test/simulator rows clearly and keep list search/pagination server-side
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`

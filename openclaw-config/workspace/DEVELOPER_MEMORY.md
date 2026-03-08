@@ -52,6 +52,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Human conduct overrides now live in `/admin/mc/dm-conduct`.
 - `force_normal` is the correct lift path for test accounts; `reset` clears offense history; `force_silent` manually mutes.
 - The conduct page must remain operator-usable: search by username/ID/phone, explain states, and show success/error feedback after actions.
+- The conduct page is a conduct-managed user list, not the full DM audience; mark test/simulator rows clearly and keep list search/pagination server-side.
 - Live KB changes must follow `scan -> preview -> approval -> apply -> verify -> final report`.
 - `/api/integrations/knowledge/*` uses `Authorization: Bearer <KIO_API_KEY>` and now supports:
   - `GET /api/integrations/knowledge/entries`

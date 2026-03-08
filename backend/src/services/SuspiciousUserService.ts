@@ -51,6 +51,7 @@ export interface SuspiciousUser {
   platform: 'instagram' | 'whatsapp';
   platformUserId: string;
   username?: string;
+  isTestLike: boolean;
   reason: string;
   flaggedAt: string;
   offenseCount: number;
@@ -66,6 +67,30 @@ export interface SuspiciousUser {
   manualNote: string | null;
   lastAction: string | null;
   lastSource: string | null;
+}
+
+export interface SuspiciousUserListOptions {
+  platform?: string;
+  searchQuery?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SuspiciousUserListResult {
+  total: number;
+  limit: number;
+  offset: number;
+  users: SuspiciousUser[];
+  stats: {
+    total: number;
+    normal: number;
+    guarded: number;
+    finalWarning: number;
+    silent: number;
+    manual: number;
+    testing: number;
+    testLike: number;
+  };
 }
 
 export interface SuspiciousCheckResult {
@@ -103,6 +128,17 @@ interface SuspiciousUserRow {
   last_action?: string | null;
   last_source?: string | null;
   username?: string | null;
+}
+
+interface SuspiciousUserListStatsRow {
+  total: number;
+  normal_count: number;
+  guarded_count: number;
+  final_warning_count: number;
+  silent_count: number;
+  manual_count: number;
+  testing_count: number;
+  test_like_count: number;
 }
 
 const GUARDED_SCORE = 1;
@@ -261,6 +297,83 @@ export class SuspiciousUserService {
     return state !== 'silent';
   }
 
+  private isTestLikeUser(row: Pick<SuspiciousUserRow, 'platform_user_id' | 'username'>): boolean {
+    const platformUserId = row.platform_user_id.toLowerCase();
+    const username = (row.username || '').toLowerCase();
+    return (
+      platformUserId.startsWith('conduct_')
+      || platformUserId.startsWith('test-')
+      || username.includes('dm simulator')
+    );
+  }
+
+  private clearExpiredManualModes(): void {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE suspicious_users
+      SET manual_mode = 'auto',
+          manual_mode_until = NULL,
+          manual_note = NULL,
+          updated_at = ?
+      WHERE manual_mode IN ('force_normal', 'force_silent')
+        AND manual_mode_until IS NOT NULL
+        AND manual_mode_until <= ?
+    `).run(now, now);
+  }
+
+  private buildListWhereClause(platform?: string, searchQuery?: string): { sql: string; params: unknown[] } {
+    const clauses = [`(s.is_active = 1 OR COALESCE(s.manual_mode, 'auto') != 'auto')`];
+    const params: unknown[] = [];
+
+    if (platform) {
+      clauses.push('s.platform = ?');
+      params.push(platform);
+    }
+
+    const normalizedQuery = searchQuery?.trim().toLocaleLowerCase('tr-TR');
+    if (normalizedQuery) {
+      const likeValue = `%${normalizedQuery}%`;
+      clauses.push(`(
+        lower(s.platform_user_id) LIKE ?
+        OR lower(COALESCE(c.name, '')) LIKE ?
+        OR lower(COALESCE(s.reason, '')) LIKE ?
+        OR lower(COALESCE(s.last_source, '')) LIKE ?
+      )`);
+      params.push(likeValue, likeValue, likeValue, likeValue);
+    }
+
+    return {
+      sql: clauses.join(' AND '),
+      params,
+    };
+  }
+
+  private buildEffectiveStateSql(nowIso: string): string {
+    return `
+      CASE
+        WHEN COALESCE(s.manual_mode, 'auto') = 'force_normal' THEN 'normal'
+        WHEN COALESCE(s.manual_mode, 'auto') = 'force_silent' THEN 'silent'
+        WHEN s.is_active != 1 THEN 'normal'
+        WHEN (
+          s.conduct_state = 'silent'
+          OR COALESCE(s.conduct_score, s.offense_count, 0) >= ${SILENT_SCORE}
+        ) THEN CASE
+          WHEN s.silent_until IS NOT NULL AND s.silent_until > '${nowIso}' THEN 'silent'
+          ELSE 'final_warning'
+        END
+        WHEN (
+          s.conduct_state = 'final_warning'
+          OR COALESCE(s.conduct_score, s.offense_count, 0) >= ${FINAL_WARNING_SCORE}
+        ) THEN 'final_warning'
+        WHEN (
+          s.conduct_state = 'guarded'
+          OR COALESCE(s.conduct_score, s.offense_count, 0) >= ${GUARDED_SCORE}
+        ) THEN 'guarded'
+        ELSE 'normal'
+      END
+    `;
+  }
+
   private hydrateUser(row: SuspiciousUserRow): SuspiciousUser {
     const effectiveState = this.toEffectiveState(row);
 
@@ -269,6 +382,7 @@ export class SuspiciousUserService {
       platform: row.platform,
       platformUserId: row.platform_user_id,
       username: row.username || undefined,
+      isTestLike: this.isTestLikeUser(row),
       reason: row.reason || 'Inappropriate message',
       flaggedAt: row.flagged_at,
       offenseCount: Number(row.offense_count) || 0,
@@ -631,23 +745,79 @@ export class SuspiciousUserService {
   }
 
   getSuspiciousUsers(platform?: string): SuspiciousUser[] {
-    let query = `
+    this.clearExpiredManualModes();
+    const { sql: whereSql, params } = this.buildListWhereClause(platform);
+    const rows = this.db.prepare(`
       SELECT s.*, c.name as username
       FROM suspicious_users s
       LEFT JOIN instagram_customers c ON s.platform = 'instagram' AND s.platform_user_id = c.instagram_id
-      WHERE s.is_active = 1 OR COALESCE(s.manual_mode, 'auto') != 'auto'
-    `;
-    const params: unknown[] = [];
-
-    if (platform) {
-      query += ' AND s.platform = ?';
-      params.push(platform);
-    }
-
-    query += ' ORDER BY s.last_offense_at DESC';
-
-    const rows = this.db.prepare(query).all(...params) as SuspiciousUserRow[];
+      WHERE ${whereSql}
+      ORDER BY s.last_offense_at DESC
+    `).all(...params) as SuspiciousUserRow[];
     return rows.map(row => this.hydrateUser(row));
+  }
+
+  listSuspiciousUsers(options: SuspiciousUserListOptions = {}): SuspiciousUserListResult {
+    this.clearExpiredManualModes();
+
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
+    const offset = Math.max(options.offset ?? 0, 0);
+    const { sql: whereSql, params } = this.buildListWhereClause(options.platform, options.searchQuery);
+    const nowIso = new Date().toISOString();
+    const effectiveStateSql = this.buildEffectiveStateSql(nowIso);
+
+    const rows = this.db.prepare(`
+      SELECT s.*, c.name as username
+      FROM suspicious_users s
+      LEFT JOIN instagram_customers c ON s.platform = 'instagram' AND s.platform_user_id = c.instagram_id
+      WHERE ${whereSql}
+      ORDER BY s.last_offense_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset) as SuspiciousUserRow[];
+
+    const totalRow = this.db.prepare(`
+      SELECT COUNT(*) as total
+      FROM suspicious_users s
+      LEFT JOIN instagram_customers c ON s.platform = 'instagram' AND s.platform_user_id = c.instagram_id
+      WHERE ${whereSql}
+    `).get(...params) as { total: number } | undefined;
+
+    const statsRow = this.db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN ${effectiveStateSql} = 'normal' THEN 1 ELSE 0 END) as normal_count,
+        SUM(CASE WHEN ${effectiveStateSql} = 'guarded' THEN 1 ELSE 0 END) as guarded_count,
+        SUM(CASE WHEN ${effectiveStateSql} = 'final_warning' THEN 1 ELSE 0 END) as final_warning_count,
+        SUM(CASE WHEN ${effectiveStateSql} = 'silent' THEN 1 ELSE 0 END) as silent_count,
+        SUM(CASE WHEN COALESCE(s.manual_mode, 'auto') != 'auto' THEN 1 ELSE 0 END) as manual_count,
+        SUM(CASE WHEN COALESCE(s.manual_mode, 'auto') = 'force_normal' THEN 1 ELSE 0 END) as testing_count,
+        SUM(CASE
+          WHEN s.platform_user_id LIKE 'conduct_%'
+            OR s.platform_user_id LIKE 'test-%'
+            OR lower(COALESCE(c.name, '')) LIKE '%dm simulator%'
+          THEN 1 ELSE 0
+        END) as test_like_count
+      FROM suspicious_users s
+      LEFT JOIN instagram_customers c ON s.platform = 'instagram' AND s.platform_user_id = c.instagram_id
+      WHERE ${whereSql}
+    `).get(...params) as SuspiciousUserListStatsRow | undefined;
+
+    return {
+      total: Number(totalRow?.total) || 0,
+      limit,
+      offset,
+      users: rows.map(row => this.hydrateUser(row)),
+      stats: {
+        total: Number(statsRow?.total) || 0,
+        normal: Number(statsRow?.normal_count) || 0,
+        guarded: Number(statsRow?.guarded_count) || 0,
+        finalWarning: Number(statsRow?.final_warning_count) || 0,
+        silent: Number(statsRow?.silent_count) || 0,
+        manual: Number(statsRow?.manual_count) || 0,
+        testing: Number(statsRow?.testing_count) || 0,
+        testLike: Number(statsRow?.test_like_count) || 0,
+      },
+    };
   }
 
   getConductEvents(platform: string, platformUserId: string, limit: number = 20): ConductEvent[] {

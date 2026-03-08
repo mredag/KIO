@@ -77,6 +77,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` is the manual mute path.
 - Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
 - The DM conduct page now needs to support: search by Instagram username/ID/phone, explicit success-error feedback after actions, and visible explanations of all conduct states.
+- The DM conduct page is not an all-users inbox; it lists only conduct-managed users, marks test/simulator-looking rows, and must keep search/pagination server-side so large tables do not load in one shot.
 
 ## Knowledge Base Rules
 - `knowledge_base.id` must be non-null and durable.

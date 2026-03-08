@@ -1566,14 +1566,25 @@ export function createAdminRoutes(
   router.get('/dm-conduct/users', authMiddleware, async (req: Request, res: Response) => {
     try {
       const platform = typeof req.query.platform === 'string' ? req.query.platform : undefined;
+      const searchQuery = typeof req.query.q === 'string' ? req.query.q : undefined;
+      const limit = typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : undefined;
+      const offset = typeof req.query.offset === 'string' ? Number.parseInt(req.query.offset, 10) : undefined;
 
       const { SuspiciousUserService } = await import('../services/SuspiciousUserService.js');
       const suspiciousService = new SuspiciousUserService(db.getDb());
-      const users = suspiciousService.getSuspiciousUsers(platform);
+      const result = suspiciousService.listSuspiciousUsers({
+        platform,
+        searchQuery,
+        limit: Number.isFinite(limit) ? limit : undefined,
+        offset: Number.isFinite(offset) ? offset : undefined,
+      });
 
       res.json({
-        count: users.length,
-        users,
+        count: result.total,
+        limit: result.limit,
+        offset: result.offset,
+        stats: result.stats,
+        users: result.users,
       });
     } catch (error) {
       console.error('[Admin] Error fetching DM conduct users:', error);

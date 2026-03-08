@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import AdminLayout from '../../../layouts/AdminLayout';
 import { GlassCard } from '../../../components/mc/GlassCard';
@@ -14,6 +14,7 @@ interface ConductUser {
   platform: Platform;
   platformUserId: string;
   username?: string;
+  isTestLike: boolean;
   reason: string;
   flaggedAt: string;
   offenseCount: number;
@@ -54,6 +55,25 @@ interface ChatMessage {
   sentiment?: string;
   aiResponse?: string;
   createdAt: string;
+}
+
+interface ConductStats {
+  total: number;
+  normal: number;
+  guarded: number;
+  finalWarning: number;
+  silent: number;
+  manual: number;
+  testing: number;
+  testLike: number;
+}
+
+interface ConductUserListResponse {
+  count: number;
+  limit: number;
+  offset: number;
+  stats: ConductStats;
+  users: ConductUser[];
 }
 
 const stateBadgeClasses: Record<ConductState, string> = {
@@ -101,8 +121,18 @@ function normalizeSearchText(value: string): string {
 }
 
 const conductApi = {
-  async getUsers(platform?: Platform): Promise<{ count: number; users: ConductUser[] }> {
-    const params = platform ? { platform } : undefined;
+  async getUsers(input: {
+    platform?: Platform;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ConductUserListResponse> {
+    const params = {
+      ...(input.platform ? { platform: input.platform } : {}),
+      ...(input.q ? { q: input.q } : {}),
+      ...(typeof input.limit === 'number' ? { limit: input.limit } : {}),
+      ...(typeof input.offset === 'number' ? { offset: input.offset } : {}),
+    };
     const { data } = await api.get('/admin/dm-conduct/users', { params });
     return data;
   },
@@ -140,6 +170,8 @@ function userKey(platform: Platform, platformUserId: string): string {
   return `${platform}:${platformUserId}`;
 }
 
+const PAGE_SIZE = 50;
+
 function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
     <GlassCard className="p-5" hover={false}>
@@ -152,8 +184,11 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint: 
 
 export default function MCDMConductPage() {
   const queryClient = useQueryClient();
+  const selectedPanelRef = useRef<HTMLDivElement | null>(null);
   const [platformFilter, setPlatformFilter] = useState<'all' | Platform>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [page, setPage] = useState(0);
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
   const [hasInitialSelection, setHasInitialSelection] = useState(false);
   const [overrideMode, setOverrideMode] = useState<ManualMode>('force_normal');
@@ -163,55 +198,55 @@ export default function MCDMConductPage() {
   const [newUserId, setNewUserId] = useState('');
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchQuery(normalizeSearchText(searchQuery));
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [platformFilter]);
+
   const usersQuery = useQuery({
-    queryKey: ['mc', 'dm-conduct', 'users', platformFilter],
-    queryFn: () => conductApi.getUsers(platformFilter === 'all' ? undefined : platformFilter),
+    queryKey: ['mc', 'dm-conduct', 'users', platformFilter, debouncedSearchQuery, page],
+    queryFn: () => conductApi.getUsers({
+      platform: platformFilter === 'all' ? undefined : platformFilter,
+      q: debouncedSearchQuery || undefined,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+    }),
     refetchInterval: 15000,
   });
 
   const users = usersQuery.data?.users || [];
-  const filteredUsers = useMemo(() => {
-    const normalizedQuery = normalizeSearchText(searchQuery);
-    if (!normalizedQuery) {
-      return users;
-    }
-
-    return users.filter((user) => {
-      const haystacks = [
-        user.platformUserId,
-        user.username || '',
-        user.reason || '',
-        user.lastSource || '',
-      ].map(normalizeSearchText);
-
-      return haystacks.some(value => value.includes(normalizedQuery));
-    });
-  }, [searchQuery, users]);
 
   const selectedUser = useMemo(() => {
     if (!selectedUserKey) {
       return null;
     }
-    return filteredUsers.find((user) => userKey(user.platform, user.platformUserId) === selectedUserKey) || null;
-  }, [filteredUsers, selectedUserKey]);
+    return users.find((user) => userKey(user.platform, user.platformUserId) === selectedUserKey) || null;
+  }, [users, selectedUserKey]);
 
   useEffect(() => {
-    if (!hasInitialSelection && !selectedUserKey && filteredUsers[0]) {
-      setSelectedUserKey(userKey(filteredUsers[0].platform, filteredUsers[0].platformUserId));
+    if (!hasInitialSelection && !selectedUserKey && users[0]) {
+      setSelectedUserKey(userKey(users[0].platform, users[0].platformUserId));
       setHasInitialSelection(true);
     }
-  }, [filteredUsers, hasInitialSelection, selectedUserKey]);
+  }, [hasInitialSelection, selectedUserKey, users]);
 
   useEffect(() => {
-    if (selectedUserKey && !selectedUser && filteredUsers[0]) {
-      setSelectedUserKey(userKey(filteredUsers[0].platform, filteredUsers[0].platformUserId));
+    if (selectedUserKey && !selectedUser && users[0]) {
+      setSelectedUserKey(userKey(users[0].platform, users[0].platformUserId));
       return;
     }
 
-    if (selectedUserKey && !selectedUser && filteredUsers.length === 0) {
+    if (selectedUserKey && !selectedUser && users.length === 0) {
       setSelectedUserKey(null);
     }
-  }, [filteredUsers, selectedUser, selectedUserKey]);
+  }, [selectedUser, selectedUserKey, users]);
 
   useEffect(() => {
     if (!selectedUser) {
@@ -223,7 +258,7 @@ export default function MCDMConductPage() {
 
     setOverrideMode(selectedUser.manualMode);
     setOverrideDuration(24);
-      setOverrideNote(selectedUser.manualNote || '');
+    setOverrideNote(selectedUser.manualNote || '');
   }, [selectedUser]);
 
   useEffect(() => {
@@ -234,6 +269,20 @@ export default function MCDMConductPage() {
     const timeout = window.setTimeout(() => setActionFeedback(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [actionFeedback]);
+
+  useEffect(() => {
+    if (!selectedUser) {
+      return;
+    }
+
+    if (window.innerWidth >= 1280) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      selectedPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [selectedUserKey, selectedUser]);
 
   const eventsQuery = useQuery({
     queryKey: ['mc', 'dm-conduct', 'events', selectedUser?.platform, selectedUser?.platformUserId],
@@ -291,13 +340,25 @@ export default function MCDMConductPage() {
     },
   });
 
-  const stats = useMemo(() => ({
-    total: filteredUsers.length,
-    totalAll: users.length,
-    silent: filteredUsers.filter((user) => user.conductState === 'silent').length,
-    manual: filteredUsers.filter((user) => user.manualMode !== 'auto').length,
-    testing: filteredUsers.filter((user) => user.manualMode === 'force_normal').length,
-  }), [filteredUsers, users]);
+  const stats = usersQuery.data?.stats || {
+    total: 0,
+    normal: 0,
+    guarded: 0,
+    finalWarning: 0,
+    silent: 0,
+    manual: 0,
+    testing: 0,
+    testLike: 0,
+  };
+  const totalCount = usersQuery.data?.count || 0;
+  const visibleStart = totalCount === 0 ? 0 : (page * PAGE_SIZE) + 1;
+  const visibleEnd = Math.min((page * PAGE_SIZE) + users.length, totalCount);
+  const hasPreviousPage = page > 0;
+  const hasNextPage = (page + 1) * PAGE_SIZE < totalCount;
+
+  const handleSelectUser = (user: ConductUser) => {
+    setSelectedUserKey(userKey(user.platform, user.platformUserId));
+  };
 
   const handleQuickOverride = (mode: ManualMode, durationHours: number | null, note: string) => {
     if (!selectedUser) {
@@ -324,6 +385,9 @@ export default function MCDMConductPage() {
       note: 'test-account-lift',
     });
     setNewUserId('');
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+    setPage(0);
   };
 
   return (
@@ -342,13 +406,27 @@ export default function MCDMConductPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mc-fade-up-delay">
           <StatCard
             label="Toplam"
-            value={stats.total}
-            hint={stats.total === stats.totalAll ? 'Takip edilen kullanicilar' : `${stats.totalAll} kayittan filtrelenenler`}
+            value={totalCount}
+            hint={debouncedSearchQuery ? 'Arama ile eslesen conduct kayitlari' : 'Takip edilen conduct kullanicilari'}
           />
+          <StatCard label="Normal" value={stats.normal} hint="Su anda normal tonda cevap alanlar" />
           <StatCard label="Silent" value={stats.silent} hint="Yanitsiz modda olanlar" />
           <StatCard label="Manual" value={stats.manual} hint="Admin override aktif" />
-          <StatCard label="Test Lift" value={stats.testing} hint="Force normal ile korunan hesaplar" />
+          <StatCard label="Test / Sim" value={stats.testLike} hint="Test veya simulator olarak gorunen kayitlar" />
         </div>
+
+        <GlassCard className="p-4 mc-fade-up-delay" hover={false}>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-sm text-gray-300">
+              Bu sayfa tum DM kullanicilarini degil, sadece conduct ladder tarafindan takip edilen kullanicilari listeler.
+              Canli veride su anda <span className="font-semibold text-gray-100">{Math.max(totalCount - stats.testLike, 0)}</span> gercek kayit ve
+              <span className="font-semibold text-gray-100"> {stats.testLike}</span> test/simulator gorunumlu kayit var.
+            </div>
+            <div className="text-xs text-gray-500">
+              Varsayilan liste son ihlale gore sirali ve sayfalanmis gelir. Tum kayitlar artik tek seferde yuklenmez.
+            </div>
+          </div>
+        </GlassCard>
 
         <GlassCard className="p-5 mc-fade-up-delay">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -408,7 +486,7 @@ export default function MCDMConductPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <div>
                 <div className="text-sm font-semibold text-gray-100">Kullanicilar</div>
-                <div className="text-xs text-gray-400">Live conduct state + manual override durumu</div>
+                <div className="text-xs text-gray-400">Conduct listesine girmis kayitlar. Arama ve sayfalama sunucu tarafinda calisir.</div>
               </div>
               <select
                 value={platformFilter}
@@ -460,6 +538,15 @@ export default function MCDMConductPage() {
               </div>
             </div>
 
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-white/10 text-xs text-gray-500">
+              <div>
+                {usersQuery.isFetching ? 'Liste yenileniyor...' : `${visibleStart}-${visibleEnd} / ${totalCount} kayit gosteriliyor`}
+              </div>
+              {debouncedSearchQuery && (
+                <div>Sunucu aramasi: "{searchQuery.trim()}"</div>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-white/[0.04] text-gray-400 uppercase text-[11px] tracking-[0.16em]">
@@ -473,16 +560,23 @@ export default function MCDMConductPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map((user) => {
+                  {users.map((user) => {
                     const active = selectedUser && userKey(user.platform, user.platformUserId) === userKey(selectedUser.platform, selectedUser.platformUserId);
                     return (
                       <tr
                         key={user.id}
-                        onClick={() => setSelectedUserKey(userKey(user.platform, user.platformUserId))}
+                        onClick={() => handleSelectUser(user)}
                         className={`cursor-pointer border-t border-white/5 ${active ? 'bg-sky-500/10' : 'hover:bg-white/[0.03]'}`}
                       >
                         <td className="px-5 py-4 align-top">
-                          <div className="font-medium text-gray-100">{user.username ? `@${user.username}` : user.platformUserId}</div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-medium text-gray-100">{user.username ? `@${user.username}` : user.platformUserId}</div>
+                            {user.isTestLike && (
+                              <span className="inline-flex items-center rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
+                                Test / Sim
+                              </span>
+                            )}
+                          </div>
                           <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
                             <span>{platformLabels[user.platform]}</span>
                             <span className="font-mono">{user.platformUserId}</span>
@@ -520,7 +614,7 @@ export default function MCDMConductPage() {
                       </tr>
                     );
                   })}
-                  {!usersQuery.isLoading && filteredUsers.length === 0 && (
+                  {!usersQuery.isLoading && users.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">
                         {searchQuery.trim() ? 'Aramayla eslesen conduct kaydi yok.' : 'Takip edilen conduct kaydi yok.'}
@@ -530,9 +624,32 @@ export default function MCDMConductPage() {
                 </tbody>
               </table>
             </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+              <div className="text-xs text-gray-500">
+                {totalCount === 0 ? 'Kayit yok.' : `${visibleStart}-${visibleEnd} / ${totalCount} kayit`}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((current) => Math.max(current - 1, 0))}
+                  className="mc-btn mc-btn--ghost text-xs"
+                  disabled={!hasPreviousPage || usersQuery.isFetching}
+                >
+                  Onceki
+                </button>
+                <div className="text-xs text-gray-500">Sayfa {page + 1}</div>
+                <button
+                  onClick={() => setPage((current) => current + 1)}
+                  className="mc-btn mc-btn--ghost text-xs"
+                  disabled={!hasNextPage || usersQuery.isFetching}
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
           </GlassCard>
 
-          <div className="min-w-0 space-y-6">
+          <div ref={selectedPanelRef} className="min-w-0 space-y-6 xl:sticky xl:top-24 xl:self-start">
             <GlassCard className="p-5" hover={false}>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -541,7 +658,14 @@ export default function MCDMConductPage() {
                     <div className="mt-3 text-sm text-gray-400">Listeden bir kayit secin veya test lift formu ile yeni bir override olusturun.</div>
                   ) : (
                     <>
-                      <div className="mt-3 text-lg font-semibold text-gray-100">{selectedUser.username ? `@${selectedUser.username}` : selectedUser.platformUserId}</div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="text-lg font-semibold text-gray-100">{selectedUser.username ? `@${selectedUser.username}` : selectedUser.platformUserId}</div>
+                        {selectedUser.isTestLike && (
+                          <span className="inline-flex items-center rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
+                            Test / Sim
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-1 text-xs text-gray-400">{platformLabels[selectedUser.platform]} / {selectedUser.platformUserId}</div>
                     </>
                   )}

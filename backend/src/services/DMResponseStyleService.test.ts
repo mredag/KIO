@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { buildDMStyleProfile, sanitizeConductResponse } from './DMResponseStyleService.js';
+import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from './DMResponseStyleService.js';
 
 describe('DMResponseStyleService', () => {
   it('suppresses repeat greeting and emoji on simple factual follow-ups', () => {
@@ -98,5 +98,30 @@ describe('DMResponseStyleService', () => {
     expect(sanitized).not.toContain('Merhaba');
     expect(sanitized).not.toContain('bizi arayin');
     expect(sanitized).not.toContain('Isterseniz');
+  });
+
+  it('forces a deterministic minimal reply for bad-customer greeting-only messages', () => {
+    const deterministic = getDeterministicConductResponse({
+      conductState: 'silent',
+      customerMessage: 'Kolay gelsin',
+      matchedKeywords: ['greeting'],
+      intentCategories: ['general'],
+    });
+
+    expect(deterministic).toEqual({
+      response: 'Buyurun.',
+      modelId: 'deterministic/bad-customer-greeting-v1',
+    });
+  });
+
+  it('does not swallow actual business questions in bad-customer mode', () => {
+    const deterministic = getDeterministicConductResponse({
+      conductState: 'silent',
+      customerMessage: 'Kolay gelsin spor salonu ucreti nedir',
+      matchedKeywords: ['greeting'],
+      intentCategories: ['pricing'],
+    });
+
+    expect(deterministic).toBeNull();
   });
 });

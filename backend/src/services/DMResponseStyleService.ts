@@ -18,9 +18,16 @@ export interface DMStyleProfile {
   };
 }
 
+export interface DeterministicConductResponse {
+  response: string;
+  modelId: string;
+}
+
 const CONDUCT_SOFT_CLOSE_PATTERNS = [
   /\byardimci olabilirim\b/,
   /\byardimci olabiliriz\b/,
+  /\byardimci olabilir miyim\b/,
+  /\bsize nasil yardimci olabilirim\b/,
   /\bbelirtirseniz\b/,
   /\bpaylasirsaniz\b/,
   /\bisterseniz\b/,
@@ -30,6 +37,9 @@ const CONDUCT_SOFT_CLOSE_PATTERNS = [
   /\brandevu icin\b/,
   /\bdetayli bilgi icin\b/,
 ];
+
+const GREETING_ONLY_PATTERN = /^(merhaba|selam|selamlar|slm|sa|iyi gunler|iyi aksamlar|iyi sabahlar|kolay gelsin)(\s+(merhaba|selam))?$/;
+const BUSINESS_QUESTION_PATTERN = /\b(fiyat|ucret|ne kadar|kac|tl|lira|adres|telefon|konum|saat|acik|kapali|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|uyelik|kurs|ders|randevu|yas|18|cocuk|ebeveyn|veli|nerede|hangi|neden|nasil)\b/;
 
 function normalizeText(value: string): string {
   return value
@@ -53,9 +63,48 @@ function isSimpleFactRequest(normalizedMessage: string): boolean {
   return /\b(fiyat|ucret|ne kadar|kac|tl|lira|saat|acik|kapali|adres|telefon|konum|yas|18|cocuk|ebeveyn|veli|hangi saat|nerede)\b/.test(normalizedMessage);
 }
 
+export function getDeterministicConductResponse(params: {
+  conductState?: ConductState;
+  customerMessage: string;
+  matchedKeywords?: string[];
+  intentCategories?: string[];
+}): DeterministicConductResponse | null {
+  if (params.conductState !== 'silent') {
+    return null;
+  }
+
+  const normalizedMessage = normalizeText(params.customerMessage);
+  if (!normalizedMessage) {
+    return null;
+  }
+
+  const matchedKeywords = params.matchedKeywords || [];
+  const intentCategories = params.intentCategories || [];
+  const hasGreetingSignal = matchedKeywords.includes('greeting') || GREETING_ONLY_PATTERN.test(normalizedMessage);
+  const isGeneralOnly = intentCategories.length === 0 || intentCategories.every(category => category === 'general');
+
+  if (!hasGreetingSignal || !isGeneralOnly) {
+    return null;
+  }
+
+  if (BUSINESS_QUESTION_PATTERN.test(normalizedMessage)) {
+    return null;
+  }
+
+  if (!GREETING_ONLY_PATTERN.test(normalizedMessage) && normalizedMessage.split(' ').length > 4) {
+    return null;
+  }
+
+  return {
+    response: 'Buyurun.',
+    modelId: 'deterministic/bad-customer-greeting-v1',
+  };
+}
+
 function includesRepeatGreeting(value: string): boolean {
   const normalized = normalizeText(value);
   return normalized.includes('size nasil yardimci olabilirim')
+    || normalized.startsWith('kolay gelsin')
     || normalized.startsWith('merhaba')
     || normalized.startsWith('selam');
 }
@@ -76,6 +125,10 @@ function shouldDropConductSegment(normalizedSegment: string): boolean {
     return true;
   }
 
+  if (normalizedSegment.startsWith('kolay gelsin')) {
+    return true;
+  }
+
   if (normalizedSegment.startsWith('hangi ')) {
     return true;
   }
@@ -85,7 +138,7 @@ function shouldDropConductSegment(normalizedSegment: string): boolean {
 
 function stripGreetingPrefix(segment: string): string {
   return segment
-    .replace(/^\s*(merhaba|selam)\b[\s,:;.!-]*/i, '')
+    .replace(/^\s*(merhaba|selam|kolay gelsin)\b[\s,:;.!-]*/i, '')
     .trim();
 }
 
@@ -135,11 +188,19 @@ export function sanitizeConductResponse(
     .split('\n')
     .map(line => sanitizeLineForConduct(line))
     .filter(Boolean)
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
 
-  return sanitized || response.trim();
+  if (sanitized) {
+    return sanitized;
+  }
+
+  if (conductState === 'silent') {
+    return 'Buyurun.';
+  }
+
+  return response.trim();
 }
 
 export function buildDMStyleProfile(params: {

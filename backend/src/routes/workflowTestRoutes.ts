@@ -12,7 +12,7 @@ import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../serv
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
-import { buildDMStyleProfile, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
+import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
@@ -363,10 +363,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       }
 
       // STAGE 1: Context Analysis (same as webhook)
+      const contextStartTime = Date.now();
       const analysis = await contextService.analyzeMessage(senderId, text);
+      const contextAnalysisMs = Date.now() - contextStartTime;
 
       // ═══ STAGE 2: Knowledge Fetch + Format (same as webhook) ═══
       // Always include 'contact' — phone/address are in system prompt and fallback
+      const knowledgeStartTime = Date.now();
       const kbCategories: Set<string> = new Set(analysis.intentCategories);
       if (hasAgePolicySignals(text, analysis.followUpHint?.rewrittenQuestion, analysis.activeTopicLabel)) {
         kbCategories.add('policies');
@@ -495,6 +498,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
       // Format KB from raw JSON to clean labeled text (anti-hallucination)
       const formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
+      const knowledgeAssemblyMs = Date.now() - knowledgeStartTime;
 
       // ═══ STAGE 3: Direct Response via OpenRouter (same as webhook) ═══
       const pipelineConfig = pipelineConfigService.getConfig();
@@ -516,10 +520,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       });
 
       const directService = new DirectResponseService();
+      const deterministicConductResponse = getDeterministicConductResponse({
+        conductState: conductStateForReply,
+        customerMessage: text,
+        matchedKeywords: analysis.matchedKeywords,
+        intentCategories: analysis.intentCategories,
+      });
       const deterministicInfoResponse = conductStateForReply === 'normal' && isGenericInfoRequest(text)
         ? buildGenericInfoTemplateFromKnowledge()
         : null;
-      const deterministicClarifier = deterministicInfoResponse || conductStateForReply !== 'normal'
+      const deterministicClarifier = deterministicConductResponse || deterministicInfoResponse || conductStateForReply !== 'normal'
         ? null
         : buildDeterministicClarifierResponse({
             messageText: text,
@@ -527,11 +537,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             responseMode: analysis.responseDirective.mode,
             semanticSignals: analysis.matchedKeywords,
           });
-      const deterministicResponse = deterministicInfoResponse || deterministicClarifier?.response || null;
-      const deterministicModelId = deterministicInfoResponse
+      const deterministicResponse = deterministicConductResponse?.response || deterministicInfoResponse || deterministicClarifier?.response || null;
+      const deterministicModelId = deterministicConductResponse?.modelId || (deterministicInfoResponse
         ? 'deterministic/info-template-v1'
-        : deterministicClarifier?.modelId || null;
-      const deterministicSessionKey = deterministicInfoResponse
+        : deterministicClarifier?.modelId || null);
+      const deterministicSessionKey = deterministicConductResponse
+        ? 'deterministic-conduct'
+        : deterministicInfoResponse
         ? 'deterministic-info-template'
         : deterministicClarifier
           ? 'deterministic-clarifier'
@@ -547,7 +559,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             modelId: deterministicModelId,
             latencyMs: 0,
             tokensEstimated: estimateTokens(deterministicResponse),
-            usage: ZERO_USAGE_METRICS,
+            usage: {
+              ...ZERO_USAGE_METRICS,
+              outputTokens: estimateTokens(deterministicResponse),
+              totalTokens: estimateTokens(deterministicResponse),
+            },
             success: true,
             error: undefined,
           }
@@ -641,6 +657,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       }
 
       const responseTime = Date.now() - startTime;
+      const directInputTokens = directResult.usage?.inputTokens || 0;
+      const directOutputTokens = directResult.usage?.outputTokens || 0;
+      const policyTokens = policyResult?.tokensEstimated || 0;
+      const safetyFilterMs = sexualIntentResult.latencyMs || 0;
+      const directGenerationMs = directResult.latencyMs || 0;
+      const policyLatencyMs = policyResult?.latencyMs || 0;
+      const uncategorizedMs = Math.max(
+        0,
+        responseTime - safetyFilterMs - contextAnalysisMs - knowledgeAssemblyMs - directGenerationMs - policyLatencyMs,
+      );
 
       // Build pipeline trace (same structure as real webhook)
       finalResponse = sanitizeConductResponse(finalResponse, conductStateForReply);
@@ -688,6 +714,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           latencyMs: directResult.latencyMs,
           modelId: directResult.modelId,
           tokensEstimated: directResult.tokensEstimated,
+          inputTokens: directInputTokens,
+          outputTokens: directOutputTokens,
         },
         policyValidation: policyResult ? {
           status: (policyResult as any).fallback ? 'fallback' : (policyResult as any).correctionApplied ? 'corrected' : policyResult.valid ? 'pass' : 'fail',
@@ -700,7 +728,24 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         } : { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
         metaSendStatus: 'skipped',
         totalResponseTimeMs: responseTime,
-        tokensEstimated: directResult.tokensEstimated + (policyResult?.tokensEstimated || 0),
+        tokensEstimated: directResult.tokensEstimated + policyTokens,
+        timingBreakdown: {
+          ingestDelayMs: null,
+          customerPerceivedTotalMs: null,
+          safetyFilterMs,
+          contextAnalysisMs,
+          knowledgeAssemblyMs,
+          openclawDispatchMs: 0,
+          metaSendMs: 0,
+          uncategorizedMs,
+        },
+        tokenBreakdown: {
+          directTokens: directResult.tokensEstimated,
+          directInputTokens,
+          directOutputTokens,
+          policyTokens,
+          totalTokens: directResult.tokensEstimated + policyTokens,
+        },
       };
 
       // Log outbound response with pipeline trace

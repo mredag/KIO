@@ -13,7 +13,7 @@ import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
 import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
-import { buildDMStyleProfile, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
+import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
 import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
@@ -150,6 +150,27 @@ export interface PipelineTrace {
     latencyMs: number;
     modelId: string;
     tokensEstimated: number;
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+  timingBreakdown?: {
+    ingestDelayMs?: number | null;
+    customerPerceivedTotalMs?: number | null;
+    safetyFilterMs: number;
+    contextAnalysisMs: number;
+    knowledgeAssemblyMs: number;
+    openclawDispatchMs: number;
+    metaSendMs: number;
+    uncategorizedMs: number;
+  };
+  tokenBreakdown?: {
+    directTokens?: number;
+    directInputTokens?: number;
+    directOutputTokens?: number;
+    estimatedInputTokens?: number;
+    estimatedOutputTokens?: number;
+    policyTokens: number;
+    totalTokens: number;
   };
   metaSendStatus: 'success' | 'fail' | 'skipped';
   metaSendError?: string;
@@ -327,6 +348,14 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     }
 
     return getSexualIntentReply(action);
+  }
+
+  function normalizeMetaTimestampMs(value: unknown): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+
+    return value < 1_000_000_000_000 ? value * 1000 : value;
   }
 
   /**
@@ -720,6 +749,12 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
           const API_KEY = process.env.KIO_API_KEY || '';
           const startTime = Date.now();
+          const metaTimestampMs = normalizeMetaTimestampMs(messaging.timestamp);
+          const ingestDelayMs = metaTimestampMs ? Math.max(0, startTime - metaTimestampMs) : null;
+          let contextAnalysisMs = 0;
+          let knowledgeAssemblyMs = 0;
+          let openclawDispatchMs = 0;
+          let metaSendDurationMs = 0;
           
           // Generate unique execution ID for this DM pipeline run
           const executionId = `EXE-${randomUUID().substring(0, 8)}`;
@@ -867,7 +902,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           // Context service: analyze message for intent, model routing, and conversation history
           const contextService = new InstagramContextService(db);
           let analysis;
+          const contextStartTime = Date.now();
 
+          const knowledgeStartTime = Date.now();
           try {
             analysis = await contextService.analyzeMessage(senderId, messageText);
             // Initialize trace from analysis
@@ -927,6 +964,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             };
             console.error('[Instagram Webhook] Context service error (using defaults):', contextErr);
             // Continue with defaults - don't bail out
+          } finally {
+            contextAnalysisMs = Date.now() - contextStartTime;
           }
 
           // Log inbound message to DB FIRST — so conversation history is available
@@ -1120,6 +1159,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // they sometimes ignore JSON values and hallucinate from training data.
             // Plain text with clear labels eliminates this failure mode.
             const formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
+            knowledgeAssemblyMs = Date.now() - knowledgeStartTime;
 
             // Build enriched message — agent just needs to generate Turkish text
             // Keep prompt minimal to save tokens — instructions are in AGENTS.md core files
@@ -1148,8 +1188,32 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             let skipPolicy = pipelineConfigService.shouldSkipPolicy(analysis.modelTier);
 
             let agentResponse: string | null = null;
+            const deterministicConductResponse = getDeterministicConductResponse({
+              conductState: conductStateForReply,
+              customerMessage: messageText,
+              matchedKeywords: analysis.matchedKeywords,
+              intentCategories: analysis.intentCategories,
+            });
 
-            if (conductStateForReply === 'normal' && isGenericInfoRequest(messageText)) {
+            if (deterministicConductResponse) {
+              console.log('[Instagram Webhook] Using deterministic conduct response (%s)', deterministicConductResponse.modelId);
+              agentResponse = deterministicConductResponse.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: deterministicConductResponse.modelId,
+                tokensEstimated: estimateTokens(deterministicConductResponse.response),
+                inputTokens: 0,
+                outputTokens: estimateTokens(deterministicConductResponse.response),
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-conduct';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = deterministicConductResponse.modelId;
+              skipPolicy = true;
+            }
+
+            if (!agentResponse && conductStateForReply === 'normal' && isGenericInfoRequest(messageText)) {
               const deterministicInfoResponse = buildGenericInfoTemplateFromKnowledge();
               if (deterministicInfoResponse) {
                 console.log('[Instagram Webhook] Using deterministic info template response');
@@ -1159,6 +1223,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   latencyMs: 0,
                   modelId: 'deterministic/info-template-v1',
                   tokensEstimated: estimateTokens(deterministicInfoResponse),
+                  inputTokens: 0,
+                  outputTokens: estimateTokens(deterministicInfoResponse),
                 };
                 trace.openclawDispatchStatus = 'skipped' as any;
                 trace.openclawSessionKey = 'deterministic-info-template';
@@ -1184,6 +1250,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   latencyMs: 0,
                   modelId: deterministicClarifier.modelId,
                   tokensEstimated: estimateTokens(deterministicClarifier.response),
+                  inputTokens: 0,
+                  outputTokens: estimateTokens(deterministicClarifier.response),
                 };
                 trace.openclawDispatchStatus = 'skipped' as any;
                 trace.openclawSessionKey = 'deterministic-clarifier';
@@ -1224,6 +1292,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 latencyMs: directResult.latencyMs,
                 modelId: directResult.modelId,
                 tokensEstimated: directResult.tokensEstimated,
+                inputTokens: directResult.usage?.inputTokens,
+                outputTokens: directResult.usage?.outputTokens,
               };
               trace.openclawDispatchStatus = 'skipped' as any;
               trace.openclawSessionKey = 'direct';
@@ -1275,6 +1345,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               // Record dispatch time — only poll for responses AFTER this timestamp
               const dispatchTime = new Date().toISOString();
               console.log('[Instagram Webhook] Forwarding to OpenClaw /hooks/instagram (dispatchTime: %s)', dispatchTime);
+              const openclawDispatchStartTime = Date.now();
               const openclawResponse = await fetch(hookUrl, {
                 method: 'POST',
                 headers: {
@@ -1292,6 +1363,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   model: analysis.modelId,
                 }),
               });
+              openclawDispatchMs = Date.now() - openclawDispatchStartTime;
               const ocBody = await openclawResponse.json() as Record<string, unknown>;
               console.log('[Instagram Webhook] OpenClaw response:', openclawResponse.status, ocBody);
 
@@ -1455,8 +1527,10 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
 
             // Send the (validated) response via Meta Graph API
+            const metaSendStartTime = Date.now();
             try {
               const sendResult = await sendInstagramText(API_KEY, senderId, finalResponse);
+              metaSendDurationMs = Date.now() - metaSendStartTime;
               console.log(
                 '[Instagram Webhook] Send result:',
                 sendResult.ok ? 200 : (sendResult.status ?? 'error'),
@@ -1475,6 +1549,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 };
               }
             } catch (sendErr: any) {
+              metaSendDurationMs = Date.now() - metaSendStartTime;
               console.error('[Instagram Webhook] Failed to send response:', sendErr);
               trace.metaSendStatus = 'fail';
               trace.metaSendError = sendErr?.message || String(sendErr);
@@ -1488,14 +1563,55 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
             // Compute tokens and finalize trace
             const directTokens = trace.directResponse?.tokensEstimated || 0;
+            let estimatedInputTokens = 0;
+            let estimatedOutputTokens = 0;
             if (trace.directResponse?.used) {
               trace.tokensEstimated = directTokens + policyTotalTokens;
             } else {
-              const outputTokens = estimateTokens(finalResponse);
-              const inputTokens = estimateTokens(messageText + knowledgeContext);
-              trace.tokensEstimated = inputTokens + outputTokens + policyTotalTokens;
+              estimatedOutputTokens = estimateTokens(finalResponse);
+              estimatedInputTokens = estimateTokens(messageText + knowledgeContext);
+              trace.tokensEstimated = estimatedInputTokens + estimatedOutputTokens + policyTotalTokens;
             }
             trace.totalResponseTimeMs = Date.now() - startTime;
+            const safetyFilterMs = trace.sexualIntent?.latencyMs || 0;
+            const generationMs = trace.directResponse?.used
+              ? trace.directResponse.latencyMs || 0
+              : trace.agentPollDurationMs || 0;
+            const uncategorizedMs = Math.max(
+              0,
+              trace.totalResponseTimeMs
+                - safetyFilterMs
+                - contextAnalysisMs
+                - knowledgeAssemblyMs
+                - openclawDispatchMs
+                - generationMs
+                - policyTotalLatencyMs
+                - metaSendDurationMs,
+            );
+            trace.timingBreakdown = {
+              ingestDelayMs,
+              customerPerceivedTotalMs: ingestDelayMs != null ? ingestDelayMs + trace.totalResponseTimeMs : null,
+              safetyFilterMs,
+              contextAnalysisMs,
+              knowledgeAssemblyMs,
+              openclawDispatchMs,
+              metaSendMs: metaSendDurationMs,
+              uncategorizedMs,
+            };
+            trace.tokenBreakdown = trace.directResponse?.used
+              ? {
+                  directTokens,
+                  directInputTokens: trace.directResponse.inputTokens,
+                  directOutputTokens: trace.directResponse.outputTokens,
+                  policyTokens: policyTotalTokens,
+                  totalTokens: trace.tokensEstimated,
+                }
+              : {
+                  estimatedInputTokens,
+                  estimatedOutputTokens,
+                  policyTokens: policyTotalTokens,
+                  totalTokens: trace.tokensEstimated,
+                };
 
             // Log the interaction
             try {

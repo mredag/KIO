@@ -173,6 +173,53 @@ function QualityDot({ responseTimeMs }: { responseTimeMs: number | null }) {
   );
 }
 
+function getDisplayedResponseTimeMs(trace: any, responseTimeMs: number | null | undefined): number | null {
+  const customerPerceivedMs = trace?.timingBreakdown?.customerPerceivedTotalMs;
+  if (typeof customerPerceivedMs === 'number' && Number.isFinite(customerPerceivedMs) && customerPerceivedMs > 0) {
+    return customerPerceivedMs;
+  }
+
+  if (typeof responseTimeMs === 'number' && Number.isFinite(responseTimeMs)) {
+    return responseTimeMs;
+  }
+
+  return null;
+}
+
+function formatTokenSummary(trace: any): string {
+  if (!trace) {
+    return '~0 token';
+  }
+
+  const breakdown = trace.tokenBreakdown;
+  const totalTokens = breakdown?.totalTokens ?? trace.tokensEstimated ?? 0;
+  if (!breakdown) {
+    return `~${totalTokens} token`;
+  }
+
+  const parts: string[] = [`~${totalTokens} token`];
+  if (typeof breakdown.directTokens === 'number' && breakdown.directTokens > 0) {
+    parts.push(`yanit ${breakdown.directTokens}`);
+  }
+  if (typeof breakdown.policyTokens === 'number' && breakdown.policyTokens > 0) {
+    parts.push(`policy ${breakdown.policyTokens}`);
+  }
+  if (typeof breakdown.estimatedInputTokens === 'number' && breakdown.estimatedInputTokens > 0) {
+    parts.push(`giris ${breakdown.estimatedInputTokens}`);
+  }
+  if (typeof breakdown.estimatedOutputTokens === 'number' && breakdown.estimatedOutputTokens > 0) {
+    parts.push(`cikis ${breakdown.estimatedOutputTokens}`);
+  }
+  if (typeof breakdown.directInputTokens === 'number' && breakdown.directInputTokens > 0) {
+    parts.push(`yanit-giris ${breakdown.directInputTokens}`);
+  }
+  if (typeof breakdown.directOutputTokens === 'number' && breakdown.directOutputTokens > 0) {
+    parts.push(`yanit-cikis ${breakdown.directOutputTokens}`);
+  }
+
+  return parts.join(' | ');
+}
+
 function getStepStatus(trace: any, step: string): 'success' | 'fail' | 'pending' | 'warning' {
   if (!trace) return 'pending';
   switch (step) {
@@ -248,12 +295,22 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
     ? trace.responseStyle.antiRepeatSignals
     : [];
 
-  // Calculate per-step timing breakdown
+  const timing = trace.timingBreakdown || {};
+  const safetyMs = timing.safetyFilterMs ?? trace.sexualIntent?.latencyMs ?? 0;
+  const contextMs = timing.contextAnalysisMs ?? 0;
+  const knowledgeMs = timing.knowledgeAssemblyMs ?? 0;
+  const dispatchMs = timing.openclawDispatchMs ?? 0;
   const pollMs = trace.agentPollDurationMs || 0;
   const policyMs = pv?.totalLatencyMs || 0;
+  const metaSendMs = timing.metaSendMs ?? 0;
   const totalMs = trace.totalResponseTimeMs || 0;
-  // Overhead = total - poll - policy (includes context analysis, knowledge fetch, openclaw dispatch, meta send)
-  const overheadMs = Math.max(0, totalMs - pollMs - policyMs);
+  const generationMs = trace.directResponse?.used ? (trace.directResponse.latencyMs || 0) : pollMs;
+  const uncategorizedMs = timing.uncategorizedMs ?? Math.max(
+    0,
+    totalMs - safetyMs - contextMs - knowledgeMs - dispatchMs - generationMs - policyMs - metaSendMs,
+  );
+  const customerPerceivedMs = timing.customerPerceivedTotalMs;
+  const ingestDelayMs = timing.ingestDelayMs;
 
   return (
     <div className="px-3 pb-3 border-t border-white/[0.06]">
@@ -303,6 +360,11 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
                 {kw}
               </span>
             ))}
+          </div>
+        )}
+        {contextMs > 0 && (
+          <div className="pl-7 text-[10px] text-gray-600 font-mono">
+            Planlama {formatResponseTime(contextMs)}
           </div>
         )}
 
@@ -546,31 +608,51 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
             <span className="text-[10px] text-gray-500">Süre Dağılımı</span>
             <span className="text-[10px] text-gray-400 font-mono ml-auto">{formatResponseTime(totalMs)}</span>
           </div>
+          {(customerPerceivedMs && customerPerceivedMs > totalMs + 1500) || (ingestDelayMs && ingestDelayMs > 1500) ? (
+            <div className="mb-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-500">
+              <span>Musteri bekleme: <span className="font-mono text-gray-300">{formatResponseTime(customerPerceivedMs)}</span></span>
+              {ingestDelayMs ? (
+                <span>Webhook gecikmesi: <span className="font-mono text-gray-300">{formatResponseTime(ingestDelayMs)}</span></span>
+              ) : null}
+              <span>Islem suresi: <span className="font-mono text-gray-300">{formatResponseTime(totalMs)}</span></span>
+            </div>
+          ) : null}
           {/* Stacked bar */}
           <div className="h-2 rounded-full overflow-hidden flex bg-gray-700/30">
-            {overheadMs > 0 && (
+            {safetyMs > 0 && (
               <div
-                className="bg-sky-500/60 h-full"
-                style={{ width: `${(overheadMs / totalMs) * 100}%` }}
-                title={`Pipeline: ${formatResponseTime(overheadMs)}`}
+                className="bg-emerald-400/60 h-full"
+                style={{ width: `${(safetyMs / totalMs) * 100}%` }}
+                title={`Guvenlik: ${formatResponseTime(safetyMs)}`}
               />
             )}
-            {trace.directResponse?.used ? (
-              (trace.directResponse.latencyMs > 0) && (
-                <div
-                  className="bg-emerald-500/60 h-full"
-                  style={{ width: `${(trace.directResponse.latencyMs / totalMs) * 100}%` }}
-                  title={`Direkt: ${formatResponseTime(trace.directResponse.latencyMs)}`}
-                />
-              )
-            ) : (
-              pollMs > 0 && (
-                <div
-                  className="bg-purple-500/60 h-full"
-                  style={{ width: `${(pollMs / totalMs) * 100}%` }}
-                  title={`Agent: ${formatResponseTime(pollMs)}`}
-                />
-              )
+            {contextMs > 0 && (
+              <div
+                className="bg-sky-500/60 h-full"
+                style={{ width: `${(contextMs / totalMs) * 100}%` }}
+                title={`Planlama: ${formatResponseTime(contextMs)}`}
+              />
+            )}
+            {knowledgeMs > 0 && (
+              <div
+                className="bg-cyan-500/60 h-full"
+                style={{ width: `${(knowledgeMs / totalMs) * 100}%` }}
+                title={`Bilgi: ${formatResponseTime(knowledgeMs)}`}
+              />
+            )}
+            {dispatchMs > 0 && (
+              <div
+                className="bg-indigo-500/60 h-full"
+                style={{ width: `${(dispatchMs / totalMs) * 100}%` }}
+                title={`Dispatch: ${formatResponseTime(dispatchMs)}`}
+              />
+            )}
+            {generationMs > 0 && (
+              <div
+                className={`${trace.directResponse?.used ? 'bg-violet-500/60' : 'bg-purple-500/60'} h-full`}
+                style={{ width: `${(generationMs / totalMs) * 100}%` }}
+                title={`${trace.directResponse?.used ? 'Direkt model' : 'Agent yanit'}: ${formatResponseTime(generationMs)}`}
+              />
             )}
             {policyMs > 0 && (
               <div
@@ -579,22 +661,51 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
                 title={`Policy: ${formatResponseTime(policyMs)}`}
               />
             )}
+            {metaSendMs > 0 && (
+              <div
+                className="bg-pink-500/60 h-full"
+                style={{ width: `${(metaSendMs / totalMs) * 100}%` }}
+                title={`Meta: ${formatResponseTime(metaSendMs)}`}
+              />
+            )}
+            {uncategorizedMs > 0 && (
+              <div
+                className="bg-gray-500/40 h-full"
+                style={{ width: `${(uncategorizedMs / totalMs) * 100}%` }}
+                title={`Diger: ${formatResponseTime(uncategorizedMs)}`}
+              />
+            )}
           </div>
           {/* Legend */}
-          <div className="flex gap-3 mt-1">
-            <span className="text-[9px] text-gray-500 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-sm bg-sky-500/60 inline-block" />
-              Pipeline {formatResponseTime(overheadMs)}
-            </span>
-            {trace.directResponse?.used ? (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+            {safetyMs > 0 && (
               <span className="text-[9px] text-gray-500 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-sm bg-emerald-500/60 inline-block" />
-                Direkt {formatResponseTime(trace.directResponse.latencyMs)}
+                <span className="w-2 h-2 rounded-sm bg-emerald-400/60 inline-block" />
+                Guvenlik {formatResponseTime(safetyMs)}
               </span>
-            ) : (
+            )}
+            {contextMs > 0 && (
               <span className="text-[9px] text-gray-500 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-sm bg-purple-500/60 inline-block" />
-                Agent {formatResponseTime(pollMs)}
+                <span className="w-2 h-2 rounded-sm bg-sky-500/60 inline-block" />
+                Planlama {formatResponseTime(contextMs)}
+              </span>
+            )}
+            {knowledgeMs > 0 && (
+              <span className="text-[9px] text-gray-500 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-cyan-500/60 inline-block" />
+                Bilgi {formatResponseTime(knowledgeMs)}
+              </span>
+            )}
+            {dispatchMs > 0 && (
+              <span className="text-[9px] text-gray-500 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-indigo-500/60 inline-block" />
+                Dispatch {formatResponseTime(dispatchMs)}
+              </span>
+            )}
+            {generationMs > 0 && (
+              <span className="text-[9px] text-gray-500 flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-sm ${trace.directResponse?.used ? 'bg-violet-500/60' : 'bg-purple-500/60'} inline-block`} />
+                {trace.directResponse?.used ? 'Direkt' : 'Agent'} {formatResponseTime(generationMs)}
               </span>
             )}
             {policyMs > 0 && (
@@ -603,7 +714,21 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
                 Policy {formatResponseTime(policyMs)}
               </span>
             )}
-            <span className="text-[9px] text-gray-400 ml-auto">~{trace.tokensEstimated || 0} token</span>
+            {metaSendMs > 0 && (
+              <span className="text-[9px] text-gray-500 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-pink-500/60 inline-block" />
+                Meta {formatResponseTime(metaSendMs)}
+              </span>
+            )}
+            {uncategorizedMs > 0 && (
+              <span className="text-[9px] text-gray-500 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm bg-gray-500/40 inline-block" />
+                Diger {formatResponseTime(uncategorizedMs)}
+              </span>
+            )}
+            <span className="text-[9px] text-gray-400 ml-auto" title={formatTokenSummary(trace)}>
+              {formatTokenSummary(trace)}
+            </span>
           </div>
         </div>
       )}
@@ -702,6 +827,7 @@ function LiveFeedTab() {
           const isExpanded = expandedId === dm.id;
           const trace = dm.pipelineTrace;
           const senderId = dm.channel === 'whatsapp' ? dm.phone : dm.instagramId;
+          const displayedResponseTimeMs = getDisplayedResponseTimeMs(trace, dm.responseTimeMs);
           return (
             <div key={dm.id} className="mc-card">
               <div
@@ -742,7 +868,7 @@ function LiveFeedTab() {
                         {dm.executionId}
                       </span>
                     )}
-                    <QualityDot responseTimeMs={dm.responseTimeMs} />
+                    <QualityDot responseTimeMs={displayedResponseTimeMs} />
                     <TierBadge tier={dm.modelTier} modelUsed={dm.modelUsed} />
                     {trace?.policyValidation && trace.policyValidation.status !== 'pass' && trace.policyValidation.status !== 'skipped' && (
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
@@ -756,6 +882,11 @@ function LiveFeedTab() {
                     {getConductState(trace) && getConductState(trace) !== 'normal' && (
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${getConductBadgeClass(getConductState(trace))}`}>
                         {formatConductStateLabel(getConductState(trace))}
+                      </span>
+                    )}
+                    {displayedResponseTimeMs != null && dm.responseTimeMs != null && displayedResponseTimeMs > dm.responseTimeMs + 1500 && (
+                      <span className="text-[9px] text-gray-500">
+                        islem {formatResponseTime(dm.responseTimeMs)}
                       </span>
                     )}
                     <span className="text-[10px] text-gray-500">{timeAgo(dm.createdAt)}</span>
@@ -792,7 +923,8 @@ function LiveFeedTab() {
                 const isOutbound = msg.direction === 'outbound';
                 const trace = msg.pipelineTrace;
                 const pv = trace?.policyValidation;
-                const qualityColor = getResponseQualityColor(msg.responseTimeMs);
+                const displayedResponseTimeMs = getDisplayedResponseTimeMs(trace, msg.responseTimeMs);
+                const qualityColor = getResponseQualityColor(displayedResponseTimeMs);
                 const isTraceExpanded = expandedId === `conv-${msg.id}`;
 
                 return (
@@ -836,12 +968,15 @@ function LiveFeedTab() {
                                   {formatTierLabel(msg.modelTier)}
                                 </span>
                               )}
-                              {msg.responseTimeMs != null && (
+                              {displayedResponseTimeMs != null && (
                                 <span className={`${qualityColor === 'green' ? 'text-green-400' : qualityColor === 'yellow' ? 'text-yellow-400' : qualityColor === 'red' ? 'text-red-400' : 'text-gray-500'}`}>
-                                  {formatResponseTime(msg.responseTimeMs)}
+                                  {formatResponseTime(displayedResponseTimeMs)}
                                 </span>
                               )}
-                              {msg.tokensEstimated > 0 && <span>~{msg.tokensEstimated}t</span>}
+                              {displayedResponseTimeMs != null && msg.responseTimeMs != null && displayedResponseTimeMs > msg.responseTimeMs + 1500 && (
+                                <span className="text-gray-500">islem {formatResponseTime(msg.responseTimeMs)}</span>
+                              )}
+                              {msg.tokensEstimated > 0 && <span title={formatTokenSummary(trace)}>{formatTokenSummary(trace)}</span>}
                               {msg.intent && <span className="text-purple-400">#{msg.intent}</span>}
                             </div>
 

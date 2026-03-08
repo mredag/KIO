@@ -898,8 +898,12 @@ export class InstagramContextService {
     return null;
   }
 
-  private shouldAttemptContextRepair(plan: AIContextPlan, history: ConversationEntry[]): boolean {
+  private shouldAttemptContextRepair(plan: AIContextPlan, history: ConversationEntry[], messageText: string): boolean {
     if (plan.followUpHint) {
+      return false;
+    }
+
+    if (this.shouldSkipFollowUpCarryOver(plan, messageText)) {
       return false;
     }
 
@@ -928,6 +932,102 @@ export class InstagramContextService {
       .length;
   }
 
+  private normalizeMessageForHeuristics(messageText: string): string {
+    return normalizeTurkish(messageText.toLowerCase())
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private stripPoliteLeadIn(messageText: string): string {
+    let normalized = this.normalizeMessageForHeuristics(messageText);
+    const politeLeadInPattern = /^(?:tesekkur(?:ler)?|sagol(?:un)?|saol|eyvallah|tamam(?:dir)?|peki|ok(?:ay)?|anladim|olur|rica ederim)\b\s*/;
+
+    while (politeLeadInPattern.test(normalized)) {
+      normalized = normalized.replace(politeLeadInPattern, '').trim();
+    }
+
+    return normalized;
+  }
+
+  private hasExplicitServiceMention(messageText: string): boolean {
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return /\b(?:masaj|massage|spa|hamam|sauna|fitness|pilates|reformer|yuzme|havuz|taekwondo|jimnastik|kickboks|boks|pt|personal|trainer|kurs|ders|uyelik|medikal|sicak tas|mix|kese|kopuk)\b/.test(normalized);
+  }
+
+  private isStandaloneGratitudeMessage(messageText: string): boolean {
+    return this.stripPoliteLeadIn(messageText).length === 0;
+  }
+
+  private hasStandaloneHoursRequest(messageText: string, categories: string[]): boolean {
+    if (!categories.includes('hours')) {
+      return false;
+    }
+
+    const explicitServiceMention = this.hasExplicitServiceMention(messageText);
+    const nonHoursCategories = categories.filter(category =>
+      !['hours', 'general'].includes(category) && !(category === 'services' && !explicitServiceMention),
+    );
+    if (nonHoursCategories.length > 0) {
+      return false;
+    }
+
+    const normalized = this.stripPoliteLeadIn(messageText);
+    if (!normalized) {
+      return false;
+    }
+
+    const hasHoursSignal = /\b(?:acilis|kapanis|calisma|kacta|kaca kadar|hangi saat)\b/.test(normalized);
+    if (!hasHoursSignal) {
+      return false;
+    }
+
+    return !explicitServiceMention;
+  }
+
+  private shouldSkipFollowUpCarryOver(plan: AIContextPlan, messageText: string): boolean {
+    return this.isStandaloneGratitudeMessage(messageText)
+      || this.hasStandaloneHoursRequest(messageText, plan.categories);
+  }
+
+  private applyIndependentTurnGuards(plan: AIContextPlan, messageText: string): void {
+    const standaloneGratitude = this.isStandaloneGratitudeMessage(messageText);
+    if (standaloneGratitude) {
+      plan.followUpHint = null;
+      plan.topicSummary = null;
+      plan.categories = ['general'];
+      if (!plan.keywords.includes('gratitude_message')) {
+        plan.keywords.push('gratitude_message');
+      }
+      plan.responseDirective = {
+        mode: 'answer_directly',
+        instruction: 'Mesaj yalnizca tesekkur veya kisa kapanis ise cok kisa ve dogal bir nezaket cevabi ver. Onceki hizmet konusunu tasima. Yeni bilgi ekleme veya saat/fiyat uydurma.',
+        rationale: 'Saf tesekkur/kapanis mesaji eski aktif konuyu devam ettirmemeli.',
+      };
+      return;
+    }
+
+    const standaloneHours = this.hasStandaloneHoursRequest(messageText, plan.categories);
+    if (!standaloneHours) {
+      return;
+    }
+
+    plan.followUpHint = null;
+    plan.topicSummary = this.hasExplicitServiceMention(messageText) ? plan.topicSummary : null;
+    plan.categories = plan.categories.filter(category => category !== 'services');
+    if (!plan.categories.includes('hours')) {
+      plan.categories = ['hours', ...plan.categories];
+    }
+    if (!plan.keywords.includes('standalone_hours_request')) {
+      plan.keywords.push('standalone_hours_request');
+    }
+    plan.responseDirective = {
+      mode: 'answer_directly',
+      instruction: 'Acilis/kapanis veya calisma saati sorusu varsa mevcut mesaji bagimsiz bir saat sorusu olarak ele al. Mesaj yeni bir hizmet adi vermiyorsa eski aktif hizmet konusunu tasima. Once genel saat bilgisini dogrudan ver.',
+      rationale: 'Bagimsiz saat sorusu eski hizmet baglamini kirar; stale topic tasinmamali.',
+    };
+  }
+
   private shouldAttemptStateRepair(
     plan: AIContextPlan,
     messageText: string,
@@ -938,6 +1038,10 @@ export class InstagramContextService {
     }
 
     if (!conversationState.activeTopic || conversationState.activeTopicConfidence < 0.55) {
+      return false;
+    }
+
+    if (this.shouldSkipFollowUpCarryOver(plan, messageText)) {
       return false;
     }
 
@@ -960,8 +1064,13 @@ export class InstagramContextService {
   private shouldOverrideFollowUpWithState(
     plan: AIContextPlan,
     conversationState: ConversationStateRecord | null,
+    messageText: string,
   ): boolean {
     if (!conversationState || !plan.followUpHint) {
+      return false;
+    }
+
+    if (this.shouldSkipFollowUpCarryOver(plan, messageText)) {
       return false;
     }
 
@@ -1355,6 +1464,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
+    this.applyIndependentTurnGuards(plan, messageText);
     return plan;
   }
 
@@ -1392,6 +1502,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
+    this.applyIndependentTurnGuards(plan, messageText);
     return plan;
   }
 
@@ -1472,7 +1583,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       plan.usageTrace = [
         this.buildUsageTrace('context_planner', 'google/gemini-2.5-flash-lite', data, `Only return valid JSON.\n${prompt}`, content),
       ];
-      if (this.shouldAttemptContextRepair(plan, history)) {
+      if (this.shouldAttemptContextRepair(plan, history, messageText)) {
         const repairResult = await this.repairImplicitFollowUpAI(messageText, history);
         if (repairResult.usageTrace) {
           plan.usageTrace.push(repairResult.usageTrace);
@@ -1504,7 +1615,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
             repairedFollowUpHint.rewrittenQuestion);
         }
       }
-      if (this.shouldOverrideFollowUpWithState(plan, conversationState)) {
+      if (this.shouldOverrideFollowUpWithState(plan, conversationState, messageText)) {
         const overriddenFollowUpHint = this.buildStateFollowUpHint(messageText, conversationState!);
         if (overriddenFollowUpHint) {
           plan.followUpHint = overriddenFollowUpHint;
@@ -1535,6 +1646,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       this.applyPolicyPrioritySignals(plan, messageText);
       this.applyMassagePricingSignals(plan, messageText);
       this.applyRoomAvailabilitySignals(plan, messageText);
+      this.applyIndependentTurnGuards(plan, messageText);
       this.applyGroundedFollowUpGuard(plan);
 
       return plan;

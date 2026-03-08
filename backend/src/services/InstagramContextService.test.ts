@@ -110,6 +110,78 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Saat gibi net bilgileri ver');
   });
 
+  it('treats gratitude-prefixed hours questions as independent instead of carrying a stale service topic', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services', 'hours'],
+      semanticSignals: ['hours_inquiry', 'recent_follow_up'],
+      followUpHint: {
+        topicLabel: 'medical masaj paketleri',
+        rewrittenQuestion: 'medical masaj paketleri icin tesekkurler acilis kapanis saatleriniz',
+        sourceMessage: 'Medical masaj paketiniz fiyati nekadar',
+      },
+      responseDirective: {
+        mode: 'clarify_only',
+        instruction: 'Aktif konu: medical masaj paketleri. Mesajin saat kismini bu hizmete gore yanitla.',
+        rationale: 'Planner eski konuyu tasidi.',
+      },
+      tier: 'standard',
+      tierReason: 'Baglamli saat sorusu',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'Tesekkurler acilis kapanis saatleriniz',
+      createHistory([
+        { text: 'Medical masaj paketiniz fiyati nekadar', minutesAgo: 2 },
+        { direction: 'outbound', text: 'Medikal 30dk ve 50dk seceneklerimiz var.', minutesAgo: 1 },
+      ]),
+    );
+
+    expect(result.followUpHint).toBeNull();
+    expect(result.categories).toEqual(['hours']);
+    expect(result.keywords).toContain('standalone_hours_request');
+    expect(result.responseDirective.mode).toBe('answer_directly');
+    expect(result.responseDirective.instruction).toContain('bagimsiz bir saat sorusu');
+  });
+
+  it('treats pure gratitude as a short closure instead of reviving the prior topic', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services', 'general'],
+      semanticSignals: ['recent_follow_up'],
+      followUpHint: {
+        topicLabel: 'medical masaj paketleri',
+        rewrittenQuestion: 'medical masaj paketleri icin tesekkurler',
+        sourceMessage: 'Medical masaj paketiniz fiyati nekadar',
+      },
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Aktif konuya gore kisa bir bilgi daha ver.',
+        rationale: 'Planner eski konuyu tasidi.',
+      },
+      tier: 'light',
+      tierReason: 'Kisa baglamli mesaj',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'Tesekkurler',
+      createHistory([
+        { text: 'Medical masaj paketiniz fiyati nekadar', minutesAgo: 2 },
+        { direction: 'outbound', text: 'Medikal 30dk ve 50dk seceneklerimiz var.', minutesAgo: 1 },
+      ]),
+    );
+
+    expect(result.followUpHint).toBeNull();
+    expect(result.categories).toEqual(['general']);
+    expect(result.keywords).toContain('gratitude_message');
+    expect(result.responseDirective.mode).toBe('answer_directly');
+    expect(result.responseDirective.instruction).toContain('cok kisa ve dogal bir nezaket cevabi');
+  });
+
   it('forces policies into age-related follow-ups even when the planner anchors to a service topic', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
@@ -552,6 +624,78 @@ describe('InstagramContextService AI context planner', () => {
     });
     expect(analysis.activeTopicLabel).toBe('reformer pilates');
     expect(analysis.conversationState?.repairedFromState).toBe(true);
+  });
+
+  it('does not use stored service state for standalone hours questions with a gratitude prefix', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['hours'],
+      semanticSignals: ['hours_inquiry'],
+      topicSummary: null,
+      contextDependency: {
+        dependsOnPriorTopic: false,
+        topicLabel: null,
+        sourceMessage: null,
+        rationale: 'Bagimsiz saat sorusu.',
+      },
+      responseDirective: {
+        mode: 'answer_directly',
+        instruction: 'Genel saat bilgisini ver.',
+        rationale: 'Mesaj tek basina saat soruyor.',
+      },
+      tier: 'light',
+      tierReason: 'Net saat sorusu',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const fakeDb = {
+      prepare(sql: string) {
+        if (sql.includes('ORDER BY created_at DESC')) {
+          return {
+            all: () => [
+              { direction: 'outbound', message_text: 'Medikal 30dk ve 50dk seceneklerimiz var.', created_at: minutesAgo(1) },
+              { direction: 'inbound', message_text: 'Medical masaj paketiniz fiyati nekadar', created_at: minutesAgo(2) },
+            ],
+          };
+        }
+
+        if (sql.includes('COUNT(*) as c')) {
+          return { get: () => ({ c: 8 }) };
+        }
+
+        if (sql.includes('FROM dm_conversation_state')) {
+          return {
+            get: () => ({
+              channel: 'instagram',
+              customer_id: 'ig-user',
+              active_topic: 'medical masaj paketleri',
+              active_topic_confidence: 0.95,
+              topic_source_message: 'Medical masaj paketiniz fiyati nekadar',
+              last_question_type: 'service_topic',
+              pending_categories: '["services","pricing"]',
+              last_customer_message: '1300 Dediğiniz pakette sauna falan varmı',
+              last_assistant_message: 'Medikal 30dk ve 50dk seceneklerimiz var.',
+              turn_count: 4,
+              expires_at: minutesFromNow(10),
+              created_at: minutesAgo(2),
+              updated_at: minutesAgo(1),
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected SQL in test: ${sql}`);
+      },
+    } as any;
+
+    const service = new InstagramContextService(fakeDb);
+    const analysis = await service.analyzeMessage('ig-user', 'Tesekkurler acilis kapanis saatleriniz');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(analysis.intentCategories).toEqual(['hours']);
+    expect(analysis.followUpHint).toBeNull();
+    expect(analysis.activeTopicLabel).toBeNull();
+    expect(analysis.conversationState?.repairedFromState).toBe(false);
+    expect(analysis.responseDirective.instruction).toContain('bagimsiz bir saat sorusu');
   });
   it('uses recent conversation state instead of a stale planner follow-up when topics conflict', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';

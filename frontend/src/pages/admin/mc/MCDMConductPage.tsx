@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import AdminLayout from '../../../layouts/AdminLayout';
 import { GlassCard } from '../../../components/mc/GlassCard';
@@ -184,13 +184,11 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint: 
 
 export default function MCDMConductPage() {
   const queryClient = useQueryClient();
-  const selectedPanelRef = useRef<HTMLDivElement | null>(null);
   const [platformFilter, setPlatformFilter] = useState<'all' | Platform>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [page, setPage] = useState(0);
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
-  const [hasInitialSelection, setHasInitialSelection] = useState(false);
   const [overrideMode, setOverrideMode] = useState<ManualMode>('force_normal');
   const [overrideDuration, setOverrideDuration] = useState<number>(24);
   const [overrideNote, setOverrideNote] = useState('');
@@ -231,19 +229,7 @@ export default function MCDMConductPage() {
   }, [users, selectedUserKey]);
 
   useEffect(() => {
-    if (!hasInitialSelection && !selectedUserKey && users[0]) {
-      setSelectedUserKey(userKey(users[0].platform, users[0].platformUserId));
-      setHasInitialSelection(true);
-    }
-  }, [hasInitialSelection, selectedUserKey, users]);
-
-  useEffect(() => {
-    if (selectedUserKey && !selectedUser && users[0]) {
-      setSelectedUserKey(userKey(users[0].platform, users[0].platformUserId));
-      return;
-    }
-
-    if (selectedUserKey && !selectedUser && users.length === 0) {
+    if (selectedUserKey && !selectedUser) {
       setSelectedUserKey(null);
     }
   }, [selectedUser, selectedUserKey, users]);
@@ -269,20 +255,6 @@ export default function MCDMConductPage() {
     const timeout = window.setTimeout(() => setActionFeedback(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [actionFeedback]);
-
-  useEffect(() => {
-    if (!selectedUser) {
-      return;
-    }
-
-    if (window.innerWidth >= 1280) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      selectedPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }, [selectedUserKey, selectedUser]);
 
   const eventsQuery = useQuery({
     queryKey: ['mc', 'dm-conduct', 'events', selectedUser?.platform, selectedUser?.platformUserId],
@@ -403,15 +375,16 @@ export default function MCDMConductPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mc-fade-up-delay">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5 mc-fade-up-delay">
           <StatCard
             label="Toplam"
             value={totalCount}
             hint={debouncedSearchQuery ? 'Arama ile eslesen conduct kayitlari' : 'Takip edilen conduct kullanicilari'}
           />
           <StatCard label="Normal" value={stats.normal} hint="Su anda normal tonda cevap alanlar" />
+          <StatCard label="Guarded" value={stats.guarded} hint="Kisa ve mesafeli moda alinmis kullanicilar" />
+          <StatCard label="Final/Silent" value={stats.finalWarning + stats.silent} hint="Sert uyarida veya sessiz modda olanlar" />
           <StatCard label="Silent" value={stats.silent} hint="Yanitsiz modda olanlar" />
-          <StatCard label="Manual" value={stats.manual} hint="Admin override aktif" />
           <StatCard label="Test / Sim" value={stats.testLike} hint="Test veya simulator olarak gorunen kayitlar" />
         </div>
 
@@ -425,6 +398,11 @@ export default function MCDMConductPage() {
             <div className="text-xs text-gray-500">
               Varsayilan liste son ihlale gore sirali ve sayfalanmis gelir. Tum kayitlar artik tek seferde yuklenmez.
             </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
+            Cok sayida <span className="font-semibold">guarded</span> gorunmesinin nedeni bu listenin tarihsel conduct kayitlarini da tutmasi.
+            Bu kayitlar sadece <span className="font-semibold">mutlu son</span> soranlar degil; onceki moderasyon sisteminden gelen
+            <span className="font-semibold"> ai_detected_inappropriate</span>, <span className="font-semibold">hard_reject_keyword</span> ve euphemism hitlerini de icerir.
           </div>
         </GlassCard>
 
@@ -481,12 +459,12 @@ export default function MCDMConductPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <div className="space-y-6">
           <GlassCard className="min-w-0 overflow-hidden p-0">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <div>
                 <div className="text-sm font-semibold text-gray-100">Kullanicilar</div>
-                <div className="text-xs text-gray-400">Conduct listesine girmis kayitlar. Arama ve sayfalama sunucu tarafinda calisir.</div>
+                <div className="text-xs text-gray-400">Conduct listesine girmis kayitlar. Satira tikladiginizda detay ve aksiyonlar sagdan acilir.</div>
               </div>
               <select
                 value={platformFilter}
@@ -648,82 +626,88 @@ export default function MCDMConductPage() {
               </div>
             </div>
           </GlassCard>
+        </div>
 
-          <div ref={selectedPanelRef} className="min-w-0 space-y-6 xl:sticky xl:top-24 xl:self-start">
-            <GlassCard className="p-5" hover={false}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-gray-100">Secili kullanici</div>
-                  {!selectedUser ? (
-                    <div className="mt-3 text-sm text-gray-400">Listeden bir kayit secin veya test lift formu ile yeni bir override olusturun.</div>
-                  ) : (
-                    <>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <div className="text-lg font-semibold text-gray-100">{selectedUser.username ? `@${selectedUser.username}` : selectedUser.platformUserId}</div>
-                        {selectedUser.isTestLike && (
-                          <span className="inline-flex items-center rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
-                            Test / Sim
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 text-xs text-gray-400">{platformLabels[selectedUser.platform]} / {selectedUser.platformUserId}</div>
-                    </>
-                  )}
+        {selectedUser && (
+          <>
+            <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedUserKey(null)} />
+            <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[560px] border-l border-white/10 bg-[#07111f] shadow-2xl">
+              <div className="flex h-full flex-col">
+                <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Secili kullanici</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="text-xl font-semibold text-gray-100">{selectedUser.username ? `@${selectedUser.username}` : selectedUser.platformUserId}</div>
+                      {selectedUser.isTestLike && (
+                        <span className="inline-flex items-center rounded-full border border-sky-400/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
+                          Test / Sim
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-400">{platformLabels[selectedUser.platform]} / {selectedUser.platformUserId}</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${stateBadgeClasses[selectedUser.conductState]}`}>
+                      {stateLabels[selectedUser.conductState]}
+                    </span>
+                    <button
+                      onClick={() => setSelectedUserKey(null)}
+                      className="rounded-lg border border-white/10 px-3 py-2 text-xs text-gray-300 hover:bg-white/[0.04]"
+                    >
+                      Kapat
+                    </button>
+                  </div>
                 </div>
-                {selectedUser && (
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${stateBadgeClasses[selectedUser.conductState]}`}>
-                    {stateLabels[selectedUser.conductState]}
-                  </span>
-                )}
-              </div>
 
-              {selectedUser && (
-                <>
-                  <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-lg border border-white/10 p-3">
+                <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                       <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Manual mode</div>
                       <div className="mt-2 text-gray-100">{manualModeLabels[selectedUser.manualMode]}</div>
                       <div className="mt-1 text-xs text-gray-400">{selectedUser.manualNote || 'No note'}</div>
                     </div>
-                    <div className="rounded-lg border border-white/10 p-3">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                       <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Silent window</div>
                       <div className="mt-2 text-gray-100">{selectedUser.silentUntil ? formatDateTime(new Date(selectedUser.silentUntil)) : 'Not silent'}</div>
                       <div className="mt-1 text-xs text-gray-400">reply {selectedUser.shouldReply ? 'enabled' : 'disabled'}</div>
                     </div>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => handleQuickOverride('force_normal', 24, 'test-account-lift')}
-                      className="mc-btn mc-btn--primary text-xs"
-                      disabled={overrideMutation.isPending}
-                    >
-                      {overrideMutation.isPending ? 'Isleniyor...' : 'Lift 24h'}
-                    </button>
-                    <button
-                      onClick={() => handleQuickOverride('force_silent', 24, 'manual-silent')}
-                      className="mc-btn mc-btn--ghost text-xs"
-                      disabled={overrideMutation.isPending}
-                    >
-                      {overrideMutation.isPending ? 'Isleniyor...' : 'Silent 24h'}
-                    </button>
-                    <button
-                      onClick={() => handleQuickOverride('auto', null, 'clear-override')}
-                      className="mc-btn mc-btn--ghost text-xs"
-                      disabled={overrideMutation.isPending}
-                    >
-                      {overrideMutation.isPending ? 'Isleniyor...' : 'Clear override'}
-                    </button>
-                    <button
-                      onClick={() => resetMutation.mutate({ platform: selectedUser.platform, platformUserId: selectedUser.platformUserId })}
-                      className="mc-btn mc-btn--ghost text-xs text-red-200 border-red-500/25"
-                      disabled={resetMutation.isPending}
-                    >
-                      {resetMutation.isPending ? 'Resetleniyor...' : 'Full reset'}
-                    </button>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Hizli aksiyonlar</div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleQuickOverride('force_normal', 24, 'test-account-lift')}
+                        className="mc-btn mc-btn--primary text-xs justify-center"
+                        disabled={overrideMutation.isPending}
+                      >
+                        {overrideMutation.isPending ? 'Isleniyor...' : 'Lift 24h'}
+                      </button>
+                      <button
+                        onClick={() => handleQuickOverride('force_silent', 24, 'manual-silent')}
+                        className="mc-btn mc-btn--ghost text-xs justify-center"
+                        disabled={overrideMutation.isPending}
+                      >
+                        {overrideMutation.isPending ? 'Isleniyor...' : 'Silent 24h'}
+                      </button>
+                      <button
+                        onClick={() => handleQuickOverride('auto', null, 'clear-override')}
+                        className="mc-btn mc-btn--ghost text-xs justify-center"
+                        disabled={overrideMutation.isPending}
+                      >
+                        {overrideMutation.isPending ? 'Isleniyor...' : 'Clear override'}
+                      </button>
+                      <button
+                        onClick={() => resetMutation.mutate({ platform: selectedUser.platform, platformUserId: selectedUser.platformUserId })}
+                        className="mc-btn mc-btn--ghost text-xs justify-center text-red-200 border-red-500/25"
+                        disabled={resetMutation.isPending}
+                      >
+                        {resetMutation.isPending ? 'Resetleniyor...' : 'Full reset'}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="mt-5 border-t border-white/10 pt-5 space-y-3">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
                     <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Custom override</div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <select value={overrideMode} onChange={(event) => setOverrideMode(event.target.value as ManualMode)} className="mc-input">
@@ -742,7 +726,7 @@ export default function MCDMConductPage() {
                       />
                       <button
                         onClick={() => handleQuickOverride(overrideMode, overrideMode === 'auto' ? null : overrideDuration, overrideNote || 'manual-override')}
-                        className="mc-btn mc-btn--primary text-xs"
+                        className="mc-btn mc-btn--primary text-xs justify-center"
                         disabled={overrideMutation.isPending}
                       >
                         {overrideMutation.isPending ? 'Uygulaniyor...' : 'Apply override'}
@@ -755,59 +739,59 @@ export default function MCDMConductPage() {
                       placeholder="Operator note"
                     />
                   </div>
-                </>
-              )}
-            </GlassCard>
 
-            <GlassCard className="p-5" hover={false}>
-              <div className="text-sm font-semibold text-gray-100">Conduct events</div>
-              <div className="mt-4 space-y-3 max-h-[320px] overflow-y-auto pr-1">
-                {eventsQuery.isLoading && <div className="text-sm text-gray-400">Yukleniyor...</div>}
-                {!eventsQuery.isLoading && !eventsQuery.data?.events.length && (
-                  <div className="text-sm text-gray-400">Event kaydi yok.</div>
-                )}
-                {eventsQuery.data?.events.map((event) => (
-                  <div key={event.id} className="rounded-lg border border-white/10 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{event.eventType}</div>
-                      <div className="text-xs text-gray-400">{formatDateTime(new Date(event.createdAt))}</div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                    <div className="text-sm font-semibold text-gray-100">Conduct events</div>
+                    <div className="mt-4 space-y-3 max-h-[280px] overflow-y-auto pr-1">
+                      {eventsQuery.isLoading && <div className="text-sm text-gray-400">Yukleniyor...</div>}
+                      {!eventsQuery.isLoading && !eventsQuery.data?.events.length && (
+                        <div className="text-sm text-gray-400">Event kaydi yok.</div>
+                      )}
+                      {eventsQuery.data?.events.map((event) => (
+                        <div key={event.id} className="rounded-lg border border-white/10 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{event.eventType}</div>
+                            <div className="text-xs text-gray-400">{formatDateTime(new Date(event.createdAt))}</div>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2 text-sm text-gray-200">
+                            <span>{stateLabels[event.stateBefore]}</span>
+                            <span className="text-gray-500">{'->'}</span>
+                            <span>{stateLabels[event.stateAfter]}</span>
+                          </div>
+                          <div className="mt-2 text-sm text-gray-300">{event.reason}</div>
+                          <div className="mt-2 text-xs text-gray-500">score +{event.scoreDelta} / offense {event.offenseCount} / {event.source || 'unknown'}</div>
+                          {event.messageExcerpt && (
+                            <div className="mt-2 rounded bg-black/20 px-2.5 py-2 text-xs text-gray-400">{event.messageExcerpt}</div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-200">
-                      <span>{stateLabels[event.stateBefore]}</span>
-                      <span className="text-gray-500">{'->'}</span>
-                      <span>{stateLabels[event.stateAfter]}</span>
-                    </div>
-                    <div className="mt-2 text-sm text-gray-300">{event.reason}</div>
-                    <div className="mt-2 text-xs text-gray-500">score +{event.scoreDelta} / offense {event.offenseCount} / {event.source || 'unknown'}</div>
-                    {event.messageExcerpt && (
-                      <div className="mt-2 rounded bg-black/20 px-2.5 py-2 text-xs text-gray-400">{event.messageExcerpt}</div>
-                    )}
                   </div>
-                ))}
-              </div>
-            </GlassCard>
 
-            <GlassCard className="p-5" hover={false}>
-              <div className="text-sm font-semibold text-gray-100">Recent chat history</div>
-              <div className="mt-4 space-y-3 max-h-[360px] overflow-y-auto pr-1">
-                {historyQuery.isLoading && <div className="text-sm text-gray-400">Yukleniyor...</div>}
-                {!historyQuery.isLoading && !historyQuery.data?.messages.length && (
-                  <div className="text-sm text-gray-400">Mesaj gecmisi yok.</div>
-                )}
-                {(historyQuery.data?.messages || []).slice().reverse().map((message) => (
-                  <div key={message.id} className={`rounded-lg px-3 py-2 ${message.direction === 'inbound' ? 'bg-white/[0.04]' : 'bg-sky-500/12 border border-sky-500/20'}`}>
-                    <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-gray-500">
-                      <span>{message.direction}</span>
-                      <span>{formatDateTime(new Date(message.createdAt))}</span>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                    <div className="text-sm font-semibold text-gray-100">Recent chat history</div>
+                    <div className="mt-4 space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                      {historyQuery.isLoading && <div className="text-sm text-gray-400">Yukleniyor...</div>}
+                      {!historyQuery.isLoading && !historyQuery.data?.messages.length && (
+                        <div className="text-sm text-gray-400">Mesaj gecmisi yok.</div>
+                      )}
+                      {(historyQuery.data?.messages || []).slice().reverse().map((message) => (
+                        <div key={message.id} className={`rounded-lg px-3 py-2 ${message.direction === 'inbound' ? 'bg-white/[0.04]' : 'bg-sky-500/12 border border-sky-500/20'}`}>
+                          <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-gray-500">
+                            <span>{message.direction}</span>
+                            <span>{formatDateTime(new Date(message.createdAt))}</span>
+                          </div>
+                          <div className="mt-2 whitespace-pre-wrap text-sm text-gray-100">{message.messageText}</div>
+                          {message.intent && <div className="mt-2 text-xs text-gray-400">intent: {message.intent}</div>}
+                        </div>
+                      ))}
                     </div>
-                    <div className="mt-2 whitespace-pre-wrap text-sm text-gray-100">{message.messageText}</div>
-                    {message.intent && <div className="mt-2 text-xs text-gray-400">intent: {message.intent}</div>}
                   </div>
-                ))}
+                </div>
               </div>
-            </GlassCard>
-          </div>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </AdminLayout>
   );

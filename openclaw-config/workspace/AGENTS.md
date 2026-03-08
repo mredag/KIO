@@ -371,9 +371,9 @@ WhatsApp API endpoints:
 Auth: `Authorization: Bearer <KIO_API_KEY>`
 ```
 
-## Telegram Escalation Commands (Callback Button Fallback)
+## Telegram Escalation Commands (Shared-Bot Command Mode)
 
-When the system sends escalation notifications with inline buttons (Onayla/Reddet/Detay), the buttons use Telegram callback_query. Since OpenClaw consumes all Telegram updates, callback_query events may not reach the backend poller.
+Shared Telegram-bot callback buttons are disabled for operator actions. Do not rely on inline callback buttons on this bot.
 
 **Admin can use text commands instead of buttons:**
 ```
@@ -402,11 +402,16 @@ curl -H "Authorization: Bearer <KIO_API_KEY>" \
   "http://localhost:3001/api/mc/jobs/<jobId>"
 ```
 
-Respond with the result in Turkish. Example: "Ã¢Å“â€¦ Job abc12345 onaylandÃ„Â± ve scheduled durumuna alÃ„Â±ndÃ„Â±."
+Rules:
+- Never assume a Telegram button click changed backend state.
+- Never treat button-label text like `Onayla`, `Reddet`, `Detail`, `Yes - hard block`, or `No - keep safe` as a completed action.
+- Only confirm success after the KIO API returns a successful response.
+
+Respond with the verified API result in Turkish. Example: "Job abc12345 onaylandi ve scheduled durumuna alindi."
 
 ## Telegram DM Safety Review Commands
 
-DM safety phrase review messages use text-command fallback on the shared Telegram bot. Do not rely on inline callback buttons.
+DM safety phrase review messages use text-command fallback on the shared Telegram bot. Inline callback buttons are disabled for this flow.
 
 **Admin can use text commands instead of buttons:**
 ```
@@ -423,7 +428,12 @@ curl -X POST -H "Authorization: Bearer <KIO_API_KEY>" \
   "http://localhost:3001/api/integrations/dm-safety/reviews/<reviewId>/decision"
 ```
 
-Replace `block` with `allow` or `detail` as needed, then reply in Turkish with the API result.
+Rules:
+- If the user sends only a button label like `Yes - hard block`, `No - keep safe`, or `Detail`, do not claim success.
+- Tell the user to use `/dmphr block <reviewId>`, `/dmphr allow <reviewId>`, or `/dmphr detail <reviewId>`.
+- Only confirm success after the KIO API returns `ok: true`.
+
+Replace `block` with `allow` or `detail` as needed, then reply in Turkish with the verified API result.
 
 ## Git Workflow (Pi Production Ã¢â‚¬â€ MANDATORY)
 

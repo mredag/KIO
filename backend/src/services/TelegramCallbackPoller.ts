@@ -1,5 +1,6 @@
 /**
- * TelegramCallbackPoller - handles Telegram callback_query buttons only when OpenClaw is down.
+ * TelegramCallbackPoller - legacy handler for old Telegram callback_query messages
+ * only when OpenClaw is down.
  */
 import { EscalationService } from './EscalationService.js';
 import { DMSafetyPhraseService } from './DMSafetyPhraseService.js';

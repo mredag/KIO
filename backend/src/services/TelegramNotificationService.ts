@@ -1,12 +1,10 @@
 /**
  * TelegramNotificationService — Sends actionable alerts to admin via Telegram Bot API.
  *
- * Uses inline_keyboard buttons only where they are actually reliable.
- *
  * Shares the same bot as OpenClaw's Telegram channel (same bot token).
  * Because OpenClaw uses getUpdates long-polling, callback_query buttons are not
- * reliable on the shared bot. Phrase-review notifications should use text-command
- * fallback instead of inline callback buttons.
+ * reliable on the shared bot. Admin actions must use text commands or URL
+ * buttons that do not depend on callback_query delivery.
  */
 import Database from 'better-sqlite3';
 
@@ -116,12 +114,13 @@ export class TelegramNotificationService {
     if (msg.jobId && msg.jobId !== 'no-job') {
       lines.push('');
       lines.push(`📋 <code>${msg.jobId.substring(0, 8)}</code>`);
+      lines.push(...this.buildEscalationCommandLines(msg.jobId, msg.source));
     }
 
     const text = lines.join('\n');
 
-    // Build inline keyboard with action buttons
-    const keyboard = this.buildInlineKeyboard(msg.jobId, msg.source);
+    // Only keep safe URL buttons on the shared Telegram bot.
+    const keyboard = this.buildUrlKeyboard(msg.customer?.username);
 
     try {
       const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
@@ -180,7 +179,8 @@ export class TelegramNotificationService {
       '',
       this.escapeHtml(this.truncateText(msg.reason, 240)),
       '',
-      '<b>Telegram command fallback:</b>',
+      '<b>Operator action:</b>',
+      'Shared bot on Telegram does not support reliable callback buttons while OpenClaw is online.',
       `<code>/dmphr block ${this.escapeHtml(msg.reviewId)}</code>`,
       `<code>/dmphr allow ${this.escapeHtml(msg.reviewId)}</code>`,
       `<code>/dmphr detail ${this.escapeHtml(msg.reviewId)}</code>`,
@@ -271,88 +271,34 @@ export class TelegramNotificationService {
     } catch { /* non-critical */ }
   }
 
-  private buildInlineKeyboard(jobId: string, source?: string): { inline_keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>> } | null {
-    if (!jobId || jobId === 'no-job') return null;
+  private buildUrlKeyboard(username?: string): { inline_keyboard: Array<Array<{ text: string; url: string }>> } | null {
+    const rows: Array<Array<{ text: string; url: string }>> = [];
 
-    // Workshop URL for web-based action (always works, no Telegram polling needed)
-    const workshopUrl = `http://localhost:3001/admin/mc/workshop`;
-
-    // Policy violations
-    if (source === 'policy_agent') {
-      return {
-        inline_keyboard: [
-          [
-            { text: '📝 KB İncele Görevi Oluştur', callback_data: `esc:approve:${jobId}` },
-            { text: '🔕 Bilgi Aldım', callback_data: `esc:reject:${jobId}` },
-          ],
-          [
-            { text: '📋 Detay', callback_data: `esc:detail:${jobId}` },
-            { text: '🌐 Panel', url: workshopUrl },
-          ],
-        ],
-      };
+    if (username) {
+      rows.push([{ text: 'Instagram DM', url: `https://ig.me/m/${encodeURIComponent(username)}` }]);
     }
 
-    // DM pipeline failures
-    if (source === 'dm_pipeline') {
-      return {
-        inline_keyboard: [
-          [
-            { text: '🔍 Analiz Başlat', callback_data: `esc:approve:${jobId}` },
-            { text: '🔕 Yoksay', callback_data: `esc:reject:${jobId}` },
-          ],
-          [
-            { text: '📋 Detay', callback_data: `esc:detail:${jobId}` },
-            { text: '🌐 Panel', url: workshopUrl },
-          ],
-        ],
-      };
-    }
+    rows.push([{ text: 'Panel', url: 'http://localhost:3001/admin/mc/workshop' }]);
 
-    // Cost spike
-    if (source === 'autopilot') {
-      return {
-        inline_keyboard: [
-          [
-            { text: '📊 İncele', callback_data: `esc:approve:${jobId}` },
-            { text: '🔕 Yoksay', callback_data: `esc:reject:${jobId}` },
-          ],
-          [
-            { text: '🌐 Panel', url: workshopUrl },
-          ],
-        ],
-      };
-    }
+    return { inline_keyboard: rows };
+  }
 
-    // Nightly audit
+  private buildEscalationCommandLines(jobId: string, source?: string): string[] {
+    const lines = [
+      '<b>Operator action:</b>',
+      'Shared bot on Telegram does not support reliable callback buttons while OpenClaw is online.',
+      `<code>/esc detail ${this.escapeHtml(jobId)}</code>`,
+    ];
+
     if (source === 'nightly_audit') {
-      return {
-        inline_keyboard: [
-          [
-            { text: '📊 Analiste Ata', callback_data: `esc:assign_analyst:${jobId}` },
-            { text: '🔕 Yoksay', callback_data: `esc:reject:${jobId}` },
-          ],
-          [
-            { text: '📋 Detay', callback_data: `esc:detail:${jobId}` },
-            { text: '🌐 Panel', url: workshopUrl },
-          ],
-        ],
-      };
+      lines.push(`<code>/esc analyst ${this.escapeHtml(jobId)}</code>`);
+      lines.push(`<code>/esc reject ${this.escapeHtml(jobId)}</code>`);
+      return lines;
     }
 
-    // Default
-    return {
-      inline_keyboard: [
-        [
-          { text: '✅ Onayla', callback_data: `esc:approve:${jobId}` },
-          { text: '❌ Reddet', callback_data: `esc:reject:${jobId}` },
-        ],
-        [
-          { text: '📋 Detay', callback_data: `esc:detail:${jobId}` },
-          { text: '🌐 Panel', url: workshopUrl },
-        ],
-      ],
-    };
+    lines.push(`<code>/esc approve ${this.escapeHtml(jobId)}</code>`);
+    lines.push(`<code>/esc reject ${this.escapeHtml(jobId)}</code>`);
+    return lines;
   }
 
   // Keep buildActionUrls for backward compat (EscalationService references it)

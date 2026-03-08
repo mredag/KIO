@@ -352,8 +352,9 @@ setIntegrationDMSafetyPhraseService(dmSafetyPhraseService);
 setEscalationActionService(escalationService);
 setTelegramWebhookDeps(escalationService, telegramNotifier, dmSafetyPhraseService);
 
-// Start Telegram callback poller (handles inline keyboard button presses)
-// Auto-detects OpenClaw gateway and defers when it's running
+// Start legacy Telegram callback poller for old callback-button messages only.
+// Current operator flow is command/URL based because the shared bot makes
+// callback delivery unreliable while OpenClaw is online.
 const telegramPoller = new TelegramCallbackPoller(escalationService, dmSafetyPhraseService, telegramNotifier);
 telegramPoller.start();
 

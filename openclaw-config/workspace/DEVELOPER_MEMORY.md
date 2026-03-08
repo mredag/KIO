@@ -41,12 +41,12 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 ## Safety and KB Rules
 - Safety is AI-first plus a narrow euphemism guard. Do not replace it with a giant phrase list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop before the normal AI safety decision.
-- Shared Telegram-bot callback buttons are unreliable while OpenClaw is online. Use `/dmphr block|allow|detail <reviewId>` with `POST /api/integrations/dm-safety/reviews/:reviewId/decision` for DM safety review fallback.
+- Shared Telegram-bot callback buttons are disabled for operator actions. Use `/dmphr block|allow|detail <reviewId>` and `/esc approve|reject|detail|analyst <jobId>` instead of Telegram action buttons.
 - Questions about what to bring or wear for a visit (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) are normal logistics, not safety-review candidates.
 - Persistent safety config lives in `mc_policies.id='dm_safety_phrase_config'` with `hardBlockPhrases` and `reviewedSafePhrases`.
-- Short ambiguous phrases that return `retry_question` can create `dm_safety_phrase_reviews` records and send Telegram `Yes / No / Detail` review prompts.
-- `Yes` promotes the normalized phrase into the instant hard-block list. `No` marks the exact phrase safe so it stops re-alerting.
-- Telegram callback actions for `dmphr:*` and `esc:*` must be handled as backend control actions, not as normal Jarvis chat.
+- Short ambiguous phrases that return `retry_question` can create `dm_safety_phrase_reviews` records and send Telegram review prompts with text commands, not callback buttons.
+- `block` promotes the normalized phrase into the instant hard-block list. `allow` marks the exact phrase safe so it stops re-alerting.
+- Jarvis must never claim a Telegram review or escalation action succeeded unless the backend API call returns success.
 - Policy price checks read allowed values from the current KB context, not hardcoded constants.
 - `knowledge_base.id` must stay non-null and durable.
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`.

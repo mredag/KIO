@@ -42,29 +42,88 @@ const QUALITY_DOT: Record<string, string> = {
 
 const PIPELINE_STEPS = [
   { key: 'intent', label: 'Intent Tespiti' },
-  { key: 'model', label: 'Model Seçimi' },
-  { key: 'knowledge', label: 'Bilgi Tabanı' },
-  { key: 'openclaw', label: 'OpenClaw Gönderim' },
-  { key: 'poll', label: 'Yanıt Bekleme' },
+  { key: 'behavior', label: 'Davranis / Ton' },
+  { key: 'model', label: 'Model Secimi' },
+  { key: 'knowledge', label: 'Bilgi Tabani' },
+  { key: 'openclaw', label: 'OpenClaw Gonderim' },
+  { key: 'poll', label: 'Yanit Bekleme' },
   { key: 'policy', label: 'Policy Agent' },
-  { key: 'send', label: 'Meta Gönderim' },
+  { key: 'send', label: 'Meta Gonderim' },
 ];
 
 const ERROR_STAGES = [
-  { value: '', label: 'Tüm Aşamalar' },
-  { value: 'context_error', label: 'Bağlam Hatası' },
-  { value: 'knowledge_fetch_fail', label: 'Bilgi Tabanı Hatası' },
-  { value: 'openclaw_timeout', label: 'OpenClaw Zaman Aşımı' },
-  { value: 'openclaw_dispatch_fail', label: 'OpenClaw Gönderim Hatası' },
-  { value: 'policy_validation_fail', label: 'Policy İhlali' },
-  { value: 'meta_send_fail', label: 'Meta Gönderim Hatası' },
+  { value: '', label: 'Tum Asamalar' },
+  { value: 'context_error', label: 'Baglam Hatasi' },
+  { value: 'knowledge_fetch_fail', label: 'Bilgi Tabani Hatasi' },
+  { value: 'openclaw_timeout', label: 'OpenClaw Zaman Asimi' },
+  { value: 'openclaw_dispatch_fail', label: 'OpenClaw Gonderim Hatasi' },
+  { value: 'policy_validation_fail', label: 'Policy Ihlali' },
+  { value: 'meta_send_fail', label: 'Meta Gonderim Hatasi' },
 ];
 
 const CHANNEL_FILTERS: { key: DmChannel | 'all'; label: string }[] = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'instagram', label: '📸 Instagram' },
-  { key: 'whatsapp', label: '💬 WhatsApp' },
+  { key: 'all', label: 'Tumu' },
+  { key: 'instagram', label: 'Instagram' },
+  { key: 'whatsapp', label: 'WhatsApp' },
 ];
+
+const CONDUCT_STATE_LABELS: Record<string, string> = {
+  normal: 'Normal',
+  guarded: 'Guarded',
+  final_warning: 'Final warning',
+  silent: 'Bad customer',
+};
+
+const CONDUCT_STATE_BADGES: Record<string, string> = {
+  normal: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+  guarded: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+  final_warning: 'bg-orange-500/15 text-orange-400 border-orange-500/20',
+  silent: 'bg-red-500/15 text-red-400 border-red-500/20',
+};
+
+const ANTI_REPEAT_LABELS: Record<string, string> = {
+  repeat_greeting: 'tekrar selamlama yok',
+  repeat_phone_cta: 'telefon CTA azaltildi',
+  repeat_emoji: 'emoji tekrari yok',
+  simple_fact_request: 'kisa bilgi modu',
+};
+
+function getConductState(trace: any): string | null {
+  return trace?.conductControl?.state || trace?.responseStyle?.mode || null;
+}
+
+function formatConductStateLabel(state: string | null | undefined): string {
+  if (!state) return '-';
+  return CONDUCT_STATE_LABELS[state] || state;
+}
+
+function getConductBadgeClass(state: string | null | undefined): string {
+  if (!state) return 'bg-gray-500/15 text-gray-400 border-gray-500/20';
+  return CONDUCT_STATE_BADGES[state] || 'bg-gray-500/15 text-gray-400 border-gray-500/20';
+}
+
+function formatBehaviorHint(trace: any): string[] {
+  const hints: string[] = [];
+  const style = trace?.responseStyle;
+
+  if (style?.greetingPolicy === 'minimal') {
+    hints.push('selamlama minimal');
+  } else if (style?.greetingPolicy === 'skip_repeat_greeting') {
+    hints.push('tekrar selamlama yok');
+  }
+
+  if (style?.emojiPolicy === 'none') {
+    hints.push('emoji yok');
+  }
+
+  if (style?.ctaPolicy === 'minimal') {
+    hints.push('cta minimal');
+  } else if (style?.ctaPolicy === 'only_when_needed') {
+    hints.push('cta gerektiginde');
+  }
+
+  return hints;
+}
 
 function ChannelBadge({ channel }: { channel?: string }) {
   if (channel === 'whatsapp') {
@@ -114,11 +173,16 @@ function QualityDot({ responseTimeMs }: { responseTimeMs: number | null }) {
   );
 }
 
-function getStepStatus(trace: any, step: string): 'success' | 'fail' | 'pending' {
+function getStepStatus(trace: any, step: string): 'success' | 'fail' | 'pending' | 'warning' {
   if (!trace) return 'pending';
   switch (step) {
     case 'intent':
       return trace.intentCategories?.length > 0 ? 'success' : 'pending';
+    case 'behavior': {
+      const conductState = getConductState(trace);
+      if (!conductState) return 'pending';
+      return conductState === 'normal' ? 'success' : 'warning';
+    }
     case 'model':
       return trace.modelTier ? 'success' : 'pending';
     case 'knowledge':
@@ -149,15 +213,17 @@ function getStepStatus(trace: any, step: string): 'success' | 'fail' | 'pending'
 }
 
 const STEP_ICONS: Record<string, string> = {
-  success: '✓',
-  fail: '✗',
-  pending: '⏳',
+  success: 'OK',
+  fail: 'X',
+  pending: '...',
+  warning: '!',
 };
 
 const STEP_COLORS: Record<string, string> = {
   success: 'text-green-400 border-green-500/30',
   fail: 'text-red-400 border-red-500/30',
   pending: 'text-gray-500 border-gray-600/30',
+  warning: 'text-amber-400 border-amber-500/30',
 };
 
 // ============================================================
@@ -175,6 +241,12 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
   }
 
   const pv = trace.policyValidation;
+  const conductState = getConductState(trace);
+  const conductControl = trace.conductControl;
+  const behaviorHints = formatBehaviorHint(trace);
+  const antiRepeatSignals = Array.isArray(trace.responseStyle?.antiRepeatSignals)
+    ? trace.responseStyle.antiRepeatSignals
+    : [];
 
   // Calculate per-step timing breakdown
   const pollMs = trace.agentPollDurationMs || 0;
@@ -232,6 +304,54 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
               </span>
             ))}
           </div>
+        )}
+
+                {(trace.responseStyle || trace.conductControl) && (
+          <>
+            <div className="flex items-center gap-2">
+              <StepIcon status={getStepStatus(trace, 'behavior')} />
+              <span className="text-xs text-gray-400">Davranis / Ton</span>
+              <span className="text-[10px] ml-auto flex items-center gap-1.5">
+                {conductState && (
+                  <span className={`px-1.5 py-0.5 rounded border ${getConductBadgeClass(conductState)}`}>
+                    {formatConductStateLabel(conductState)}
+                  </span>
+                )}
+                {conductControl?.manualMode && conductControl.manualMode !== 'auto' && (
+                  <span className="px-1.5 py-0.5 rounded border bg-sky-500/10 text-sky-400 border-sky-500/20">
+                    {conductControl.manualMode === 'force_normal' ? 'Force normal' : 'Force bad customer'}
+                  </span>
+                )}
+                {conductControl?.offenseCount > 0 && (
+                  <span className="text-gray-600 font-mono">offense {conductControl.offenseCount}</span>
+                )}
+              </span>
+            </div>
+
+            {(behaviorHints.length > 0 || antiRepeatSignals.length > 0 || conductControl?.reason) && (
+              <div className="pl-7 space-y-1">
+                {(behaviorHints.length > 0 || antiRepeatSignals.length > 0) && (
+                  <div className="flex flex-wrap gap-1">
+                    {behaviorHints.map((hint: string, index: number) => (
+                      <span key={`hint-${index}`} className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20">
+                        {hint}
+                      </span>
+                    ))}
+                    {antiRepeatSignals.map((signal: string, index: number) => (
+                      <span key={`signal-${index}`} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-300 border border-slate-500/20">
+                        {ANTI_REPEAT_LABELS[signal] || signal}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {conductControl?.reason && conductState && conductState !== 'normal' && (
+                  <div className="text-[10px] text-gray-500 italic max-w-md">
+                    {conductControl.reason}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {/* Model Seçimi */}
@@ -630,7 +750,12 @@ function LiveFeedTab() {
                           ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                           : 'bg-red-500/20 text-red-400 border border-red-500/30'
                       }`}>
-                        {trace.policyValidation.status === 'corrected' ? '🔄' : '⚠️'}
+                        {trace.policyValidation.status === 'corrected' ? 'FIX' : '!'}
+                      </span>
+                    )}
+                    {getConductState(trace) && getConductState(trace) !== 'normal' && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${getConductBadgeClass(getConductState(trace))}`}>
+                        {formatConductStateLabel(getConductState(trace))}
                       </span>
                     )}
                     <span className="text-[10px] text-gray-500">{timeAgo(dm.createdAt)}</span>
@@ -766,6 +891,11 @@ function LiveFeedTab() {
                                         {STEP_ICONS[status]}
                                       </span>
                                       <span className="text-[10px] text-gray-400">{step.label}</span>
+                                      {step.key === 'behavior' && getConductState(trace) && (
+                                        <span className={`text-[9px] ml-auto px-1.5 py-0.5 rounded border ${getConductBadgeClass(getConductState(trace))}`}>
+                                          {formatConductStateLabel(getConductState(trace))}
+                                        </span>
+                                      )}
                                       {step.key === 'knowledge' && trace.knowledgeEntriesCount != null && (
                                         <span className="text-[9px] text-gray-500 ml-auto">{trace.knowledgeEntriesCount} kayıt</span>
                                       )}

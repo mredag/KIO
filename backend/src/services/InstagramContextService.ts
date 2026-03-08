@@ -869,6 +869,36 @@ export class InstagramContextService {
     }
   }
 
+  private applyDirectContactLocationSignals(plan: AIContextPlan, messageText: string): void {
+    const normalizedMessage = normalizeTurkish(messageText.toLowerCase());
+    const asksDirectLocation = /\b(?:adres|konum|nerede|neredesiniz|neresindesiniz|ulasim|yol tarifi|harita|maps)\b/.test(
+      normalizedMessage,
+    );
+    if (!asksDirectLocation || !plan.categories.includes('contact')) {
+      return;
+    }
+
+    if (!plan.keywords.includes('direct_location_answer_signal')) {
+      plan.keywords.push('direct_location_answer_signal');
+    }
+
+    const normalizedInstruction = normalizeTurkish(plan.responseDirective.instruction.toLowerCase());
+    const isUnnecessaryClarifier = plan.responseDirective.mode === 'clarify_only'
+      || normalizedInstruction.includes('konum bilgisi soran bir soru')
+      || normalizedInstruction.includes('ek bilgiye ihtiyac')
+      || normalizedInstruction.includes('hangi bolgeye yakin');
+
+    if (!isUnnecessaryClarifier) {
+      return;
+    }
+
+    plan.responseDirective = {
+      mode: 'answer_directly',
+      instruction: 'Adres, konum veya nerede oldugunuz soruluyorsa verilen contact bilgisini dogrudan kullan. Mevcut adres, ilce/sehir ve varsa konum linkini net sekilde ver. Musterinin hangi bolgede oldugunu veya neye yakin oldugunu geri sorma; sadece musteri acikca ulasim detayi isterse ek yon tarifini kisaca oner.',
+      rationale: 'Dogrudan adres/konum sorusu mevcut contact bilgisiyle cevaplanabilir; gereksiz netlestirme sorusu sorulmamali.',
+    };
+  }
+
   private isModifierOnlyRequest(categories: string[]): boolean {
     if (categories.length === 0) {
       return false;
@@ -1464,6 +1494,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
+    this.applyDirectContactLocationSignals(plan, messageText);
     this.applyIndependentTurnGuards(plan, messageText);
     return plan;
   }
@@ -1502,6 +1533,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     this.applyPolicyPrioritySignals(plan, messageText);
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
+    this.applyDirectContactLocationSignals(plan, messageText);
     this.applyIndependentTurnGuards(plan, messageText);
     return plan;
   }
@@ -1646,6 +1678,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       this.applyPolicyPrioritySignals(plan, messageText);
       this.applyMassagePricingSignals(plan, messageText);
       this.applyRoomAvailabilitySignals(plan, messageText);
+      this.applyDirectContactLocationSignals(plan, messageText);
       this.applyIndependentTurnGuards(plan, messageText);
       this.applyGroundedFollowUpGuard(plan);
 

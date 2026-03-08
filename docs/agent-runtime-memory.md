@@ -59,6 +59,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 ## Safety and Policy Notes
 - `sexualIntentFilter.ts` is AI-first, with a narrow euphemism guard for phrases like `mutlu son`, `extra hizmet`, and `premium paket`.
 - `sexualIntentFilter.ts` includes a clear-business guard for concrete pricing asks (including compact typo forms like `30daka ne kadar`) so they bypass boundary-probe hard blocks.
+- Normal visit-preparation questions such as `sort getiriyor muyuz`, `yanimizda bir sey getiriyor muyuz`, `havlu/terlik/bornoz gerekli mi` must stay `allow` and must not trigger DM safety phrase review.
 - The first sexual-intent gate now receives bounded conversation context from `instagram_interactions`: last 24 hours only, capped to at most 6 short lines and ~600 chars before model prompts.
 - `ResponsePolicyService` now receives a compact conversation snippet for rule/faithfulness checks (max 4 lines, ~600 chars) so follow-up turns are judged with context without large token bloat.
 - Age and minor signals (`yas`, `18`, `cocuk`, `ebeveyn`, `veli`) must keep `policies` in the fetched KB slice even inside follow-up pricing/service context.

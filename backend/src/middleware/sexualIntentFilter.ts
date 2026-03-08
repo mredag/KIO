@@ -37,6 +37,9 @@ const LOCATION_QUESTION_PATTERN = /\b(nerede|neredesiniz|neresindesiniz|adres|ko
 const CONTACT_QUESTION_PATTERN = /\b(telefon|numara|iletisim|ulasim|ulasabilir|whatsapp)\b/u;
 const BENIGN_INFO_REQUEST_PATTERN = /\b(bilgi|detay|yardim|yardım|yardimci|yardımcı|ogren|öğren|sorabilir|alabilir)\b/u;
 const BENIGN_GREETING_PATTERN = /\b(merhaba|selam|slm|kolay\s*gelsin|iyi\s*gunler|iyi\s*aksamlar|musait\s*misiniz)\b/u;
+const PREPARATION_ITEM_PATTERN = /\b(sort|short|havlu|terlik|bornoz|bone|mayo|bikini|kiyafet|esofman)\b/u;
+const PREPARATION_VERB_PATTERN = /\b(getir|getirelim|getireyim|getiriyoruz|getiriyor|getiriyormuyuz|getirmeli|getirmemiz|yaninda|yanimizda|gelirken|gelmeden|gerekli|lazim)\b/u;
+const GENERIC_ITEM_QUESTION_PATTERN = /\b(ne|getirelim|birsey)\b/u;
 const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
 const BOUNDARY_SUSPICIOUS_CUE_PATTERN = /\b(mutlu|extra|ekstra|ozel|muamele|sonunda)\b/u;
 
@@ -197,12 +200,17 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
   const hasBenignInfoRequest = BENIGN_INFO_REQUEST_PATTERN.test(spaced);
   const hasBenignGreeting = BENIGN_GREETING_PATTERN.test(spaced);
   const hasBoundarySuspiciousCue = BOUNDARY_SUSPICIOUS_CUE_PATTERN.test(spaced);
+  const hasPreparationItem = PREPARATION_ITEM_PATTERN.test(spaced);
+  const hasPreparationVerb = PREPARATION_VERB_PATTERN.test(spaced);
+  const hasGenericItemQuestion = GENERIC_ITEM_QUESTION_PATTERN.test(spaced);
   const tokenCount = spaced.split(' ').length;
   const isShortNeutralProbe = !hasBusinessAnchor
     && !hasBoundarySuspiciousCue
     && tokenCount > 0
     && tokenCount <= 4
     && SHORT_PROBE_PATTERN.test(spaced);
+  const looksLikePreparationQuestion = hasPreparationVerb
+    && (hasPreparationItem || hasBusinessAnchor || hasGenericItemQuestion);
 
   // Covers compact typo forms like "30daka ne kadar".
   const looksLikeDurationPriceQuestion = hasDurationToken && (hasPriceQuestion || hasNumericToken);
@@ -242,6 +250,15 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
       action: 'allow',
       confidence: 0,
       reason: 'Detected benign greeting/opening message.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  if (looksLikePreparationQuestion) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected normal preparation / what-to-bring question for the visit.',
       modelUsed: 'heuristic-clear-business-guard',
     };
   }
@@ -693,4 +710,3 @@ export async function evaluateSexualIntent(messageText: string): Promise<SexualI
 
   return mergeSexualIntentDecisions(modelDecision, boundaryDecision);
 }
-

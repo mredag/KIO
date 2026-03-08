@@ -41,6 +41,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 ## Safety and KB Rules
 - Safety is AI-first plus a narrow euphemism guard. Do not replace it with a giant phrase list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop before the normal AI safety decision.
+- Questions about what to bring or wear for a visit (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) are normal logistics, not safety-review candidates.
 - Persistent safety config lives in `mc_policies.id='dm_safety_phrase_config'` with `hardBlockPhrases` and `reviewedSafePhrases`.
 - Short ambiguous phrases that return `retry_question` can create `dm_safety_phrase_reviews` records and send Telegram `Yes / No / Detail` review prompts.
 - `Yes` promotes the normalized phrase into the instant hard-block list. `No` marks the exact phrase safe so it stops re-alerting.

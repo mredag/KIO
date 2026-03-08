@@ -69,6 +69,24 @@ function matchesConfiguredPhrase(normalizedMessage: string, normalizedPhrase: st
   return ` ${normalizedMessage} `.includes(` ${normalizedPhrase} `);
 }
 
+function isBenignPreparationQuestion(normalizedMessage: string): boolean {
+  if (!normalizedMessage) {
+    return false;
+  }
+
+  const hasSuspiciousCue = /\b(mutlu|extra|ekstra|ozel|muamele|sonunda|sex|seks|erotik|escort)\b/u.test(normalizedMessage);
+  if (hasSuspiciousCue) {
+    return false;
+  }
+
+  const hasPreparationVerb = /\b(getir|getirelim|getireyim|getiriyoruz|getiriyor|getirmeli|getirmemiz|yaninda|yanimizda|gelirken|gelmeden|gerekli|lazim)\b/u.test(normalizedMessage);
+  const hasPreparationItem = /\b(sort|short|havlu|terlik|bornoz|bone|mayo|bikini|kiyafet|esofman)\b/u.test(normalizedMessage);
+  const hasVisitAnchor = /\b(masaj|massage|spa|hamam|sauna|havuz|fitness|pilates|reformer)\b/u.test(normalizedMessage);
+  const hasGenericPackingQuestion = /\b(ne|getirelim|birsey)\b/u.test(normalizedMessage);
+
+  return hasPreparationVerb && (hasPreparationItem || hasVisitAnchor || hasGenericPackingQuestion);
+}
+
 export class DMSafetyPhraseService {
   private db: Database.Database;
   private telegram: TelegramNotificationService | null;
@@ -98,6 +116,23 @@ export class DMSafetyPhraseService {
         reviewRequest: {
           triggered: false,
           status: 'not_needed',
+          reviewId: null,
+        },
+      };
+    }
+
+    if (isBenignPreparationQuestion(normalizedMessage)) {
+      return {
+        decision: {
+          action: 'allow',
+          confidence: 0,
+          reason: 'Detected normal visit-preparation / what-to-bring question.',
+          modelUsed: 'dm-safety-benign-preparation-guard',
+        },
+        matchedPhrase: null,
+        reviewRequest: {
+          triggered: false,
+          status: 'suppressed',
           reviewId: null,
         },
       };
@@ -469,3 +504,4 @@ export class DMSafetyPhraseService {
     }
   }
 }
+

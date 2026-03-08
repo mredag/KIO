@@ -39,6 +39,7 @@ This is the Forge workspace mirror of the current operating notes. Read it befor
 
 ## Safety and KB Rules
 - The safety layer is AI-first plus a narrow euphemism guard
+- Treat what-to-bring / visit-preparation questions (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) as normal logistics; they must not trigger DM safety phrase review
 - Policy price checks derive allowed numbers from the current KB context
 - `knowledge_base.id` must stay non-null and durable
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`

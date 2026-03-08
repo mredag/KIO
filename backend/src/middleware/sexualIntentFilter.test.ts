@@ -394,6 +394,30 @@ describe('sexualIntentFilter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
+  it('allows clothing / what-to-bring questions for massage visits without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('sort getiriyoruz mu masaja gelirken yanimizda');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('what-to-bring question');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows generic bring-along questions without boundary escalation', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('yanimizda birsey getiriyor muyuz');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('what-to-bring question');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
   it('still blocks euphemistic sexual questions even when they look like pricing', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -405,4 +429,3 @@ describe('sexualIntentFilter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 });
-

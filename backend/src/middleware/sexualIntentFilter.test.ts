@@ -418,6 +418,18 @@ describe('sexualIntentFilter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
+  it('allows legitimate spouse same-room massage requests without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('esimle gelecegim beraber ayni odada masaj yaptirmak istiyoruz');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('couple / same-room massage request');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
   it('still blocks euphemistic sexual questions even when they look like pricing', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

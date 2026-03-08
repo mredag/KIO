@@ -1,3 +1,5 @@
+import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
+
 export interface SexualIntentClassification {
   confidence: number; // 0-1
   isSexual: boolean;
@@ -40,6 +42,8 @@ const BENIGN_GREETING_PATTERN = /\b(merhaba|selam|slm|kolay\s*gelsin|iyi\s*gunle
 const PREPARATION_ITEM_PATTERN = /\b(sort|short|havlu|terlik|bornoz|bone|mayo|bikini|kiyafet|esofman)\b/u;
 const PREPARATION_VERB_PATTERN = /\b(getir|getirelim|getireyim|getiriyoruz|getiriyor|getiriyormuyuz|getirmeli|getirmemiz|yaninda|yanimizda|gelirken|gelmeden|gerekli|lazim)\b/u;
 const GENERIC_ITEM_QUESTION_PATTERN = /\b(ne|getirelim|birsey)\b/u;
+const COMPANION_PATTERN = /\b(esim|esimle|partner|partnerim|partnerimle|sevgilim|sevgilimle|beraber|birlikte|cift|couple)\b/u;
+const SAME_ROOM_PATTERN = /\b(ayni\s+odada|same\s+room|cift\s+oda|iki\s+kisilik\s+oda|tek\s+kisilik\s+oda)\b/u;
 const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
 const BOUNDARY_SUSPICIOUS_CUE_PATTERN = /\b(mutlu|extra|ekstra|ozel|muamele|sonunda)\b/u;
 
@@ -203,6 +207,7 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
   const hasPreparationItem = PREPARATION_ITEM_PATTERN.test(spaced);
   const hasPreparationVerb = PREPARATION_VERB_PATTERN.test(spaced);
   const hasGenericItemQuestion = GENERIC_ITEM_QUESTION_PATTERN.test(spaced);
+  const hasMassageAnchor = /\b(masaj|massage|spa)\b/u.test(spaced);
   const tokenCount = spaced.split(' ').length;
   const isShortNeutralProbe = !hasBusinessAnchor
     && !hasBoundarySuspiciousCue
@@ -211,6 +216,10 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
     && SHORT_PROBE_PATTERN.test(spaced);
   const looksLikePreparationQuestion = hasPreparationVerb
     && (hasPreparationItem || hasBusinessAnchor || hasGenericItemQuestion);
+  const looksLikeLegitCoupleMassageRequest = hasMassageAnchor && (
+    hasRoomAvailabilitySignals(spaced)
+    || (COMPANION_PATTERN.test(spaced) && SAME_ROOM_PATTERN.test(spaced))
+  );
 
   // Covers compact typo forms like "30daka ne kadar".
   const looksLikeDurationPriceQuestion = hasDurationToken && (hasPriceQuestion || hasNumericToken);
@@ -259,6 +268,15 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
       action: 'allow',
       confidence: 0,
       reason: 'Detected normal preparation / what-to-bring question for the visit.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  if (looksLikeLegitCoupleMassageRequest) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected legitimate couple / same-room massage request without sexual cue.',
       modelUsed: 'heuristic-clear-business-guard',
     };
   }

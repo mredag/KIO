@@ -39,6 +39,11 @@ Toggle: `USE_OPENCLAW=true` in `backend/.env`
 - Legitimate couple / same-room massage requests such as `esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, or `cift odaniz var mi` are normal business questions and must stay on the allow path.
 - Room/couple-room questions should preserve FAQ grounding and answer directly from `faq.massage_room_options`.
 - Conduct ladder state is internal `normal -> guarded -> final_warning -> silent`, but operator-facing UI should say `Bad customer` instead of `silent`.
+- `retry_question` is not a conduct strike by itself. Ambiguous-but-unconfirmed phrasing should not escalate the conduct ladder.
+- Price/package difference questions such as `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions and must stay on the allow path.
+- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` should force direct contact-KB answers instead of asking another location question back.
+- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` must break stale service-topic carryover; pure `tesekkurler` / closure turns must not revive the last service topic.
+- Policy grounding for service pricing must validate the service + duration + price tuple, not only the raw price number.
 - Shared Telegram operator flows are command/API based. Do not rely on callback approval buttons on the shared bot.
 
 ---

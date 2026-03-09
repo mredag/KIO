@@ -35,7 +35,7 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator label: `Bad customer`).
 - Operator-facing language should use `Bad customer`; keep `silent` only for DB/API/internal references.
 - `DMResponseStyleService` now adds anti-repetition tone guidance. Emoji should be optional, not routine.
-- Guarded/final-warning users should not receive the friendly deterministic info template path.
+- Deterministic clarifier templates stay normal-only, but the generic `bilgi almak istiyorum` info template is still allowed for users who are not in internal `silent` / operator-facing `Bad customer` mode.
 - For obvious euphemisms like `mutlu son`, the visible reply should stay the legacy rejection wording; conduct escalation happens in the background.
 - Legitimate couple / same-room massage requests (`esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, `cift odaniz var mi`) are normal business questions. They must stay `allow` and route to room-availability grounding, not conduct escalation.
 - Users with obvious prior violations should get shorter, colder business replies with no follow-up question or extra CTA until reset/lift.
@@ -45,6 +45,8 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - Safety is AI-first plus a narrow euphemism guard. Do not replace it with a giant phrase list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop before the normal AI safety decision.
 - Shared Telegram-bot callback buttons are disabled for operator actions. Use `/dmphr block|allow|detail <reviewId>` and `/esc approve|reject|detail|analyst <jobId>` instead of Telegram action buttons.
+- `retry_question` from the safety layer is not a conduct strike by itself. Only confirmed prohibited-service behavior should keep escalating conduct state.
+- Price/package difference questions like `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions and must stay on the allow path.
 - Questions about what to bring or wear for a visit (`sort`, `havlu`, `terlik`, `bornoz`, `yanimizda bir sey getiriyor muyuz`) are normal logistics, not safety-review candidates.
 - Couple-room and same-room massage questions must stay on the business-safe path. Do not let spouse/partner wording turn them into DM safety reviews or conduct strikes.
 - Persistent safety config lives in `mc_policies.id='dm_safety_phrase_config'` with `hardBlockPhrases` and `reviewedSafePhrases`.
@@ -52,7 +54,10 @@ This is the workspace mirror of the repo's current operating notes. Read it befo
 - `block` promotes the normalized phrase into the instant hard-block list. `allow` marks the exact phrase safe so it stops re-alerting.
 - Jarvis must never claim a Telegram review or escalation action succeeded unless the backend API call returns success.
 - Room / couple-room questions should keep FAQ grounding and answer directly from `faq.massage_room_options`; do not ask the customer the same question back.
+- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must answer directly from contact KB. Do not bounce those back into another clarifying location question.
+- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` must break stale service-topic carryover. Pure `tesekkurler` / closure turns should not revive the previous service topic.
 - Policy price checks read allowed values from the current KB context, not hardcoded constants.
+- Policy grounding for service pricing must validate the service + duration + price tuple, not just whether the raw price number exists somewhere else in KB.
 - `knowledge_base.id` must stay non-null and durable.
 - Live KB is the `knowledge_base` table behind `/admin/knowledge-base`.
 - The current schema does not expose `topic_slug`.

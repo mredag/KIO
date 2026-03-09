@@ -53,7 +53,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).
 - Operator-facing UI, reports, and agent messages should say `Bad customer`; keep `silent` only for DB/API/internal references.
 - `DMResponseStyleService` now injects anti-repetition style guidance into direct-response prompts and OpenClaw fallback prompts. Emoji should be optional, not habitual.
-- Guarded/final-warning users should not get the friendly deterministic info/clarifier templates; those stay normal-only.
+- Deterministic clarifier templates stay normal-only, but the generic `bilgi almak istiyorum` info template is still allowed for any user who is not in internal `silent` / operator-facing `Bad customer` mode.
 - For obvious sexual/euphemistic asks such as `mutlu son`, the visible customer-facing reply should stay the legacy rejection copy; the conduct ladder should escalate in the background.
 - Legitimate couple / same-room massage requests such as `esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, or `cift odaniz var mi` are normal business questions. They must stay `allow`, must not create conduct strikes, and should route to room-availability grounding.
 - Users with prior obvious violations should keep receiving colder, shorter business replies with no follow-up question or extra CTA until they are reset or lifted.
@@ -62,14 +62,19 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 ## Safety and Policy Notes
 - `sexualIntentFilter.ts` is AI-first, with a narrow euphemism guard for phrases like `mutlu son`, `extra hizmet`, and `premium paket`.
 - `sexualIntentFilter.ts` includes a clear-business guard for concrete pricing asks (including compact typo forms like `30daka ne kadar`) so they bypass boundary-probe hard blocks.
+- Price/package comparison questions such as `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions. They must stay `allow` and must not create conduct strikes.
 - Normal visit-preparation questions such as `sort getiriyor muyuz`, `yanimizda bir sey getiriyor muyuz`, `havlu/terlik/bornoz gerekli mi` must stay `allow` and must not trigger DM safety phrase review.
 - Couple-room and same-room massage questions must stay on the business-safe path. Do not let spouse/partner wording push them into conduct escalation or DM safety review.
+- `retry_question` from the safety layer is not a conduct violation by itself. Do not escalate `guarded/final_warning/Bad customer` solely from ambiguous-but-unconfirmed phrasing.
 - The first sexual-intent gate now receives bounded conversation context from `instagram_interactions`: last 24 hours only, capped to at most 6 short lines and ~600 chars before model prompts.
 - `ResponsePolicyService` now receives a compact conversation snippet for rule/faithfulness checks (max 4 lines, ~600 chars) so follow-up turns are judged with context without large token bloat.
 - Age and minor signals (`yas`, `18`, `cocuk`, `ebeveyn`, `veli`) must keep `policies` in the fetched KB slice even inside follow-up pricing/service context.
 - `ResponsePolicyService` now has a deterministic age-policy contradiction guard. Replies like `yasa bakmiyoruz` must fail when KB evidence says massage/spa is `18+` or otherwise age-restricted.
 - Duration-led massage follow-ups (`uzun sureli masaj`, `kisa sureli`, `60 dk`, `90dk`, `seans`) must force `pricing` alongside `services`; otherwise policy repair can ground on unrelated package prices.
+- Service-specific pricing validation now checks the service + duration + price tuple, not just the naked number. Do not let `Medikal 60dk -> 1300` pass just because `1300` exists elsewhere in KB.
 - Room / couple-room questions must preserve FAQ grounding and answer directly from `faq.massage_room_options`; do not ask the customer the same room-availability question back.
+- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must force `answer_directly` from contact KB. Do not ask which area the customer is near unless they explicitly ask for transport detail.
+- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` and pure `tesekkurler` / closure turns must break stale service-topic carryover instead of reviving the previous service context.
 - Rule-stage style/format failures are treated as soft signals; hard blocking should come from moderation, explicit hard-rule violations, or deterministic grounding mismatches.
 - Do not turn the safety layer into a long brittle banned-word list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop ahead of the AI gate.

@@ -111,6 +111,10 @@ Backend is `"type": "module"` (ESM). TypeScript compiles `.ts` → `.js` but doe
 | `Uzun sureli masaj` gets corrected into unrelated package prices | Planner fetched `services` without massage `pricing` | Force `pricing` together with `services` for duration-led massage follow-ups (`uzun/kisa/dk/seans`) |
 | Visit-preparation question gets sent to DM safety review | Benign logistics phrasing got mistaken for euphemistic probing | Keep `sort/havlu/terlik/bornoz/yanimizda bir sey getiriyor muyuz` on the benign-preparation allow path |
 | Couple / same-room massage request gets blocked as inappropriate | Sexual-intent layer overreacted to spouse/partner wording | Allow legitimate `esimle/beraber/ayni odada/iki kisilik oda/cift oda` massage requests before model safety review |
+| Price/package difference question escalates conduct state | Ambiguous `retry_question` was treated like a real violation | Keep `aradaki fark`, `1300 ile 1800`, package comparison questions on the allow path and do not turn `retry_question` into a conduct strike |
+| Direct address/location question asks another question back | Planner kept `clarify_only` or `answer_then_clarify` even though contact KB already existed | Force direct address/location questions (`neredesiniz`, `adresiniz`, `konum`) to `answer_directly` from contact KB |
+| `Tesekkurler acilis kapanis saatleriniz` revives old service topic | Standalone hours question inherited stale active-topic context | Break stale service carryover for gratitude-prefixed hours questions and for pure `tesekkurler` / closure turns |
+| Service-specific duration/price combo hallucinates | Policy only validated the raw number, not the service-duration-price binding | Validate service + duration + price tuple against KB; do not let `Medikal 60dk -> 1300` pass because `1300` exists elsewhere |
 | Telegram operator button says success but backend state did not change | Shared-bot callback path is unreliable | Use `/dmphr ...` or `/esc ...` command/API flow and confirm success only after backend response |
 | DM Kontrol shows 10-15s when the customer waited longer | Page is showing processing segments without enough context | Inspect `timingBreakdown.customerPerceivedTotalMs`, `ingestDelayMs`, and per-stage timings together |
 | MC integration points at raw OpenClaw agent id | OpenClaw ids differ from MC ids | Normalize through `resolveMissionControlAgentId()` (`instagram` -> `instagram-dm`, `whatsapp` -> `whatsapp-dm`) |
@@ -986,5 +990,5 @@ cd ~/kio-new/deployment/raspberry-pi
 ---
 
 **Last Updated:** 2026-03-08
-**Status:** Current baseline: Pi live runtime uses hybrid Instagram DM routing, conduct ladder + anti-repetition style shaping, command-only Telegram operator actions (`/dmphr`, `/esc`), KB change-set approval hardening, room/couple-massage grounding, visit-preparation false-positive protection, and DM Kontrol behavior/timing/token breakdown visibility.
+**Status:** Current baseline: Pi live runtime uses hybrid Instagram DM routing, conduct ladder + anti-repetition style shaping, command-only Telegram operator actions (`/dmphr`, `/esc`), KB change-set approval hardening, room/couple-massage grounding, visit-preparation false-positive protection, direct contact-address answering, stale-topic breakouts for standalone hours/thanks turns, service-duration-price tuple grounding, and DM Kontrol behavior/timing/token breakdown visibility.
 

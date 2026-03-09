@@ -126,9 +126,15 @@ Current live defaults you should keep in mind:
 - Use `Bad customer` in operator-facing language; keep `silent` for DB/API/internal references only.
 - The live webhook and simulator now share the same conduct ladder before normal DM generation.
 - `DMResponseStyleService` now shapes tone to reduce repetition. Emoji should be optional, not habitual.
+- `retry_question` from the safety layer is not a conduct strike by itself. Do not escalate users into `guarded`, `final_warning`, or `Bad customer` from an ambiguous-but-unconfirmed phrase alone.
 - For obvious euphemisms like `mutlu son`, keep the visible legacy rejection wording; the conduct ladder escalates silently in the background.
+- Price/package difference questions like `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions and must stay on the allow path.
 - Legitimate couple / same-room massage requests (`esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, `cift odaniz var mi`) are normal business questions. They must stay `allow` and route to room-availability grounding.
 - `silent` is not a friendly state and no longer means no-reply for Instagram DM. It means the shortest possible factual business answer, with no warmth, CTA, or follow-up.
+- The generic `bilgi almak istiyorum` info template is still allowed for users who are not in internal `silent` / operator-facing `Bad customer` mode. Deterministic clarifier templates stay normal-only.
+- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must answer directly from contact KB. Do not ask which area the customer is near unless they explicitly ask for transport detail.
+- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` must break stale service-topic carryover. Pure `tesekkurler` / closure turns should not revive the previous service topic.
+- Service-specific pricing must stay grounded to the service + duration + price tuple in KB. Do not invent or validate a missing combo just because the raw price number exists elsewhere.
 - Shared Telegram operator actions are command/API based. Do not trust callback buttons or plain button-label text as proof that an action succeeded.
 
 ## Sub-Agent Delegation (MANDATORY for complex tasks)

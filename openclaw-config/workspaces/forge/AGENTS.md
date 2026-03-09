@@ -76,7 +76,13 @@ For OpenClaw-related changes, compare the docs with the real implementation befo
 - DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent` (operator label: `Bad customer`).
 - Human operators manage test-account lifts and manual conduct overrides from `/admin/mc/dm-conduct`.
 - `DMResponseStyleService` now handles anti-repetition tone shaping; do not reintroduce hardcoded `1-2 emoji` behavior when editing prompts.
+- `retry_question` from the safety layer is not a conduct strike by itself. Do not escalate users from ambiguous-but-unconfirmed phrases alone.
 - Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation should remain a background control, and the highest state should answer with the shortest possible factual business reply.
+- Price/package difference questions like `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions and must stay on the allow path.
+- The generic `bilgi almak istiyorum` info template is still allowed for users who are not in internal `silent` / operator-facing `Bad customer` mode. Deterministic clarifier templates stay normal-only.
+- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must answer directly from contact KB.
+- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` must break stale service-topic carryover. Pure `tesekkurler` / closure turns should not revive the previous service topic.
+- Service-specific pricing must stay grounded to the service + duration + price tuple in KB. Do not accept or invent a missing combo just because the raw price number exists elsewhere.
 
 ## Live KB Price Update Rules
 - Read `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` and workspace `KNOWLEDGE_BASE.md` before changing live KB data.

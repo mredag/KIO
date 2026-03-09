@@ -160,6 +160,7 @@ Or via `sessions_spawn` tool: include `"model": "openai-codex/gpt-5.3-codex"` in
 - `/api/mc/*` is the local backend/admin surface in the current codebase
 - SQLite/veritabanÃ„Â±na doÃ„Å¸rudan eriÃ…Å¸im YOK Ã¢â‚¬â€ sadece HTTP API kullan
 - Ãƒâ€“rnek: `curl -H "Authorization: Bearer <KIO_API_KEY>" http://localhost:3001/api/integrations/knowledge/entries`
+- **CRITICAL LOCALHOST SSRF BYPASS:** OpenClaw's internal web_fetch tool blocks localhost/127.0.0.1. Whenever you delegate a task (like checking /api/mc/dm-kontrol/test-mode) to a subagent like forge, you MUST explicitly tell the subagent: "DO NOT use your web_fetch/http tool for localhost. You MUST use bash/terminal tool to run curl commands instead."
 
 **Knowledge Base Updates (Fiyat Guncelleme):**
 Read `KNOWLEDGE_BASE.md` in this workspace before making KB changes.

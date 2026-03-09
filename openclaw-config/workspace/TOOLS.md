@@ -15,6 +15,10 @@
 - `/api/mc/*`: local backend/admin surface in the current codebase
 - Integration routes use `Authorization: Bearer <KIO_API_KEY>`
 
+## ⚠️ Localhost API Access Rule (CRITICAL)
+- **Do NOT** use your built-in `web_fetch` or HTTP tool for `localhost` or `127.0.0.1` endpoints. OpenClaw's security wrapper blocks internal addresses (SSRF protection).
+- **INSTEAD**, you MUST use the `bash` or `terminal_execute` tool to run `curl` commands.
+
 ## Safe KB Workflow
 Use the backend-enforced change-set flow for live KB edits:
 1. `GET /api/integrations/knowledge/entries`

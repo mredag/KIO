@@ -3,6 +3,10 @@ import session from 'express-session';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import dns from 'dns';
+
+// Fix Node 18+ IPv6 DNS resolution issues (EAI_AGAIN / ConnectTimeoutError)
+dns.setDefaultResultOrder('ipv4first');
 import cron from 'node-cron';
 import { UPLOADS_DIR, BACKUPS_DIR, DATABASE_PATH, FRONTEND_DIST } from './config/paths.js';
 import { initializeDatabase } from './database/init.js';

@@ -41,6 +41,11 @@ curl -s -X POST -H "Content-Type: application/json" \
   -H "Authorization: Bearer <KIO_API_KEY>" \
   -d '{"requestedBy":"jarvis","operations":[{"type":"update","id":"ENTRY_ID","value":"Yeni deger"}]}' \
   http://localhost:3001/api/integrations/knowledge/change-sets/preview
+
+# Test Mode & Pipeline Config (DM Kontrol)
+curl -s http://localhost:3001/api/mc/dm-kontrol/test-mode
+curl -s -X PATCH -H "Content-Type: application/json" -d '{"enabled":true}' http://localhost:3001/api/mc/dm-kontrol/test-mode
+curl -s http://localhost:3001/api/mc/dm-kontrol/pipeline-config
 ```
 
 ```powershell

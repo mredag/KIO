@@ -59,7 +59,7 @@ describe('GenericInfoTemplateService', () => {
       locationInfo: 'Steel Towers A Blok 4. Kat, Iskenderun / Hatay',
     });
 
-    expect(result).toContain('Elbette, size hizlica temel bilgileri paylasayim:');
+    expect(result).toContain('Kisaca temel bilgileri paylasayim:');
     expect(result).toContain('Masaj fiyatlarimiz:');
     expect(result).toContain('Terapist bilgisi:');
     expect(result).toContain('Konum: Steel Towers A Blok 4. Kat, Iskenderun / Hatay');

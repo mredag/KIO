@@ -136,7 +136,7 @@ function joinSectionsWithinLimit(sections: string[], maxChars: number): string {
 }
 
 export function buildGenericInfoTemplate(input: GenericInfoTemplateInput): string | null {
-  const sections: string[] = ['Elbette, size hizlica temel bilgileri paylasayim:'];
+  const sections: string[] = ['Kisaca temel bilgileri paylasayim:'];
 
   if (input.massagePricing?.trim()) {
     sections.push(buildCompactMassagePricingSummary(input.massagePricing));

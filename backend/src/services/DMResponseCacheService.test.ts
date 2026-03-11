@@ -223,7 +223,7 @@ describe('DMResponseCacheService', () => {
 
     service.recordObservation({
       ...params,
-      responseText: 'Elbette, size hizlica temel bilgileri paylasayim:',
+      responseText: 'Kisaca temel bilgileri paylasayim:',
       sourceExecutionId: 'EXE-A1',
     });
     service.recordObservation({
@@ -233,7 +233,7 @@ describe('DMResponseCacheService', () => {
     });
     service.recordObservation({
       ...params,
-      responseText: 'Elbette, size hizlica temel bilgileri paylasayim:',
+      responseText: 'Kisaca temel bilgileri paylasayim:',
       sourceExecutionId: 'EXE-A2',
     });
 
@@ -241,12 +241,12 @@ describe('DMResponseCacheService', () => {
 
     service.recordObservation({
       ...params,
-      responseText: 'Elbette, size hizlica temel bilgileri paylasayim:',
+      responseText: 'Kisaca temel bilgileri paylasayim:',
       sourceExecutionId: 'EXE-A3',
     });
 
     expect(service.lookupActive(params)).toMatchObject({
-      responseText: 'Elbette, size hizlica temel bilgileri paylasayim:',
+      responseText: 'Kisaca temel bilgileri paylasayim:',
       observationCount: 3,
       status: 'active',
     });

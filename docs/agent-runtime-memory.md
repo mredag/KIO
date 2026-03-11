@@ -94,6 +94,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Human overrides for conduct state live in `/admin/mc/dm-conduct`.
 - `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` now means force bad-customer mode.
 - Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
+- Full operational guide for agents lives in `docs/DM_CONDUCT_AGENT_GUIDE.md`.
 - The DM conduct page supports search by Instagram username/ID/phone, explicit success-error feedback after actions, visible explanations of all conduct states, and a dedicated detail panel for the selected user.
 - The DM conduct page is not an all-users inbox; it lists only conduct-managed users, marks test/simulator-like rows, and keeps list search/pagination server-side so large tables do not load in one shot.
 - DM Kontrol now surfaces `Davranis / Ton`, conduct state, customer-perceived wait vs processing time, and token breakdown from `pipelineTrace`. Keep `conductControl`, `responseStyle`, `timingBreakdown`, and `tokenBreakdown` populated when changing the pipeline.

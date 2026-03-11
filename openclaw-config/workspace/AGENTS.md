@@ -90,6 +90,7 @@ When the task touches OpenClaw behavior or live KB behavior, read:
 - `KNOWLEDGE_BASE.md` for live KB changes
 - `docs/agent-runtime-memory.md`
 - `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md`
+- `docs/DM_CONDUCT_AGENT_GUIDE.md` before DM conduct resets or overrides
 
 If `docs/` is not mounted in this workspace, read the same files from:
 - Pi: `/home/eform-kio/kio-new/docs/`
@@ -184,6 +185,7 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 15. In the preview, explicitly list related rows that were reviewed but intentionally left unchanged.
 
 **DM Conduct Controls:**
+- Read `docs/DM_CONDUCT_AGENT_GUIDE.md` before changing conduct state.
 - The human/operator page for conduct management is `/admin/mc/dm-conduct`.
 - `force_normal` is the correct lift path for test accounts.
 - `reset` clears offense history and returns the user to normal state.

@@ -187,6 +187,8 @@ When admin asks to update prices, KB entries, or business info (e.g., "fiyatlari
 **DM Conduct Controls:**
 - Read `docs/DM_CONDUCT_AGENT_GUIDE.md` before changing conduct state.
 - The human/operator page for conduct management is `/admin/mc/dm-conduct`.
+- Permanent block is a separate blocked-users system, not the same thing as `force_silent`.
+- Admin permanent block route: `/api/admin/blocked-users/:platform/:platformUserId/permanent`.
 - `force_normal` is the correct lift path for test accounts.
 - `reset` clears offense history and returns the user to normal state.
 - `force_silent` forces bad-customer mode.

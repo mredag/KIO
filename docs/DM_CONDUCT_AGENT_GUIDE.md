@@ -36,6 +36,54 @@ Important behavior rule:
 
 The live webhook and the simulator both apply the conduct ladder before normal DM generation.
 
+## Separate Hard-Block System
+
+The conduct ladder is not the same thing as the blocked-users system.
+
+There is a separate hard-block layer implemented in
+[UserBlockService.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/services/UserBlockService.ts).
+
+Key distinction:
+
+- `dm-conduct` changes reply behavior and tone
+- `blocked-users` can skip replies entirely
+
+Important behavior:
+
+- active blocked users are checked before normal DM generation
+- when a user is actively blocked, the webhook marks `shouldReply: false`
+- the pipeline skips KB, AI, policy, and Meta send
+- pipeline trace uses models like `blocked/temporary` or `blocked/permanent`
+
+For Instagram, a permanent block is therefore stronger than `Bad customer` mode.
+
+## Permanent Ban Logic
+
+Permanent bans can happen in two ways:
+
+1. Manual admin permanent block
+2. Automatic heuristic permanent block
+
+Automatic heuristic permanent block is evaluated in
+[PermanentBanHeuristics.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/services/PermanentBanHeuristics.ts)
+and applied from:
+
+- [instagramWebhookRoutes.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/routes/instagramWebhookRoutes.ts)
+- [workflowTestRoutes.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/routes/workflowTestRoutes.ts)
+
+Current heuristic categories:
+
+- `severe_abuse`
+- `moderate_repeat_abuse`
+- `vulgar_sexual_spam`
+
+Important:
+
+- a single innocent business question must not trigger permanent ban
+- a single euphemistic sexual question by itself must not trigger permanent ban
+- repeated vulgar sexual spam after prior warnings can trigger permanent ban
+- severe slur / hate / high-confidence abusive wording can trigger permanent ban immediately
+
 ## Hard Rules For Agents
 
 Agents must not:
@@ -44,6 +92,7 @@ Agents must not:
 - change conduct state through prompt hacks
 - use direct SQL for routine conduct operations
 - treat `retry_question` from the safety layer as a conduct strike by itself
+- confuse `force_silent` with a permanent block
 
 Agents should:
 
@@ -60,6 +109,10 @@ Agents should:
 Human/operator page:
 
 - `/admin/mc/dm-conduct`
+
+Related blocked-users page:
+
+- `/admin/blocked-users`
 
 The page supports:
 
@@ -119,6 +172,27 @@ Allowed modes:
 - `force_normal`
 - `force_silent`
 
+### Blocked Users API
+
+Permanent block controls are not on the `dm-conduct` route group.
+They live under `/api/admin/blocked-users`.
+
+List blocked users:
+
+- `GET /api/admin/blocked-users`
+
+Get blocked-user history:
+
+- `GET /api/admin/blocked-users/:platform/:platformUserId/history`
+
+Manually unblock:
+
+- `DELETE /api/admin/blocked-users/:platform/:platformUserId`
+
+Manually permanent-block:
+
+- `POST /api/admin/blocked-users/:platform/:platformUserId/permanent`
+
 ## Recommended Agent Workflow
 
 Use this order unless the owner asked for a different flow:
@@ -131,11 +205,14 @@ Use this order unless the owner asked for a different flow:
    - temporary lift for testing
    - full reset
    - forced bad-customer mode
+   - hard block / permanent block
 5. Apply one action only:
    - temporary lift: `override mode=force_normal`
    - full cleanup: `reset`
    - force bad-customer mode: `override mode=force_silent`
    - remove a manual override and return control to the ladder: `override mode=auto`
+   - hard permanent block: `POST /api/admin/blocked-users/:platform/:platformUserId/permanent`
+   - remove hard block: `DELETE /api/admin/blocked-users/:platform/:platformUserId`
 6. Re-read the user state and report what changed
 
 ## What To Say In Reports
@@ -145,6 +222,7 @@ Preferred wording:
 - `User is in guarded state`
 - `User is in final warning state`
 - `User is in Bad customer mode`
+- `User is permanently blocked`
 - `Temporary force normal override applied for 24 hours`
 - `Conduct history reset; user returned to normal`
 
@@ -154,6 +232,7 @@ Avoid phrasing like:
 - `I edited the database directly`
 - `I changed the prompt to clear the user`
 - `The user is silent` in operator-facing text
+- `force_silent means permanently blocked`
 
 ## Pipeline Notes Agents Must Remember
 
@@ -161,11 +240,17 @@ Avoid phrasing like:
 - obvious euphemistic sexual asks can escalate the ladder in the background while keeping the visible rejection copy stable
 - legitimate couple-room / same-room massage questions are normal business questions and must not create conduct strikes
 - pricing comparison and package-difference questions are normal business questions and must not create conduct strikes
+- permanent ban is a separate hard-block layer checked before normal DM generation
+- automatic permanent ban also escalates conduct state, but the blocked-users layer is what actually suppresses replies
 
 ## Where To Read The Code
 
 - Conduct ladder state and overrides:
   [SuspiciousUserService.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/services/SuspiciousUserService.ts)
+- Hard blocks and permanent blocks:
+  [UserBlockService.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/services/UserBlockService.ts)
+- Permanent-ban heuristics:
+  [PermanentBanHeuristics.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/services/PermanentBanHeuristics.ts)
 - Conduct admin routes:
   [adminRoutes.ts](/D:/PERSONEL/Eform-Resepsion-Kiosk-ClawBot/backend/src/routes/adminRoutes.ts)
 - Live Instagram pipeline wiring:
@@ -179,3 +264,4 @@ Avoid phrasing like:
 
 - There is no separate public "integration" API for conduct controls right now.
 - Conduct actions are on the admin/session surface, not the integration API surface.
+- Permanent-block operations are also on the admin/session surface.

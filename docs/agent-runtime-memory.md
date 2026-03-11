@@ -57,6 +57,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).
 - Operator-facing UI, reports, and agent messages should say `Bad customer`; keep `silent` only for DB/API/internal references.
+- Permanent blocks are a separate `UserBlockService` layer, not the same thing as `silent` / `Bad customer`.
+- Active blocked users are checked before normal DM generation and can skip replies entirely with `blocked/temporary` or `blocked/permanent`.
 - `DMResponseStyleService` now injects anti-repetition style guidance into direct-response prompts and OpenClaw fallback prompts. Emoji should be optional, not habitual.
 - Deterministic clarifier templates stay normal-only, but the generic `bilgi almak istiyorum` info template is still allowed for any user who is not in internal `silent` / operator-facing `Bad customer` mode.
 - For obvious sexual/euphemistic asks such as `mutlu son`, the visible customer-facing reply should stay the legacy rejection copy; the conduct ladder should escalate in the background.
@@ -93,6 +95,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - If policy flags a correct price, the real issue is usually missing or wrong KB context, not a stale hardcoded whitelist.
 - Human overrides for conduct state live in `/admin/mc/dm-conduct`.
 - `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` now means force bad-customer mode.
+- Admin permanent block lives under `/api/admin/blocked-users/:platform/:platformUserId/permanent`.
 - Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
 - Full operational guide for agents lives in `docs/DM_CONDUCT_AGENT_GUIDE.md`.
 - The DM conduct page supports search by Instagram username/ID/phone, explicit success-error feedback after actions, visible explanations of all conduct states, and a dedicated detail panel for the selected user.

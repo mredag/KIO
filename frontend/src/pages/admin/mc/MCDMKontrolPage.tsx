@@ -9,11 +9,13 @@ import {
   useDmErrors,
   useDmModelStats,
   useDmResponseCacheStats,
+  useDmResponseCacheEntries,
   useSeedDmResponseCache,
   useClearDmResponseCache,
   useDmTestMode,
   useToggleDmTestMode,
   type DmChannel,
+  type DmResponseCacheEntry,
 } from '../../../hooks/useDmKontrolApi';
 import { useDmKontrolSSE, type DmSSEEvent } from '../../../hooks/useDmKontrolSSE';
 import {
@@ -103,6 +105,12 @@ const CACHE_CLASS_LABELS: Record<string, string> = {
   exact_price_answer: 'net fiyat',
 };
 
+const CACHE_STATUS_FILTERS: Array<{ key: 'all' | 'active' | 'candidate'; label: string }> = [
+  { key: 'all', label: 'Tumu' },
+  { key: 'active', label: 'Active' },
+  { key: 'candidate', label: 'Candidate' },
+];
+
 function formatCacheClassLabel(cacheClass: string | null | undefined): string {
   if (!cacheClass) return '-';
   return CACHE_CLASS_LABELS[cacheClass] || cacheClass.replace(/_/g, ' ');
@@ -151,6 +159,12 @@ function getBufferStatusMeta(trace: any): { label: string; className: string } |
     label: aggregation.aggregated ? `Buffer x${aggregation.fragmentCount}` : 'Buffer',
     className: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/20',
   };
+}
+
+function getCacheEntryStatusBadge(status: 'candidate' | 'active'): string {
+  return status === 'active'
+    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
+    : 'bg-sky-500/15 text-sky-300 border-sky-500/20';
 }
 
 function getConductState(trace: any): string | null {
@@ -1210,8 +1224,10 @@ function LiveFeedTab() {
 // ============================================================
 function HealthTab() {
   const [period, setPeriod] = useState('today');
+  const [cacheStatusFilter, setCacheStatusFilter] = useState<'all' | 'active' | 'candidate'>('all');
   const { data, isLoading } = useDmHealth(period);
   const { data: cacheStats, isLoading: cacheStatsLoading } = useDmResponseCacheStats();
+  const { data: cacheEntriesData, isLoading: cacheEntriesLoading } = useDmResponseCacheEntries(cacheStatusFilter, 50);
   const seedCache = useSeedDmResponseCache();
   const clearCache = useClearDmResponseCache();
   const [cacheNotice, setCacheNotice] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -1295,6 +1311,7 @@ function HealthTab() {
   const totalCost = data?.totalEstimatedCost ?? 0;
   const modelDist = data?.modelDistribution || [];
   const rtDist = data?.responseTimeDistribution || { green: 0, yellow: 0, red: 0 };
+  const cacheEntries: DmResponseCacheEntry[] = cacheEntriesData?.items || [];
 
   return (
     <div className="space-y-6">
@@ -1408,6 +1425,84 @@ function HealthTab() {
                 </div>
               ) : (
                 <p className="text-xs text-gray-500">Cache istatistigi henuz yok.</p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-gray-500">Cache kayitlari</div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Su anda hafizada tutulan mesaj ve yanit eslesmelerini gosterir.
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  {CACHE_STATUS_FILTERS.map((filter) => (
+                    <button
+                      key={filter.key}
+                      onClick={() => setCacheStatusFilter(filter.key)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        cacheStatusFilter === filter.key
+                          ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {cacheEntriesLoading ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-3 animate-pulse">
+                      <div className="h-3 w-48 rounded bg-gray-700/50" />
+                    </div>
+                  ))}
+                </div>
+              ) : cacheEntries.length === 0 ? (
+                <p className="text-xs text-gray-500">Bu filtrede cache kaydi yok.</p>
+              ) : (
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                  {cacheEntries.map((entry) => (
+                    <div key={entry.id} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getCacheEntryStatusBadge(entry.status)}`}>
+                              {entry.status === 'active' ? 'Active' : 'Candidate'}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-slate-500/10 text-slate-300 border-slate-500/20">
+                              {formatCacheClassLabel(entry.cacheClass)}
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              obs {entry.observationCount}
+                            </span>
+                            {entry.sourceExecutionId && (
+                              <span className="text-[10px] text-sky-400 font-mono">
+                                {entry.sourceExecutionId}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-gray-500">Mesaj</div>
+                            <div className="text-xs text-gray-200 break-words">{entry.normalizedMessage}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-gray-500">Yanit</div>
+                            <div className="text-xs text-gray-300 break-words">{entry.responseText}</div>
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-gray-500 sm:text-right sm:min-w-[120px]">
+                          <div>Son: {timeAgo(entry.lastSeenAt)}</div>
+                          <div>Ilk: {timeAgo(entry.firstSeenAt)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

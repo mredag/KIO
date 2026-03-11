@@ -46,7 +46,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Optional OpenAI API pricing envs for better estimates: `OPENAI_API_DEFAULT_INPUT_PER_MILLION_USD`, `OPENAI_API_DEFAULT_OUTPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_INPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_OUTPUT_PER_MILLION_USD`.
 - DM response cache is `DMResponseCacheService.ts`: exact-match only, Instagram-side, and used only for safe simple turns.
 - Cache activation is evidence-based, not immediate: a response stays `candidate` until repeated observations promote it to `active`.
-- DM Kontrol backend exposes cache ops at `GET /api/mc/dm-kontrol/response-cache/stats`, `POST /api/mc/dm-kontrol/response-cache/seed`, and `POST /api/mc/dm-kontrol/response-cache/clear`.
+- DM Kontrol backend exposes cache ops at `GET /api/mc/dm-kontrol/response-cache/stats`, `GET /api/mc/dm-kontrol/response-cache/entries`, `POST /api/mc/dm-kontrol/response-cache/seed`, and `POST /api/mc/dm-kontrol/response-cache/clear`.
+- Full operational guide for agents lives in `docs/DM_RESPONSE_CACHE_AGENT_GUIDE.md`.
 - A real cache hit appears in pipeline trace as `fastLane.kind = "response_cache"` plus a populated `trace.cache` block.
 - Instagram inbound fragment buffering is tracked in `DMInboundAggregationService.ts` and wired only in the live Instagram webhook path.
 - The current buffer rule is limited to short fragments only: no punctuation, max 24 chars, max 3 tokens, with a 5 second rolling window before flush.

@@ -55,6 +55,19 @@ export interface DmResponseCacheSeedResult {
   stats?: DmResponseCacheStats;
 }
 
+export interface DmResponseCacheEntry {
+  id: string;
+  cacheClass: string;
+  normalizedMessage: string;
+  responseText: string;
+  sourceExecutionId: string | null;
+  observationCount: number;
+  status: 'candidate' | 'active';
+  firstSeenAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+}
+
 // ============================================================
 // DM KONTROL MERKEZİ — Live Feed
 // ============================================================
@@ -158,6 +171,20 @@ export function useDmResponseCacheStats() {
   });
 }
 
+export function useDmResponseCacheEntries(status: 'all' | 'active' | 'candidate' = 'all', limit: number = 50) {
+  return useQuery({
+    queryKey: ['dm-response-cache-entries', status, limit],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('status', status);
+      params.set('limit', String(limit));
+      const { data } = await api.get(`/mc/dm-kontrol/response-cache/entries?${params.toString()}`);
+      return data as { status: string; items: DmResponseCacheEntry[] };
+    },
+    refetchInterval: 15000,
+  });
+}
+
 export function useSeedDmResponseCache() {
   const qc = useQueryClient();
   return useMutation({
@@ -165,7 +192,10 @@ export function useSeedDmResponseCache() {
       const { data } = await api.post('/mc/dm-kontrol/response-cache/seed', body || {});
       return data as DmResponseCacheSeedResult;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dm-response-cache-stats'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dm-response-cache-stats'] });
+      qc.invalidateQueries({ queryKey: ['dm-response-cache-entries'] });
+    },
   });
 }
 
@@ -176,7 +206,10 @@ export function useClearDmResponseCache() {
       const { data } = await api.post('/mc/dm-kontrol/response-cache/clear');
       return data as { deleted: number };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dm-response-cache-stats'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dm-response-cache-stats'] });
+      qc.invalidateQueries({ queryKey: ['dm-response-cache-entries'] });
+    },
   });
 }
 

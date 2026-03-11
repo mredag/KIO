@@ -37,6 +37,7 @@ import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
+import { DMInboundAggregationService, type DMInboundAggregationTrace } from '../services/DMInboundAggregationService.js';
 import { TurkishDMHumanizerService, type TurkishDMHumanizerTrace } from '../services/TurkishDMHumanizerService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import {
@@ -190,6 +191,7 @@ export interface PipelineTrace {
     ctaPolicy: 'only_when_needed' | 'minimal';
     antiRepeatSignals: string[];
   };
+  inboundAggregation?: DMInboundAggregationTrace;
   humanizer?: TurkishDMHumanizerTrace;
   fastLane?: {
     used: boolean;
@@ -277,6 +279,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const semanticReranker = new DMKnowledgeRerankerService();
   const knowledgeContextService = new DMKnowledgeContextService(db);
   const responseCacheService = new DMResponseCacheService(db);
+  const inboundAggregationService = new DMInboundAggregationService(db);
   const humanizerService = new TurkishDMHumanizerService();
   const userBlockService = new UserBlockService(db);
   
@@ -836,6 +839,27 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     }
   }
 
+  inboundAggregationService.setDispatchHandler(async ({ customerId, messageText, trace: aggregationTrace }) => {
+    const selfPort = process.env.PORT || '3001';
+    const response = await fetch(`http://127.0.0.1:${selfPort}/webhook/instagram`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        __bufferedDispatch: true,
+        senderId: customerId,
+        messageText,
+        metaTimestampMs: Date.parse(aggregationTrace.lastReceivedAt),
+        aggregationTrace,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Buffered self-dispatch failed with status ${response.status}`);
+    }
+  });
+
   /**
    * GET /webhook/instagram - Webhook verification
    * Meta sends a GET request to verify the webhook URL
@@ -873,56 +897,91 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
     // Log the message for debugging
     try {
-      const entry = body?.entry?.[0];
-      const messaging = entry?.messaging?.[0];
-      
-      if (messaging?.message?.text) {
+      const isBufferedDispatch = body?.__bufferedDispatch === true;
+      const entry = isBufferedDispatch ? null : body?.entry?.[0];
+      const messaging = isBufferedDispatch ? null : entry?.messaging?.[0];
+      const senderId = isBufferedDispatch
+        ? String(body?.senderId || 'unknown')
+        : (messaging?.sender?.id || 'unknown');
+      let messageText = isBufferedDispatch
+        ? String(body?.messageText || '')
+        : String(messaging?.message?.text || '');
+      const incomingMetaTimestampMs = isBufferedDispatch
+        ? normalizeMetaTimestampMs(body?.metaTimestampMs)
+        : normalizeMetaTimestampMs(messaging?.timestamp);
+      let aggregationTrace: DMInboundAggregationTrace | null = isBufferedDispatch
+        ? (body?.aggregationTrace || null)
+        : null;
+
+      if (messageText) {
         console.log('[Instagram Webhook] DM received:', {
-          from: messaging.sender?.id,
-          text: messaging.message.text.substring(0, 50) + '...',
-          timestamp: messaging.timestamp
+          from: senderId,
+          text: messageText.substring(0, 50) + '...',
+          timestamp: incomingMetaTimestampMs ?? messaging?.timestamp,
+          bufferedDispatch: isBufferedDispatch,
         });
         
         // Forward to OpenClaw /hooks/agent endpoint, then poll for response and handle send+log
         if (OPENCLAW_WEBHOOK_URL && OPENCLAW_HOOKS_TOKEN) {
-          const senderId = messaging.sender?.id || 'unknown';
-          const messageText = messaging.message.text;
+          if (!isBufferedDispatch) {
+            fetchAndStoreInstagramProfile(senderId).catch(() => {});
 
-          // Fetch Instagram profile (name) — fire-and-forget, non-blocking
-          fetchAndStoreInstagramProfile(senderId).catch(() => {});
-
-          // Echo-back filter — ignore messages sent BY the page itself
-          // Meta sends echo webhooks for outbound messages (is_echo=true or sender=pageId)
-          const pageId = entry?.id;
-          if (messaging.message?.is_echo === true || (pageId && senderId === pageId)) {
-            console.log('[Instagram Webhook] Ignoring echo-back (sender=%s, pageId=%s, is_echo=%s)', senderId, pageId, messaging.message?.is_echo);
-            return;
-          }
-
-          // Test mode gate — skip non-whitelisted senders
-          if (isTestModeBlocked(senderId)) {
-            console.log('[Instagram Webhook] Test mode: ignoring sender %s (not in whitelist)', senderId);
-            return;
-          }
-
-          // Dedup guard — Meta retries webhooks, causing duplicate AI responses
-          const mid = messaging.message?.mid;
-          if (mid) {
-            // Clean old entries
-            const now = Date.now();
-            for (const [key, ts] of recentMessageIds) {
-              if (now - ts > DEDUP_WINDOW_MS) recentMessageIds.delete(key);
-            }
-            if (recentMessageIds.has(mid)) {
-              console.log('[Instagram Webhook] Duplicate message ignored (mid: %s)', mid);
+            // Echo-back filter — ignore messages sent BY the page itself
+            // Meta sends echo webhooks for outbound messages (is_echo=true or sender=pageId)
+            const pageId = entry?.id;
+            if (messaging?.message?.is_echo === true || (pageId && senderId === pageId)) {
+              console.log('[Instagram Webhook] Ignoring echo-back (sender=%s, pageId=%s, is_echo=%s)', senderId, pageId, messaging?.message?.is_echo);
               return;
             }
-            recentMessageIds.set(mid, now);
+
+            // Test mode gate — skip non-whitelisted senders
+            if (isTestModeBlocked(senderId)) {
+              console.log('[Instagram Webhook] Test mode: ignoring sender %s (not in whitelist)', senderId);
+              return;
+            }
+
+            // Dedup guard — Meta retries webhooks, causing duplicate AI responses
+            const mid = messaging?.message?.mid;
+            if (mid) {
+              // Clean old entries
+              const now = Date.now();
+              for (const [key, ts] of recentMessageIds) {
+                if (now - ts > DEDUP_WINDOW_MS) recentMessageIds.delete(key);
+              }
+              if (recentMessageIds.has(mid)) {
+                console.log('[Instagram Webhook] Duplicate message ignored (mid: %s)', mid);
+                return;
+              }
+              recentMessageIds.set(mid, now);
+            }
+
+            const aggregationResult = inboundAggregationService.ingest({
+              channel: 'instagram',
+              customerId: senderId,
+              messageText,
+              receivedAt: incomingMetaTimestampMs != null
+                ? new Date(incomingMetaTimestampMs).toISOString()
+                : new Date().toISOString(),
+            });
+
+            if (aggregationResult.action === 'buffered') {
+              console.log('[Instagram Webhook] Buffered short DM fragment:', {
+                senderId,
+                fragmentCount: aggregationResult.trace?.fragmentCount || 1,
+                fragments: aggregationResult.trace?.fragments || [messageText],
+              });
+              return;
+            }
+
+            if (aggregationResult.messageText) {
+              messageText = aggregationResult.messageText;
+            }
+            aggregationTrace = aggregationResult.trace;
           }
 
           const API_KEY = process.env.KIO_API_KEY || '';
           const startTime = Date.now();
-          const metaTimestampMs = normalizeMetaTimestampMs(messaging.timestamp);
+          const metaTimestampMs = incomingMetaTimestampMs;
           const ingestDelayMs = metaTimestampMs ? Math.max(0, startTime - metaTimestampMs) : null;
           let contextAnalysisMs = 0;
           let knowledgeAssemblyMs = 0;
@@ -939,6 +998,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           let pipelineError: PipelineError | null = null;
           markFastLane(trace, 'none', []);
           setCacheTrace(trace, {});
+          if (aggregationTrace) {
+            trace.inboundAggregation = aggregationTrace;
+          }
 
           const activeBlock = userBlockService.checkBlock('instagram', senderId);
           if (activeBlock.isBlocked) {

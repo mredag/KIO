@@ -44,8 +44,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `openai-codex/*` is treated as `openai-oauth` with `cost=0` when `OPENAI_API_KEY` is not set; if API key billing is enabled, provider becomes `openai-api`.
 - In current DM runtime, unprefixed `openai/*` tier models are still treated as OpenRouter-routed unless explicitly changed.
 - Optional OpenAI API pricing envs for better estimates: `OPENAI_API_DEFAULT_INPUT_PER_MILLION_USD`, `OPENAI_API_DEFAULT_OUTPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_INPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_OUTPUT_PER_MILLION_USD`.
-- Do not assume a local-only DM fragment buffer exists on every machine. Verify the tracked `instagramWebhookRoutes.ts` implementation before changing inbound timing behavior.
-- Do not assume any old "3 merged words" or fixed 5 second buffering rule exists unless it is present in the deployed tracked code.
+- Instagram inbound fragment buffering is tracked in `DMInboundAggregationService.ts` and wired only in the live Instagram webhook path.
+- The current buffer rule is limited to short fragments only: no punctuation, max 24 chars, max 3 tokens, with a 5 second rolling window before flush.
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.
 - Generic pricing clarifiers and topic-selection clarifiers should stay lightweight and deterministic when possible.
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.

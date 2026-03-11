@@ -32,6 +32,29 @@ export interface DmFeedResponse {
   total?: number;
 }
 
+export interface DmResponseCacheStats {
+  total: number;
+  active: number;
+  candidate: number;
+  classes: Array<{
+    cacheClass: string;
+    count: number;
+  }>;
+}
+
+export interface DmResponseCacheSeedResult {
+  days: number;
+  dryRun: boolean;
+  directOnly: boolean;
+  kbSignature: string;
+  configSignature: string;
+  scanned: number;
+  eligible: number;
+  recorded: number;
+  skipped: Record<string, number>;
+  stats?: DmResponseCacheStats;
+}
+
 // ============================================================
 // DM KONTROL MERKEZİ — Live Feed
 // ============================================================
@@ -124,6 +147,39 @@ export function useDmModelStats(period: string = 'today') {
 // ============================================================
 
 // GET /api/mc/dm-kontrol/test-mode
+export function useDmResponseCacheStats() {
+  return useQuery({
+    queryKey: ['dm-response-cache-stats'],
+    queryFn: async () => {
+      const { data } = await api.get('/mc/dm-kontrol/response-cache/stats');
+      return data as DmResponseCacheStats;
+    },
+    refetchInterval: 15000,
+  });
+}
+
+export function useSeedDmResponseCache() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body?: { days?: number; dryRun?: boolean; directOnly?: boolean; limit?: number }) => {
+      const { data } = await api.post('/mc/dm-kontrol/response-cache/seed', body || {});
+      return data as DmResponseCacheSeedResult;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dm-response-cache-stats'] }),
+  });
+}
+
+export function useClearDmResponseCache() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/mc/dm-kontrol/response-cache/clear');
+      return data as { deleted: number };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dm-response-cache-stats'] }),
+  });
+}
+
 export function useDmTestMode() {
   return useQuery({
     queryKey: ['dm-test-mode'],

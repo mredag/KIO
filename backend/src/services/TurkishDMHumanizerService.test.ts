@@ -59,6 +59,17 @@ describe('TurkishDMHumanizerService', () => {
     expect(result.text).toContain('0326 502 58 58');
   });
 
+  it('preserves URLs instead of splitting them during sentence cleanup', () => {
+    const result = service.humanize({
+      text: 'Konum: https://maps.app.goo.gl/qC4jh7fquXYX3vPA6',
+      config: ENABLED_CONFIG,
+      conductState: 'normal',
+    });
+
+    expect(result.text).toBe('Konum: https://maps.app.goo.gl/qC4jh7fquXYX3vPA6');
+    expect(result.text).not.toContain('maps. app. goo. gl');
+  });
+
   it('does not mutate guarded conduct replies', () => {
     const result = service.humanize({
       text: 'Merhaba! Elbette, fiyatimiz 1500 TL.',

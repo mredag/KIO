@@ -21,6 +21,7 @@ export interface TurkishDMHumanizerResult {
 }
 
 const PROTECTED_PATTERNS = [
+  /https?:\/\/\S+/g,
   /\+?\d{2}\s*\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}/g,
   /\b\d{3,4}\s?\d{3}\s?\d{2}\s?\d{2}\b/g,
   /\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\b/g,

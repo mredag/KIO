@@ -91,6 +91,33 @@ function clipSingleLine(value: string, maxChars: number): string {
   return clipTemplateBlock(value, 4, maxChars).replace(/\s*\n\s*/g, ' ').trim();
 }
 
+function buildCompactLocationSummary(value: string): string {
+  const lines = value
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+  const addressLine = lines.find(line => /^adres\s*:/iu.test(line))
+    || lines.find(line => !/^konum\s*\(google maps\)/iu.test(line))
+    || value;
+
+  return clipSingleLine(addressLine.replace(/^adres\s*:\s*/iu, ''), 180);
+}
+
+function buildCompactPhoneSummary(value: string): string {
+  return clipSingleLine(value.replace(/\s*\n\s*/g, ' | '), 160);
+}
+
+function buildCompactTherapistSummary(value: string): string {
+  const cleaned = value
+    .replace(/\r/g, '')
+    .replace(/\n+/g, ' ')
+    .replace(/^[\p{Extended_Pictographic}\uFE0F\uFE0E\s]+/u, '')
+    .trim();
+  const firstSentence = cleaned.match(/[^.!?]+[.!?]?/u)?.[0] || cleaned;
+  return clipSingleLine(firstSentence, 110);
+}
+
 function buildCompactMassagePricingSummary(value: string): string {
   const formatted = formatMassagePricingTemplate(value)
     .replace(/\r/g, '')
@@ -142,16 +169,13 @@ export function buildGenericInfoTemplate(input: GenericInfoTemplateInput): strin
     sections.push(buildCompactMassagePricingSummary(input.massagePricing));
   }
   if (input.locationInfo?.trim()) {
-    sections.push(`Konum: ${clipSingleLine(input.locationInfo, 220)}`);
+    sections.push(`Konum: ${buildCompactLocationSummary(input.locationInfo)}`);
   }
   if (input.phoneInfo?.trim()) {
-    sections.push(`Detayli bilgi ve randevu: ${clipSingleLine(input.phoneInfo, 160)}`);
+    sections.push(`Detayli bilgi ve randevu: ${buildCompactPhoneSummary(input.phoneInfo)}`);
   }
   if (input.therapistInfo?.trim()) {
-    sections.push(`Terapist bilgisi: ${clipSingleLine(input.therapistInfo, 150)}`);
-  }
-  if (input.bringInfo?.trim()) {
-    sections.push(`Hazirlik: ${clipSingleLine(input.bringInfo, 130)}`);
+    sections.push(`Terapist bilgisi: ${buildCompactTherapistSummary(input.therapistInfo)}`);
   }
 
   const result = joinSectionsWithinLimit(sections, GENERIC_INFO_TEMPLATE_MAX_CHARS);

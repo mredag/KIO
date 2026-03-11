@@ -49,6 +49,7 @@ export const MCPoliciesPage = lazy(() => import('../pages/admin/mc/MCPoliciesPag
 export const MCJarvisPage = lazy(() => import('../pages/admin/mc/MCJarvisPage'));
 export const MCDMKontrolPage = lazy(() => import('../pages/admin/mc/MCDMKontrolPage'));
 export const MCDMConductPage = lazy(() => import('../pages/admin/mc/MCDMConductPage'));
+export const MCDMReviewPage = lazy(() => import('../pages/admin/mc/MCDMReviewPage'));
 export const MCAutoPilotPage = lazy(() => import('../pages/admin/mc/MCAutoPilotPage'));
 export const MCActivityPage = lazy(() => import('../pages/admin/mc/MCActivityPage'));
 export const MCCronPage = lazy(() => import('../pages/admin/mc/MCCronPage'));

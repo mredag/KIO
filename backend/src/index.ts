@@ -46,6 +46,7 @@ import { MCSchedulerService } from './services/MCSchedulerService.js';
 import { createJarvisRoutes, setJarvisHardwareWatchdog } from './routes/jarvisRoutes.js';
 import { createAgentCommsRoutes } from './routes/agentCommsRoutes.js';
 import { createDmKontrolRoutes } from './routes/dmKontrolRoutes.js';
+import { createDMReviewRoutes, setDMReviewService } from './routes/dmReviewRoutes.js';
 import { createAutoPilotRoutes, setAutoPilotService } from './routes/autopilotRoutes.js';
 import { createActivityRoutes } from './routes/activityRoutes.js';
 import { createGatewayRoutes } from './routes/gatewayRoutes.js';
@@ -62,6 +63,7 @@ import { createTelegramWebhookRoutes, setTelegramWebhookDeps } from './routes/te
 import { TelegramCallbackPoller } from './services/TelegramCallbackPoller.js';
 import { AutoPilotService } from './services/AutoPilotService.js';
 import { NightlyAuditService } from './services/NightlyAuditService.js';
+import { DMConversationReviewService } from './services/DMConversationReviewService.js';
 import { TelegramNotificationService } from './services/TelegramNotificationService.js';
 import { EscalationService } from './services/EscalationService.js';
 import { DMSafetyPhraseService } from './services/DMSafetyPhraseService.js';
@@ -311,6 +313,7 @@ app.use('/api/mc', createMissionControlRoutes(db));
 app.use('/api/mc/jarvis', createJarvisRoutes(db));
 app.use('/api/mc', createAgentCommsRoutes(db));
 app.use('/api/mc/dm-kontrol', createDmKontrolRoutes(db));
+app.use('/api/mc/dm-review', createDMReviewRoutes(db));
 app.use('/api/mc/autopilot', createAutoPilotRoutes(db));
 app.use('/api/mc/activity', createActivityRoutes(db));
 app.use('/api/mc/gateways', createGatewayRoutes(db));
@@ -335,6 +338,10 @@ autoPilot.start();
 const nightlyAudit = new NightlyAuditService(db);
 setAuditService(nightlyAudit);
 nightlyAudit.start();
+
+// Initialize manual DM Conversation Review service
+const dmConversationReview = new DMConversationReviewService(db);
+setDMReviewService(dmConversationReview);
 
 // Initialize Telegram + Escalation Services (closed-loop DM quality system)
 const telegramNotifier = new TelegramNotificationService(db);

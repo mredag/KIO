@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '../../layouts/AdminLayout';
 import { useUnifiedInteractions, useInteractionsAnalytics, useExportInteractions } from '../../hooks/useAdminApi';
 import { DataTable, Column } from '../../components/admin/DataTable';
@@ -22,12 +23,18 @@ interface Interaction {
 
 export default function InteractionsPage() {
   const { t } = useTranslation(['admin', 'common']);
+  const [searchParams] = useSearchParams();
+  const initialSearchQuery = searchParams.get('customerId') || searchParams.get('q') || '';
   
   // Filters
   const [platform, setPlatform] = useState<Platform>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+
+  useEffect(() => {
+    setSearchQuery(initialSearchQuery);
+  }, [initialSearchQuery]);
   
   // Build filters object
   const filters = useMemo(() => {

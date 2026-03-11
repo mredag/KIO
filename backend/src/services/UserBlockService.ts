@@ -35,6 +35,7 @@ export interface BlockCheckResult {
   remainingMinutes?: number;
   blockCount?: number;
   reason?: string;
+  isPermanent?: boolean;
 }
 
 // Block duration escalation (in minutes)
@@ -45,6 +46,9 @@ const BLOCK_DURATIONS = [
   720,   // 4th offense: 12 hours
   1440,  // 5th+ offense: 24 hours
 ];
+
+const PERMANENT_BLOCK_YEARS = 100;
+const PERMANENT_BLOCK_THRESHOLD_YEARS = 50;
 
 export class UserBlockService {
   private db: Database.Database;
@@ -111,13 +115,17 @@ export class UserBlockService {
     const expiresAt = new Date(block.expires_at);
     const remainingMs = expiresAt.getTime() - Date.now();
     const remainingMinutes = Math.ceil(remainingMs / 60000);
+    const permanentThreshold = new Date(
+      Date.now() + PERMANENT_BLOCK_THRESHOLD_YEARS * 365 * 24 * 60 * 60 * 1000,
+    ).getTime();
 
     return {
       isBlocked: true,
       expiresAt: block.expires_at,
       remainingMinutes,
       blockCount: block.block_count,
-      reason: block.reason
+      reason: block.reason,
+      isPermanent: expiresAt.getTime() >= permanentThreshold,
     };
   }
 
@@ -204,7 +212,7 @@ export class UserBlockService {
     const now = new Date();
     const nowStr = now.toISOString();
     // Set expiration to 100 years from now (effectively permanent)
-    const expiresAt = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString();
+    const expiresAt = new Date(now.getTime() + PERMANENT_BLOCK_YEARS * 365 * 24 * 60 * 60 * 1000).toISOString();
 
     const existing = this.db.prepare(`
       SELECT * FROM blocked_users 

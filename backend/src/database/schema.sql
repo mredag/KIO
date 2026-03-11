@@ -255,6 +255,82 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_category ON knowledge_base(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_active ON knowledge_base(is_active);
 
+CREATE TABLE IF NOT EXISTS dm_response_cache (
+  id TEXT PRIMARY KEY,
+  lookup_key TEXT NOT NULL,
+  cache_class TEXT NOT NULL,
+  normalized_message TEXT NOT NULL,
+  kb_signature TEXT NOT NULL,
+  config_signature TEXT NOT NULL,
+  conduct_state TEXT NOT NULL,
+  cache_version TEXT NOT NULL,
+  response_hash TEXT NOT NULL,
+  response_text TEXT NOT NULL,
+  source_execution_id TEXT,
+  observation_count INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL CHECK(status IN ('candidate', 'active')) DEFAULT 'candidate',
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  UNIQUE(lookup_key, response_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dm_response_cache_lookup ON dm_response_cache(lookup_key, status);
+CREATE INDEX IF NOT EXISTS idx_dm_response_cache_expires ON dm_response_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_dm_response_cache_class ON dm_response_cache(cache_class, status);
+
+CREATE TABLE IF NOT EXISTS dm_review_runs (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'completed', 'failed')),
+  channel TEXT NOT NULL CHECK(channel IN ('instagram', 'whatsapp', 'both')),
+  days_back INTEGER NOT NULL DEFAULT 7,
+  model TEXT NOT NULL,
+  total_threads INTEGER NOT NULL DEFAULT 0,
+  reviewed_threads INTEGER NOT NULL DEFAULT 0,
+  total_customers INTEGER NOT NULL DEFAULT 0,
+  total_messages INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  total_cost_usd REAL NOT NULL DEFAULT 0,
+  progress_message TEXT,
+  error TEXT,
+  summary_json TEXT,
+  settings_json TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dm_review_runs_status_created ON dm_review_runs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dm_review_runs_completed ON dm_review_runs(completed_at DESC);
+
+CREATE TABLE IF NOT EXISTS dm_review_findings (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  channel TEXT NOT NULL CHECK(channel IN ('instagram', 'whatsapp')),
+  customer_id TEXT NOT NULL,
+  customer_name TEXT,
+  conversation_id TEXT,
+  thread_key TEXT NOT NULL,
+  thread_started_at TEXT NOT NULL,
+  thread_ended_at TEXT NOT NULL,
+  message_count INTEGER NOT NULL DEFAULT 0,
+  transcript_json TEXT NOT NULL,
+  metrics_json TEXT NOT NULL,
+  grounding_json TEXT NOT NULL,
+  review_json TEXT NOT NULL,
+  overall_score REAL NOT NULL,
+  overall_status TEXT NOT NULL CHECK(overall_status IN ('strong', 'mixed', 'weak', 'critical')),
+  primary_need TEXT,
+  flags_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (run_id) REFERENCES dm_review_runs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_dm_review_findings_run_score ON dm_review_findings(run_id, overall_score ASC);
+CREATE INDEX IF NOT EXISTS idx_dm_review_findings_customer ON dm_review_findings(customer_id, thread_started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dm_review_findings_status ON dm_review_findings(overall_status, thread_started_at DESC);
+
 CREATE TABLE IF NOT EXISTS knowledge_base_change_sets (
   id TEXT PRIMARY KEY,
   requested_by TEXT,

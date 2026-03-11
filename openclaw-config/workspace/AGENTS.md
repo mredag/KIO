@@ -258,9 +258,13 @@ Base: `http://localhost:3001` | Auth depends on route: `/api/integrations/*` => 
 curl -s -H "Authorization: Bearer <KIO_API_KEY>" http://localhost:3001/api/integrations/knowledge/entries
 curl -s -H "Authorization: Bearer <KIO_API_KEY>" http://localhost:3001/api/mc/dm-kontrol/health
 
-# Test modunu aÃƒÂ§mak / kapatmak iÃƒÂ§in (Soruldugunda bunu BASH araci ile calistir):
+# Test modunu aÃƒÂ§mak / kapatmak iÃƒÂ§in (Senin icin EN DOGRU yol budur. BASH araci ile kullan):
+# Once durumu gormek istersen:
+curl -s http://localhost:3001/api/mc/dm-kontrol/test-mode
+# Degistirmek icin:
 curl -s -X PATCH -H "Content-Type: application/json" -d '{"enabled":true}' http://localhost:3001/api/mc/dm-kontrol/test-mode
-# kapatmak iÃƒÂ§in `{"enabled":false}` kullanÃ„Â±n.
+# Pipeline Configu okumak icin:
+curl -s http://localhost:3001/api/mc/dm-kontrol/pipeline-config
 ```
 
 | Endpoint | Method | Purpose |

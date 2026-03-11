@@ -34,7 +34,8 @@ export const KEYWORD_CATEGORY_MAP: Record<string, string[]> = {
              'nakit', 'kredi', 'kart', 'taksit', 'havlu', 'sort', 'bone',
              'getir', 'yaninda'],
   contact: ['adres', 'nerede', 'konum', 'harita', 'telefon', 'numara',
-            'ara', 'iletisim', 'ulasim', 'yol', 'tarif', 'maps', 'address'],
+            'ara', 'iletisim', 'ulasim', 'yol', 'tarif', 'maps', 'address',
+            'neredesiniz', 'neresindesiniz'],
   faq: ['randevu', 'rezervasyon', 'nasil', 'terapist', 'kadin', 'erkek',
         'sicaklik', 'derece', 'havuz sicak', 'pt var mi', 'ne getir'],
 };
@@ -227,6 +228,28 @@ export class InstagramContextService {
     };
   }
 
+  analyzeSimpleTurn(senderId: string, messageText: string): MessageAnalysis | null {
+    const conversationHistory = this.getRecentContextWindow(this.getConversationHistory(senderId));
+    const conversationState = this.conversationStateService.getState('instagram', senderId);
+    const totalInteractions = this.getTotalInteractionCount(senderId);
+    const formattedHistory = this.formatConversationHistory(conversationHistory);
+    const simplePlan = this.buildSimpleTurnPlan(messageText);
+
+    if (!this.isSimpleTurnEligible(messageText, simplePlan, conversationHistory, conversationState)) {
+      return null;
+    }
+
+    return this.buildMessageAnalysisFromPlan({
+      plan: simplePlan,
+      conversationHistory,
+      formattedHistory,
+      conversationState,
+      totalInteractions,
+      usedConversationState: false,
+      repairedFromState: false,
+    });
+  }
+
   async analyzeMessage(senderId: string, messageText: string): Promise<MessageAnalysis> {
       try {
         const conversationHistory = this.getRecentContextWindow(this.getConversationHistory(senderId));
@@ -234,36 +257,15 @@ export class InstagramContextService {
         const totalInteractions = this.getTotalInteractionCount(senderId);
         const formattedHistory = this.formatConversationHistory(conversationHistory);
         const contextPlan = await this.planMessageContextAI(messageText, conversationHistory, conversationState);
-        const { tier: modelTier, tierReason } = contextPlan;
-        const modelId = MODEL_CONFIG[modelTier].modelId;
-        const isNewCustomer = totalInteractions === 0;
-        const activeTopicLabel = contextPlan.followUpHint?.topicLabel
-          || contextPlan.topicSummary
-          || (contextPlan.stateRepairApplied ? conversationState?.activeTopic || null : null);
-
-        return {
+        return this.buildMessageAnalysisFromPlan({
+          plan: contextPlan,
           conversationHistory,
           formattedHistory,
-          intentCategories: contextPlan.categories,
-          matchedKeywords: contextPlan.keywords,
-          followUpHint: contextPlan.followUpHint,
-          activeTopicLabel,
-          conversationState: conversationState ? {
-            activeTopic: conversationState.activeTopic,
-            activeTopicConfidence: conversationState.activeTopicConfidence,
-            topicSourceMessage: conversationState.topicSourceMessage,
-            expiresAt: conversationState.expiresAt,
-            usedForPlanning: true,
-            repairedFromState: contextPlan.stateRepairApplied,
-          } : null,
-          responseDirective: contextPlan.responseDirective,
-          tierReason,
-          modelTier,
-          modelId,
-          isNewCustomer,
+          conversationState,
           totalInteractions,
-          usageTrace: contextPlan.usageTrace || [],
-        };
+          usedConversationState: true,
+          repairedFromState: contextPlan.stateRepairApplied,
+        });
       } catch (error) {
         console.error('[InstagramContextService] analyzeMessage error:', error);
         return {
@@ -330,6 +332,10 @@ export class InstagramContextService {
       lastAssistantMessage: assistantResponse,
       ttlMinutes,
     });
+  }
+
+  clearConversationState(senderId: string): void {
+    this.conversationStateService.clearState('instagram', senderId);
   }
 
   private classifyConversationQuestionType(analysis: MessageAnalysis): string {
@@ -570,6 +576,20 @@ export class InstagramContextService {
     }
 
     return trimmed;
+  }
+
+  private matchesCategoryKeyword(normalizedMessage: string, keyword: string): boolean {
+    const normalizedKeyword = normalizeTurkish(keyword.toLowerCase().trim());
+    if (!normalizedKeyword) {
+      return false;
+    }
+
+    if (normalizedKeyword.length <= 2 && !normalizedKeyword.includes(' ')) {
+      const escaped = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`).test(normalizedMessage);
+    }
+
+    return normalizedMessage.includes(normalizedKeyword);
   }
 
   private normalizeCategories(value: unknown): string[] {
@@ -873,8 +893,12 @@ export class InstagramContextService {
     const normalizedMessage = normalizeTurkish(messageText.toLowerCase());
     const asksDirectAddress = /\b(?:adres|konum|nerede|neredesiniz|neresindesiniz)\b/.test(normalizedMessage);
     const asksTransport = /\b(?:ulasim|yol tarifi|harita|maps)\b/.test(normalizedMessage);
-    if ((!asksDirectAddress && !asksTransport) || !plan.categories.includes('contact')) {
+    if (!asksDirectAddress && !asksTransport) {
       return;
+    }
+
+    if (!plan.categories.includes('contact')) {
+      plan.categories = ['contact', ...plan.categories];
     }
 
     if (!plan.keywords.includes('direct_location_answer_signal')) {
@@ -955,7 +979,7 @@ export class InstagramContextService {
   }
 
   private countMeaningfulWords(messageText: string): number {
-    return normalizeTurkish(messageText.toLowerCase())
+    return normalizeTurkish(messageText.toLocaleLowerCase('tr-TR'))
       .split(/\s+/)
       .map(token => token.trim())
       .filter(Boolean)
@@ -963,7 +987,7 @@ export class InstagramContextService {
   }
 
   private normalizeMessageForHeuristics(messageText: string): string {
-    return normalizeTurkish(messageText.toLowerCase())
+    return normalizeTurkish(messageText.toLocaleLowerCase('tr-TR'))
       .replace(/[^a-z0-9\s]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -989,6 +1013,51 @@ export class InstagramContextService {
     return this.stripPoliteLeadIn(messageText).length === 0;
   }
 
+  private isStandaloneAcknowledgementMessage(messageText: string): boolean {
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    if (!normalized) {
+      return false;
+    }
+
+    const stripped = this.stripPoliteLeadIn(messageText);
+    if (/^(?:ilginize|bilginize)$/.test(normalized)) {
+      return true;
+    }
+
+    return /^(?:gelecegim|gelicem|ugrayacagim|ugrayacam|arayacagim|arayicam|geri donecegim|donus yapacagim|haber verecegim)$/.test(stripped);
+  }
+
+  private isStandaloneTerminalCourtesyMessage(messageText: string): boolean {
+    if (this.isStandaloneGratitudeMessage(messageText)) {
+      return true;
+    }
+
+    if (this.isStandaloneAcknowledgementMessage(messageText)) {
+      return true;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return [
+      /^(anladim)$/,
+      /^(tamam(?:dir)?)$/,
+      /^(peki)$/,
+      /^(olur)$/,
+      /^(ok(?:ay)?)$/,
+      /^(baska sorum yok)$/,
+      /^(baska bir sorum yok)$/,
+      /^(anladim tesekkur(?:ler)?)$/,
+      /^(tamam tesekkur(?:ler)?)$/,
+      /^(yok tesekkur(?:ler)?)$/,
+      /^(gerek yok tesekkur(?:ler)?)$/,
+      /^(sorun degil)$/,
+      /^(problem degil)$/,
+      /^(bir sey degil)$/,
+      /^(?:size|siz)\s?de$/,
+      /^(?:size|siz)\s?de iyi gunler$/,
+      /^(?:size|siz)\s?de tesekkur(?:ler)?$/,
+    ].some(pattern => pattern.test(normalized));
+  }
+
   private hasStandaloneHoursRequest(messageText: string, categories: string[]): boolean {
     if (!categories.includes('hours')) {
       return false;
@@ -996,7 +1065,7 @@ export class InstagramContextService {
 
     const explicitServiceMention = this.hasExplicitServiceMention(messageText);
     const nonHoursCategories = categories.filter(category =>
-      !['hours', 'general'].includes(category) && !(category === 'services' && !explicitServiceMention),
+      !['hours', 'general', 'faq', 'contact'].includes(category) && !(category === 'services' && !explicitServiceMention),
     );
     if (nonHoursCategories.length > 0) {
       return false;
@@ -1007,7 +1076,7 @@ export class InstagramContextService {
       return false;
     }
 
-    const hasHoursSignal = /\b(?:acilis|kapanis|calisma|kacta|kaca kadar|hangi saat)\b/.test(normalized);
+    const hasHoursSignal = /\b(?:acilis|kapanis|calisma|kacta|kaca kadar|hangi saat|saat\w*)\b/.test(normalized);
     if (!hasHoursSignal) {
       return false;
     }
@@ -1015,24 +1084,80 @@ export class InstagramContextService {
     return !explicitServiceMention;
   }
 
+  private hasAppointmentIntentSignal(messageText: string): boolean {
+    const normalized = this.stripPoliteLeadIn(messageText);
+    if (!normalized) {
+      return false;
+    }
+
+    return /\b(?:randevu|rezervasyon|rezerv)\b/.test(normalized);
+  }
+
+  private hasStandaloneAppointmentRequest(messageText: string, categories: string[]): boolean {
+    const normalized = this.stripPoliteLeadIn(messageText);
+    if (!normalized) {
+      return false;
+    }
+
+    if (!/\b(?:randevu|rezervasyon|rezerv)\b/.test(normalized)) {
+      return false;
+    }
+
+    const explicitServiceMention = this.hasExplicitServiceMention(messageText);
+    if (explicitServiceMention) {
+      return false;
+    }
+
+    const nonAppointmentCategories = categories.filter(category => !['faq', 'general', 'contact'].includes(category));
+    if (nonAppointmentCategories.length > 0) {
+      return false;
+    }
+
+    if (/\b(?:saat|kacta|kaca|bugun|yarin|aksam|sabah|ogle|gece|uygun|musait)\b/.test(normalized) || /\b\d{1,2}(?::|\.)\d{2}\b/.test(normalized)) {
+      return false;
+    }
+
+    return normalized.split(/\s+/).filter(Boolean).length <= 8;
+  }
+
   private shouldSkipFollowUpCarryOver(plan: AIContextPlan, messageText: string): boolean {
-    return this.isStandaloneGratitudeMessage(messageText)
+    return this.isStandaloneTerminalCourtesyMessage(messageText)
+      || this.hasStandaloneAppointmentRequest(messageText, plan.categories)
       || this.hasStandaloneHoursRequest(messageText, plan.categories);
   }
 
   private applyIndependentTurnGuards(plan: AIContextPlan, messageText: string): void {
-    const standaloneGratitude = this.isStandaloneGratitudeMessage(messageText);
-    if (standaloneGratitude) {
+    const standaloneTerminalCourtesy = this.isStandaloneTerminalCourtesyMessage(messageText);
+    if (standaloneTerminalCourtesy) {
       plan.followUpHint = null;
       plan.topicSummary = null;
       plan.categories = ['general'];
+      if (this.isStandaloneAcknowledgementMessage(messageText) && !plan.keywords.includes('terminal_acknowledgement')) {
+        plan.keywords.push('terminal_acknowledgement');
+      }
       if (!plan.keywords.includes('gratitude_message')) {
         plan.keywords.push('gratitude_message');
       }
       plan.responseDirective = {
         mode: 'answer_directly',
-        instruction: 'Mesaj yalnizca tesekkur veya kisa kapanis ise cok kisa ve dogal bir nezaket cevabi ver. Onceki hizmet konusunu tasima. Yeni bilgi ekleme veya saat/fiyat uydurma.',
-        rationale: 'Saf tesekkur/kapanis mesaji eski aktif konuyu devam ettirmemeli.',
+        instruction: 'Mesaj yalnizca kisa nezaket, kapanis veya karsilikli iyi dilek ise cok kisa ve dogal bir nezaket cevabi ver. Onceki hizmet konusunu tasima. Yeni bilgi ekleme veya saat/fiyat uydurma.',
+        rationale: 'Saf nezaket/kapanis mesaji eski aktif konuyu devam ettirmemeli.',
+      };
+      return;
+    }
+
+    const standaloneAppointment = this.hasStandaloneAppointmentRequest(messageText, plan.categories);
+    if (standaloneAppointment) {
+      plan.followUpHint = null;
+      plan.topicSummary = null;
+      plan.categories = ['faq', 'contact'];
+      if (!plan.keywords.includes('standalone_appointment_request')) {
+        plan.keywords.push('standalone_appointment_request');
+      }
+      plan.responseDirective = {
+        mode: 'answer_directly',
+        instruction: 'Randevu istegini bilgi olarak yanitla. Online rezervasyon olmadigini net soyle; telefon veya WhatsApp bilgisini ver. Randevu olusturma, saat garanti etme veya onay verme.',
+        rationale: 'Kisa genel randevu sorusu planlama gerektirmez; dogrudan iletisim yonlendirmesi yeterlidir.',
       };
       return;
     }
@@ -1044,17 +1169,35 @@ export class InstagramContextService {
 
     plan.followUpHint = null;
     plan.topicSummary = this.hasExplicitServiceMention(messageText) ? plan.topicSummary : null;
-    plan.categories = plan.categories.filter(category => category !== 'services');
+    const hasAppointmentIntent = this.hasAppointmentIntentSignal(messageText);
+    plan.categories = plan.categories
+      .filter(category => !['services', 'general'].includes(category));
     if (!plan.categories.includes('hours')) {
       plan.categories = ['hours', ...plan.categories];
     }
+    if (hasAppointmentIntent) {
+      if (!plan.categories.includes('faq')) {
+        plan.categories.push('faq');
+      }
+      if (!plan.categories.includes('contact')) {
+        plan.categories.push('contact');
+      }
+      if (!plan.keywords.includes('standalone_appointment_request')) {
+        plan.keywords.push('standalone_appointment_request');
+      }
+    }
+    plan.categories = [...new Set(plan.categories)];
     if (!plan.keywords.includes('standalone_hours_request')) {
       plan.keywords.push('standalone_hours_request');
     }
     plan.responseDirective = {
       mode: 'answer_directly',
-      instruction: 'Acilis/kapanis veya calisma saati sorusu varsa mevcut mesaji bagimsiz bir saat sorusu olarak ele al. Mesaj yeni bir hizmet adi vermiyorsa eski aktif hizmet konusunu tasima. Once genel saat bilgisini dogrudan ver.',
-      rationale: 'Bagimsiz saat sorusu eski hizmet baglamini kirar; stale topic tasinmamali.',
+      instruction: hasAppointmentIntent
+        ? 'Acilis/kapanis veya calisma saati sorusu varsa mevcut mesaji bagimsiz bir saat sorusu olarak ele al. Mesaj yeni bir hizmet adi vermiyorsa eski aktif hizmet konusunu tasima. Once genel saat bilgisini dogrudan ver. Mesaj genel randevu veya rezervasyon niyeti de iceriyorsa telefon ya da WhatsApp ile randevu yonlendirmesini ekle; randevu olusturma, saat garantisi verme veya onay verme.'
+        : 'Acilis/kapanis veya calisma saati sorusu varsa mevcut mesaji bagimsiz bir saat sorusu olarak ele al. Mesaj yeni bir hizmet adi vermiyorsa eski aktif hizmet konusunu tasima. Once genel saat bilgisini dogrudan ver.',
+      rationale: hasAppointmentIntent
+        ? 'Bagimsiz saat + genel randevu sorusu eski hizmet baglamini kirar; saat bilgisi ve iletisim yonlendirmesi birlikte verilmeli.'
+        : 'Bagimsiz saat sorusu eski hizmet baglamini kirar; stale topic tasinmamali.',
     };
   }
 
@@ -1387,6 +1530,180 @@ export class InstagramContextService {
     return DEFAULT_RESPONSE_DIRECTIVE;
   }
 
+  private buildMessageAnalysisFromPlan(params: {
+    plan: AIContextPlan;
+    conversationHistory: ConversationEntry[];
+    formattedHistory: string;
+    conversationState: ConversationStateRecord | null;
+    totalInteractions: number;
+    usedConversationState: boolean;
+    repairedFromState: boolean;
+  }): MessageAnalysis {
+    const { plan, conversationHistory, formattedHistory, conversationState, totalInteractions } = params;
+    const { tier: modelTier, tierReason } = plan;
+    const modelId = MODEL_CONFIG[modelTier].modelId;
+    const isNewCustomer = totalInteractions === 0;
+    const activeTopicLabel = plan.followUpHint?.topicLabel
+      || plan.topicSummary
+      || (params.repairedFromState ? conversationState?.activeTopic || null : null);
+
+    return {
+      conversationHistory,
+      formattedHistory,
+      intentCategories: plan.categories,
+      matchedKeywords: plan.keywords,
+      followUpHint: plan.followUpHint,
+      activeTopicLabel,
+      conversationState: conversationState ? {
+        activeTopic: conversationState.activeTopic,
+        activeTopicConfidence: conversationState.activeTopicConfidence,
+        topicSourceMessage: conversationState.topicSourceMessage,
+        expiresAt: conversationState.expiresAt,
+        usedForPlanning: params.usedConversationState,
+        repairedFromState: params.repairedFromState,
+      } : null,
+      responseDirective: plan.responseDirective,
+      tierReason,
+      modelTier,
+      modelId,
+      isNewCustomer,
+      totalInteractions,
+      usageTrace: plan.usageTrace || [],
+    };
+  }
+
+  private buildSimpleTurnPlan(messageText: string): AIContextPlan {
+    const currentIntent = this.detectIntentKeywords(messageText);
+    const categories = [...currentIntent.categories];
+    const tier = this.classifyModelTier(messageText, categories);
+    const plan: AIContextPlan = {
+      categories,
+      keywords: [...currentIntent.keywords],
+      followUpHint: null,
+      topicSummary: null,
+      responseDirective: this.buildFallbackResponseDirective(categories),
+      tier: tier.tier,
+      tierReason: `${tier.reason} (simple turn)`,
+      stateRepairApplied: false,
+      usageTrace: [],
+    };
+
+    this.applyPolicyPrioritySignals(plan, messageText);
+    this.applyMassagePricingSignals(plan, messageText);
+    this.applyRoomAvailabilitySignals(plan, messageText);
+    this.applyDirectContactLocationSignals(plan, messageText);
+    this.applyIndependentTurnGuards(plan, messageText);
+
+    return plan;
+  }
+
+  private isSimpleTurnEligible(
+    messageText: string,
+    plan: AIContextPlan,
+    conversationHistory: ConversationEntry[],
+    conversationState: ConversationStateRecord | null,
+  ): boolean {
+    if (plan.tier === 'advanced') {
+      return false;
+    }
+
+    if (hasAgePolicySignals(messageText) || hasRoomAvailabilitySignals(messageText)) {
+      return false;
+    }
+
+      const recentInbound = this.getRecentInboundForContext(conversationHistory, messageText);
+      const hasContextDependencyRisk = this.isModifierOnlyRequest(plan.categories)
+        && (!!conversationState?.activeTopic || recentInbound.length > 0);
+    if (hasContextDependencyRisk
+      && !this.hasStandaloneHoursRequest(messageText, plan.categories)
+      && !this.isDirectPhoneQuestion(messageText, plan.categories)
+      && !this.isDirectLocationQuestion(messageText, plan.categories)) {
+      return false;
+    }
+
+    return this.isDirectLocationQuestion(messageText, plan.categories)
+      || this.isDirectPhoneQuestion(messageText, plan.categories)
+      || this.isGreetingOrCourtesyOnly(messageText)
+      || this.isGenericInfoRequest(messageText)
+      || this.isGenericPricingClarifierQuestion(messageText, plan.categories)
+      || this.hasStandaloneAppointmentRequest(messageText, plan.categories)
+      || this.hasStandaloneHoursRequest(messageText, plan.categories)
+      || this.isExplicitServiceDefinitionQuestion(messageText, plan.categories);
+  }
+
+  private isDirectLocationQuestion(messageText: string, categories: string[]): boolean {
+    if (!categories.includes('contact')) {
+      return false;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return /\b(?:adres|konum|nerede|neredesiniz|neresindesiniz|ulasim|yol tarifi|harita|maps)\b/.test(normalized);
+  }
+
+  private isDirectPhoneQuestion(messageText: string, categories: string[]): boolean {
+    if (!categories.includes('contact')) {
+      return false;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return /\b(?:telefon|numara|iletisim|whatsapp|telefon numaraniz)\b/.test(normalized);
+  }
+
+  private isGreetingOrCourtesyOnly(messageText: string): boolean {
+    if (this.isStandaloneTerminalCourtesyMessage(messageText)) {
+      return true;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return /^(?:merhaba|selam(?:lar)?|iyi gunler|gunaydin|iyi aksamlar|hey|slm)$/.test(normalized);
+  }
+
+  private isGenericInfoRequest(messageText: string): boolean {
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    if (!normalized) {
+      return false;
+    }
+
+    const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
+      || /\bbilgi\s+(al|ver)/.test(normalized);
+    if (!hasInfoIntent) {
+      return false;
+    }
+
+    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
+    return !hasSpecificAnchor;
+  }
+
+  private isGenericPricingClarifierQuestion(messageText: string, categories: string[]): boolean {
+    if (!categories.includes('pricing') || categories.includes('services')) {
+      return false;
+    }
+
+    if (!categories.every(category => ['pricing', 'general', 'faq'].includes(category))) {
+      return false;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return /\b(?:fiyat|fiyatlar|fiyatlari|ucret|ucretler|ucretleri|ne kadar|kac para|price)\b/.test(normalized);
+  }
+
+  private isExplicitServiceDefinitionQuestion(messageText: string, categories: string[]): boolean {
+    if (!categories.includes('services') || this.isModifierOnlyRequest(categories)) {
+      return false;
+    }
+
+    if (!this.hasExplicitServiceMention(messageText)) {
+      return false;
+    }
+
+    if (!categories.every(category => ['services', 'general', 'faq'].includes(category))) {
+      return false;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    return /\b(?:nedir|nasil bir|ne ise yarar|detay|detaylari|icerik|icerigi|anlatir misiniz|var mi|neler var)\b/.test(normalized);
+  }
+
 
   /**
    * Legacy single-message intent detector kept as a fallback utility.
@@ -1708,7 +2025,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
 
     for (const [category, keywords] of Object.entries(KEYWORD_CATEGORY_MAP)) {
       for (const keyword of keywords) {
-        if (normalized.includes(keyword)) {
+        if (this.matchesCategoryKeyword(normalized, keyword)) {
           matchedCategories.add(category);
           matchedKeywords.push(keyword);
         }
@@ -1773,15 +2090,26 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
    * 
    * Uses AI-powered intent detection for better accuracy.
    */
-  private getRecentInboundForContext(history: ConversationEntry[]): ConversationEntry[] {
-    return history
+  private getRecentInboundForContext(history: ConversationEntry[], currentMessageText?: string): ConversationEntry[] {
+    const recentInbound = history
       .filter(entry => entry.direction === 'inbound')
       .slice(-3)
       .filter(entry => {
-        const msgTime = new Date(entry.createdAt).getTime();
-        return (Date.now() - msgTime) < 10 * 60 * 1000;
-      });
-  }
+          const msgTime = new Date(entry.createdAt).getTime();
+          return (Date.now() - msgTime) < 10 * 60 * 1000;
+        });
+
+    if (!currentMessageText || recentInbound.length === 0) {
+      return recentInbound;
+    }
+
+    const latestInbound = recentInbound[recentInbound.length - 1];
+    if (this.normalizeMessageForHeuristics(latestInbound.messageText) !== this.normalizeMessageForHeuristics(currentMessageText)) {
+      return recentInbound;
+    }
+
+    return recentInbound.slice(0, -1);
+    }
 
   private buildPricingFollowUpHint(
     currentIntent: IntentResult,
@@ -1963,10 +2291,10 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       }
 
       // 2. Check light: greeting-only (no KEYWORD_CATEGORY_MAP matches)
-      const hasLightPattern = MODEL_CONFIG.light.patterns.some(p => normalized.includes(p));
-      const hasKeywordMatch = Object.values(KEYWORD_CATEGORY_MAP).some(keywords =>
-        keywords.some(kw => normalized.includes(kw))
-      );
+        const hasLightPattern = MODEL_CONFIG.light.patterns.some(p => normalized.includes(p));
+        const hasKeywordMatch = Object.values(KEYWORD_CATEGORY_MAP).some(keywords =>
+          keywords.some(kw => this.matchesCategoryKeyword(normalized, kw))
+        );
 
       if (hasLightPattern && !hasKeywordMatch) {
         return { tier: 'light', modelId: MODEL_CONFIG.light.modelId, reason: 'Selamlama mesajı, bilgi sorgusu yok → light' };

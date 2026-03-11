@@ -49,26 +49,35 @@ describe('SuspiciousUserService', () => {
     db.close();
   });
 
-  it('escalates from guarded to final warning to bad-customer mode', () => {
+  it('reserves bad-customer mode for repeated or near-certain abuse', () => {
     const first = service.flagUser('instagram', 'user-1', 'uygunsuz imada bulundu', {
-      action: 'retry_question',
-      severity: 'medium',
+      action: 'block_message',
+      severity: 'high',
       source: 'test',
-      messageText: 'mutlu son var mi',
+      messageText: 'erkek masor var mi',
     });
     expect(first.conductState).toBe('guarded');
     expect(first.shouldReply).toBe(true);
     expect(first.conductScore).toBe(1);
 
     const second = service.flagUser('instagram', 'user-1', 'tekrar denedi', {
-      action: 'retry_question',
-      severity: 'medium',
+      action: 'block_message',
+      severity: 'high',
       source: 'test',
-      messageText: 'guzel son?',
+      messageText: 'erkek masor',
     });
     expect(second.conductState).toBe('final_warning');
     expect(second.shouldReply).toBe(true);
     expect(second.conductScore).toBe(2);
+
+    const notYetSilent = service.flagUser('instagram', 'user-2', 'acik ama erken asama talep', {
+      action: 'block_message',
+      severity: 'high',
+      source: 'test',
+      messageText: 'happy ending',
+    });
+    expect(notYetSilent.conductState).toBe('final_warning');
+    expect(notYetSilent.conductScore).toBe(2);
 
     const third = service.flagUser('instagram', 'user-1', 'acik uygunsuz talep', {
       action: 'block_message',
@@ -79,6 +88,7 @@ describe('SuspiciousUserService', () => {
     expect(third.conductState).toBe('silent');
     expect(third.shouldReply).toBe(true);
     expect(third.silentUntil).not.toBeNull();
+    expect(third.conductScore).toBe(4);
 
     const check = service.checkSuspicious('instagram', 'user-1');
     expect(check.conductState).toBe('silent');
@@ -139,13 +149,31 @@ describe('SuspiciousUserService', () => {
       action: 'block_message',
       severity: 'high',
       source: 'test',
+      messageText: 'happy ending',
+    });
+    service.flagUser('instagram', 'conduct_demo', 'test conduct row again', {
+      action: 'block_message',
+      severity: 'high',
+      source: 'test',
+      messageText: 'happy ending',
+    });
+    service.flagUser('instagram', 'conduct_demo', 'test conduct row final', {
+      action: 'block_message',
+      severity: 'high',
+      source: 'test',
+      messageText: 'happy ending',
     });
     service.flagUser('instagram', 'real_user', 'real conduct row', {
       action: 'retry_question',
       severity: 'medium',
       source: 'test',
     });
-    service.setManualMode('instagram', 'lifted_test', {
+    service.setManualMode('instagram', 'conduct_demo', {
+      mode: 'force_silent',
+      durationHours: 24,
+      note: 'manual keep silent',
+    });
+    service.setManualMode('instagram', 'test-lifted', {
       mode: 'force_normal',
       durationHours: 24,
       note: 'test account',
@@ -176,5 +204,28 @@ describe('SuspiciousUserService', () => {
     expect(pagedResult.offset).toBe(1);
     expect(pagedResult.total).toBe(3);
     expect(pagedResult.users).toHaveLength(1);
+
+    const silentOnly = service.listSuspiciousUsers({
+      conductState: 'silent',
+      limit: 10,
+      offset: 0,
+    });
+    expect(silentOnly.users).toHaveLength(1);
+    expect(silentOnly.users[0]?.platformUserId).toBe('conduct_demo');
+
+    const manualOnly = service.listSuspiciousUsers({
+      manualMode: 'manual_only',
+      limit: 10,
+      offset: 0,
+    });
+    expect(manualOnly.users.map((user) => user.platformUserId).sort()).toEqual(['conduct_demo', 'test-lifted'].sort());
+
+    const realOnly = service.listSuspiciousUsers({
+      testLikeFilter: 'real_only',
+      limit: 10,
+      offset: 0,
+    });
+    expect(realOnly.users).toHaveLength(1);
+    expect(realOnly.users[0]?.platformUserId).toBe('real_user');
   });
 });

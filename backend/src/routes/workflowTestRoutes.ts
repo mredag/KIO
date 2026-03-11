@@ -2,20 +2,38 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { KnowledgeBaseService } from '../services/KnowledgeBaseService.js';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
-import { InstagramContextService } from '../services/InstagramContextService.js';
+import { InstagramContextService, type AIUsageTrace, type MessageAnalysis } from '../services/InstagramContextService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
+import { DMKnowledgeContextService } from '../services/DMKnowledgeContextService.js';
+import { DMResponseCacheService } from '../services/DMResponseCacheService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
+import { UserBlockService } from '../services/UserBlockService.js';
+import { evaluatePermanentBanCandidate } from '../services/PermanentBanHeuristics.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { EscalationService } from '../services/EscalationService.js';
-import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import {
+  APPOINTMENT_MODEL_ID,
+  buildClarifyExhaustedContactResponse,
+  buildDeterministicClarifierResponse,
+  buildDeterministicCloseoutResponse,
+  CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+  HOURS_APPOINTMENT_MODEL_ID,
+  isDirectLocationQuestion,
+  isDirectPhoneQuestion,
+  isGenericInfoRequest as isGenericInfoFastLaneRequest,
+  isPilatesInfoRequest,
+  isStandaloneAppointmentRequest,
+  normalizeTemplateText as normalizeFastLaneText,
+  PILATES_INFO_MODEL_ID,
+} from '../services/DMPipelineHeuristics.js';
 import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
-import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
+import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
 import {
   evaluateSexualIntent,
   getSexualIntentReply,
@@ -52,6 +70,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const knowledgeBaseService = new KnowledgeBaseService(db);
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(rawDb);
   const semanticReranker = new DMKnowledgeRerankerService();
+  const knowledgeContextService = new DMKnowledgeContextService(rawDb);
+  const responseCacheService = new DMResponseCacheService(rawDb);
+  const userBlockService = new UserBlockService(rawDb);
 
   // Middleware: session auth (admin panel) OR API key auth (external)
   const flexibleAuth = (req: Request, res: Response, next: NextFunction) => {
@@ -59,6 +80,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     return apiKeyAuth(req, res, next);
   };
 
+  /*
   function normalizeTemplateText(text: string): string {
     return text
       .toLocaleLowerCase('tr-TR')
@@ -103,6 +125,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   }
 
   function buildGenericInfoTemplateFromKnowledge(): string | null {
+    return knowledgeContextService.getDeterministicTemplates().genericInfo;
+
     try {
       const rows = rawDb.prepare(`
         SELECT category, key_name, value
@@ -150,6 +174,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       return null;
     }
   }
+  */
+
+  function buildGenericInfoTemplateFromKnowledge(): string | null {
+    return knowledgeContextService.getDeterministicTemplates().genericInfo;
+  }
 
   function buildConductReply(
     action: 'retry_question' | 'block_message',
@@ -162,6 +191,77 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     }
 
     return getSexualIntentReply(action);
+  }
+
+  function getResponseCacheClass(messageText: string, analysis: MessageAnalysis | null): string | null {
+    if (!analysis) {
+      return null;
+    }
+
+    const normalized = normalizeFastLaneText(messageText);
+    if (analysis.matchedKeywords.includes('gratitude_message')) {
+      return 'gratitude_closeout';
+    }
+    if (isDirectLocationQuestion(messageText)) {
+      return 'direct_location';
+    }
+    if (isDirectPhoneQuestion(messageText)) {
+      return 'direct_phone';
+    }
+    if (analysis.matchedKeywords.includes('standalone_hours_request')) {
+      return 'direct_hours';
+    }
+    if (isGenericInfoFastLaneRequest(messageText)) {
+      return 'general_info';
+    }
+    if (analysis.intentCategories.includes('services')
+      && analysis.intentCategories.every(category => ['services', 'general', 'faq'].includes(category))
+      && /\b(?:nedir|nasil bir|ne ise yarar|detay|detaylari|icerik|icerigi|anlatir misiniz|var mi|neler var)\b/.test(normalized)) {
+      return /\bneler var\b/.test(normalized) ? 'service_list' : 'service_definition';
+    }
+
+    return null;
+  }
+
+  function shouldLookupResponseCache(params: {
+    messageText: string;
+    analysis: MessageAnalysis;
+    conductState: ConductState;
+    sexualAction: 'allow' | 'retry_question' | 'block_message';
+  }): boolean {
+    const normalized = normalizeFastLaneText(params.messageText);
+    return params.conductState === 'normal'
+      && params.sexualAction === 'allow'
+      && !params.analysis.followUpHint
+      && params.analysis.modelTier !== 'advanced'
+      && !hasAgePolicySignals(params.messageText, params.analysis.followUpHint?.rewrittenQuestion, params.analysis.activeTopicLabel)
+      && !hasRoomAvailabilitySignals(params.messageText, params.analysis.followUpHint?.rewrittenQuestion, params.analysis.activeTopicLabel)
+      && !/\b(?:randevu|rezervasyon|uygun musait)\b/.test(normalized);
+  }
+
+  function shouldRunSemanticEnrichment(messageText: string, analysis: MessageAnalysis, simpleTurnUsed: boolean): boolean {
+    const deterministicCloseout = buildDeterministicCloseoutResponse(messageText);
+    if (deterministicCloseout?.action === 'skip_send') {
+      return false;
+    }
+
+    if (!simpleTurnUsed) {
+      return true;
+    }
+
+    if (analysis.matchedKeywords.includes('gratitude_message')
+      || analysis.matchedKeywords.includes('standalone_hours_request')
+      || isDirectLocationQuestion(messageText)
+      || isDirectPhoneQuestion(messageText)) {
+      return false;
+    }
+
+    if (analysis.intentCategories.every(category => ['general', 'faq'].includes(category))) {
+      return false;
+    }
+
+    return !(analysis.intentCategories.includes('services')
+      && analysis.intentCategories.every(category => ['services', 'general', 'faq'].includes(category)));
   }
 
   /**
@@ -208,6 +308,221 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         VALUES (?, ?, 'inbound', ?, ?, ?, ?)
       `).run(inboundId, senderId, text, 'user_message', executionId, now);
 
+      const activeBlock = userBlockService.checkBlock('instagram', senderId);
+      if (activeBlock.isBlocked) {
+        const blockedModelId = activeBlock.isPermanent ? 'blocked/permanent' : 'blocked/temporary';
+        const blockedReason = activeBlock.reason || 'Blocked user';
+        const responseTime = Date.now() - startTime;
+        const pipelineTrace = {
+          intentCategories: [],
+          matchedKeywords: [],
+          modelTier: 'light',
+          modelId: blockedModelId,
+          tierReason: activeBlock.isPermanent ? 'Active permanent block' : 'Active temporary block',
+          isNewCustomer: false,
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped',
+          knowledgeEntriesCount: 0,
+          conductControl: {
+            state: 'silent' as const,
+            shouldReply: false,
+            offenseCount: 0,
+            manualMode: 'auto' as const,
+            silentUntil: activeBlock.expiresAt || null,
+            reason: blockedReason,
+          },
+          fastLane: {
+            used: false,
+            kind: 'none' as const,
+            skippedStages: [],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible' as const,
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped' as const,
+          openclawSessionKey: 'blocked-user',
+          agentPollDurationMs: 0,
+          policyValidation: { status: 'skipped' as const, attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped' as const,
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: 0,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: 0,
+            contextAnalysisMs: 0,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs: responseTime,
+          },
+          tokenBreakdown: {
+            policyTokens: 0,
+            totalTokens: 0,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET intent = ?, model_used = ?, model_tier = ?, pipeline_trace = ?
+          WHERE id = ?
+        `).run(
+          activeBlock.isPermanent ? 'hard_blocked_user' : 'blocked_user',
+          blockedModelId,
+          'light',
+          JSON.stringify(pipelineTrace),
+          inboundId,
+        );
+
+        res.json({
+          status: 'success',
+          response: null,
+          replySkipped: true,
+          blocked: true,
+          senderId,
+          analysis: {
+            intentCategories: [],
+            matchedKeywords: [],
+            modelTier: 'light',
+            modelId: blockedModelId,
+            tierReason: pipelineTrace.tierReason,
+            isNewCustomer: false,
+            conversationLength: 0,
+            knowledgeCategories: [],
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: null,
+          responseTime,
+        });
+        return;
+      }
+
+      const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
+      const permanentBanCheckStartedAt = Date.now();
+      const permanentBanEvaluation = evaluatePermanentBanCandidate({
+        messageText: text,
+        conductStateBefore: conductBefore?.conductState || 'normal',
+        offenseCountAfter: (conductBefore?.offenseCount || 0) + 1,
+      });
+      const permanentBanLatency = Date.now() - permanentBanCheckStartedAt;
+      if (permanentBanEvaluation.shouldBan) {
+        const permanentBanReason = permanentBanEvaluation.reason || 'Automatic permanent block';
+        const conductAfter = _dmConductService?.flagUser('instagram', senderId, permanentBanReason, {
+          action: 'block_message',
+          severity: 'high',
+          source: 'heuristic-permanent-ban',
+          messageText: text,
+        });
+        const blockedUser = userBlockService.permanentBlock('instagram', senderId, permanentBanReason);
+        const responseTime = Date.now() - startTime;
+        const pipelineTrace = {
+          sexualIntent: {
+            action: 'block_message' as const,
+            confidence: 1,
+            reason: permanentBanReason,
+            modelUsed: 'heuristic-permanent-ban',
+            latencyMs: permanentBanLatency,
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+          intentCategories: [],
+          matchedKeywords: [],
+          modelTier: 'light' as const,
+          modelId: 'blocked/permanent',
+          tierReason: 'Automatic permanent block',
+          isNewCustomer: false,
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped' as const,
+          knowledgeEntriesCount: 0,
+          conductControl: {
+            state: conductAfter?.conductState || 'silent',
+            shouldReply: false,
+            offenseCount: conductAfter?.offenseCount || ((conductBefore?.offenseCount || 0) + 1),
+            manualMode: conductAfter?.manualMode || conductBefore?.manualMode || 'auto',
+            silentUntil: conductAfter?.silentUntil || blockedUser.expiresAt,
+            reason: permanentBanReason,
+          },
+          fastLane: {
+            used: false,
+            kind: 'none' as const,
+            skippedStages: [],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible' as const,
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped' as const,
+          openclawSessionKey: 'blocked-user',
+          agentPollDurationMs: 0,
+          policyValidation: { status: 'skipped' as const, attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped' as const,
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: 0,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: permanentBanLatency,
+            contextAnalysisMs: 0,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs: Math.max(0, responseTime - permanentBanLatency),
+          },
+          tokenBreakdown: {
+            policyTokens: 0,
+            totalTokens: 0,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET intent = ?, model_used = ?, model_tier = ?, pipeline_trace = ?
+          WHERE id = ?
+        `).run(
+          'hard_blocked_user',
+          'blocked/permanent',
+          'light',
+          JSON.stringify(pipelineTrace),
+          inboundId,
+        );
+
+        res.json({
+          status: 'success',
+          response: null,
+          replySkipped: true,
+          blocked: true,
+          senderId,
+          analysis: {
+            intentCategories: [],
+            matchedKeywords: [],
+            modelTier: 'light',
+            modelId: 'blocked/permanent',
+            tierReason: pipelineTrace.tierReason,
+            isNewCustomer: false,
+            conversationLength: 0,
+            knowledgeCategories: [],
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: null,
+          responseTime,
+        });
+        return;
+      }
+
       // Push inbound SSE event to DM Kontrol
       try {
         DmSSEManager.getInstance().pushEvent({
@@ -245,7 +560,6 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             };
         sexualIntentResult = safetyResult.decision;
         const sexualIntentLatency = Date.now() - sexualIntentStartTime;
-        const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
 
         if (sexualIntentResult.action !== 'allow') {
           const shouldEscalateConduct = shouldEscalateConductForSexualDecision(sexualIntentResult.action);
@@ -371,8 +685,626 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
       // STAGE 1: Context Analysis (same as webhook)
       const contextStartTime = Date.now();
-      const analysis = await contextService.analyzeMessage(senderId, text);
+      const simpleAnalysis = contextService.analyzeSimpleTurn(senderId, text);
+      const analysis = simpleAnalysis || await contextService.analyzeMessage(senderId, text);
+      const simpleTurnUsed = !!simpleAnalysis;
       const contextAnalysisMs = Date.now() - contextStartTime;
+      const conductForReply = _dmConductService?.checkSuspicious('instagram', senderId);
+      const conductStateForReply: ConductState = conductForReply?.conductState || 'normal';
+      const styleProfile = buildDMStyleProfile({
+        customerMessage: text,
+        conversationHistory: analysis.conversationHistory,
+        isNewCustomer: analysis.isNewCustomer,
+        followUpHint: analysis.followUpHint,
+        conductState: conductStateForReply,
+      });
+      const deterministicTemplates = knowledgeContextService.getDeterministicTemplates();
+      const pipelineConfig = pipelineConfigService.getConfig();
+      const earlyDeterministicPilates = conductStateForReply === 'normal' && isPilatesInfoRequest(text)
+        ? deterministicTemplates.pilatesInfo
+        : null;
+      const earlyDeterministicAppointment = conductStateForReply === 'normal' && isStandaloneAppointmentRequest(text)
+        ? deterministicTemplates.appointmentBooking
+        : null;
+      const earlyDeterministicCloseout = conductStateForReply === 'normal'
+        ? buildDeterministicCloseoutResponse(text)
+        : null;
+      const earlyDeterministicContactFallback = conductStateForReply === 'normal'
+        ? buildClarifyExhaustedContactResponse({
+            messageText: text,
+            conversationHistory: analysis.conversationHistory,
+            responseMode: analysis.responseDirective.mode,
+            fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+          })
+        : null;
+
+      if (earlyDeterministicPilates) {
+        const safetyTokens = sexualIntentResult.totalTokens || 0;
+        const contextTokens = (analysis.usageTrace || []).reduce(
+          (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+          0,
+        );
+        const pilatesTokens = estimateTokens(earlyDeterministicPilates);
+        const responseTime = Date.now() - startTime;
+        const uncategorizedMs = Math.max(
+          0,
+          responseTime - (sexualIntentResult.latencyMs || 0) - contextAnalysisMs,
+        );
+        const pipelineTrace = {
+          sexualIntent: sexualIntentResult,
+          intentCategories: analysis.intentCategories,
+          matchedKeywords: analysis.matchedKeywords,
+          modelTier: analysis.modelTier,
+          modelId: PILATES_INFO_MODEL_ID,
+          tierReason: analysis.tierReason,
+          isNewCustomer: analysis.isNewCustomer,
+          conversationHistory: {
+            messageCount: analysis.conversationHistory.length,
+            messages: analysis.conversationHistory.map(entry => ({
+              direction: entry.direction,
+              text: entry.messageText.substring(0, 100),
+              timestamp: entry.createdAt,
+              relativeTime: entry.relativeTime,
+            })),
+            formattedForAI: analysis.formattedHistory.substring(0, 500),
+            followUpHint: analysis.followUpHint,
+            activeState: analysis.conversationState,
+            responseDirective: analysis.responseDirective,
+          },
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped',
+          knowledgeEntriesCount: 0,
+          semanticRetrieval: {
+            enabled: true,
+            strategy: 'sparse_tfidf_chargram',
+            queryText: '',
+            candidateCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            refreshedIndex: false,
+            skippedReason: 'fast_lane_skip',
+          },
+          semanticRerank: {
+            enabled: true,
+            modelId: 'disabled',
+            candidateCount: 0,
+            selectedCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            skippedReason: 'fast_lane_skip',
+            rationale: null,
+          },
+          conductControl: {
+            state: conductStateForReply,
+            shouldReply: conductForReply?.shouldReply !== false,
+            offenseCount: conductForReply?.offenseCount || 0,
+            manualMode: conductForReply?.manualMode || 'auto',
+            silentUntil: conductForReply?.silentUntil || null,
+            reason: conductForReply?.reason,
+          },
+          responseStyle: styleProfile.trace,
+          fastLane: {
+            used: true,
+            kind: 'deterministic_pilates_info',
+            skippedStages: ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation'],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible',
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped',
+          openclawSessionKey: 'deterministic-pilates-info',
+          agentPollDurationMs: 0,
+          directResponse: {
+            used: true,
+            latencyMs: 0,
+            modelId: PILATES_INFO_MODEL_ID,
+            tokensEstimated: pilatesTokens,
+            inputTokens: 0,
+            outputTokens: pilatesTokens,
+          },
+          policyValidation: { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped',
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: safetyTokens + contextTokens + pilatesTokens,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: sexualIntentResult.latencyMs || 0,
+            contextAnalysisMs,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs,
+          },
+          tokenBreakdown: {
+            safetyTokens,
+            contextTokens,
+            rerankTokens: 0,
+            directTokens: pilatesTokens,
+            directInputTokens: 0,
+            directOutputTokens: pilatesTokens,
+            policyTokens: 0,
+            totalTokens: safetyTokens + contextTokens + pilatesTokens,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET pipeline_trace = ?, model_tier = ?, model_used = ?
+          WHERE id = ?
+        `).run(JSON.stringify(pipelineTrace), analysis.modelTier, PILATES_INFO_MODEL_ID, inboundId);
+
+        res.json({
+          status: 'success',
+          response: earlyDeterministicPilates,
+          senderId,
+          sexualIntent: sexualIntentResult,
+          analysis: {
+            intentCategories: analysis.intentCategories,
+            matchedKeywords: analysis.matchedKeywords,
+            modelTier: analysis.modelTier,
+            modelId: PILATES_INFO_MODEL_ID,
+            tierReason: analysis.tierReason,
+            isNewCustomer: analysis.isNewCustomer,
+            conversationLength: analysis.conversationHistory.length,
+            knowledgeCategories: analysis.intentCategories,
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: pipelineTrace.responseStyle,
+          responseTime,
+          pipelineTrace,
+        });
+        return;
+      }
+
+      if (earlyDeterministicAppointment) {
+        const safetyTokens = sexualIntentResult.totalTokens || 0;
+        const contextTokens = (analysis.usageTrace || []).reduce(
+          (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+          0,
+        );
+        const appointmentTokens = estimateTokens(earlyDeterministicAppointment);
+        const responseTime = Date.now() - startTime;
+        const uncategorizedMs = Math.max(
+          0,
+          responseTime - (sexualIntentResult.latencyMs || 0) - contextAnalysisMs,
+        );
+        const pipelineTrace = {
+          sexualIntent: sexualIntentResult,
+          intentCategories: analysis.intentCategories,
+          matchedKeywords: analysis.matchedKeywords,
+          modelTier: analysis.modelTier,
+          modelId: APPOINTMENT_MODEL_ID,
+          tierReason: analysis.tierReason,
+          isNewCustomer: analysis.isNewCustomer,
+          conversationHistory: {
+            messageCount: analysis.conversationHistory.length,
+            messages: analysis.conversationHistory.map(entry => ({
+              direction: entry.direction,
+              text: entry.messageText.substring(0, 100),
+              timestamp: entry.createdAt,
+              relativeTime: entry.relativeTime,
+            })),
+            formattedForAI: analysis.formattedHistory.substring(0, 500),
+            followUpHint: analysis.followUpHint,
+            activeState: analysis.conversationState,
+            responseDirective: analysis.responseDirective,
+          },
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped',
+          knowledgeEntriesCount: 0,
+          semanticRetrieval: {
+            enabled: true,
+            strategy: 'sparse_tfidf_chargram',
+            queryText: '',
+            candidateCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            refreshedIndex: false,
+            skippedReason: 'fast_lane_skip',
+          },
+          semanticRerank: {
+            enabled: true,
+            modelId: 'disabled',
+            candidateCount: 0,
+            selectedCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            skippedReason: 'fast_lane_skip',
+            rationale: null,
+          },
+          conductControl: {
+            state: conductStateForReply,
+            shouldReply: conductForReply?.shouldReply !== false,
+            offenseCount: conductForReply?.offenseCount || 0,
+            manualMode: conductForReply?.manualMode || 'auto',
+            silentUntil: conductForReply?.silentUntil || null,
+            reason: conductForReply?.reason,
+          },
+          responseStyle: styleProfile.trace,
+          fastLane: {
+            used: true,
+            kind: 'deterministic_appointment',
+            skippedStages: ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation'],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible',
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped',
+          openclawSessionKey: 'deterministic-appointment',
+          agentPollDurationMs: 0,
+          directResponse: {
+            used: true,
+            latencyMs: 0,
+            modelId: APPOINTMENT_MODEL_ID,
+            tokensEstimated: appointmentTokens,
+            inputTokens: 0,
+            outputTokens: appointmentTokens,
+          },
+          policyValidation: { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped',
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: safetyTokens + contextTokens + appointmentTokens,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: sexualIntentResult.latencyMs || 0,
+            contextAnalysisMs,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs,
+          },
+          tokenBreakdown: {
+            safetyTokens,
+            contextTokens,
+            rerankTokens: 0,
+            directTokens: appointmentTokens,
+            directInputTokens: 0,
+            directOutputTokens: appointmentTokens,
+            policyTokens: 0,
+            totalTokens: safetyTokens + contextTokens + appointmentTokens,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET pipeline_trace = ?, model_tier = ?, model_used = ?
+          WHERE id = ?
+        `).run(JSON.stringify(pipelineTrace), analysis.modelTier, APPOINTMENT_MODEL_ID, inboundId);
+
+        res.json({
+          status: 'success',
+          response: earlyDeterministicAppointment,
+          senderId,
+          sexualIntent: sexualIntentResult,
+          analysis: {
+            intentCategories: analysis.intentCategories,
+            matchedKeywords: analysis.matchedKeywords,
+            modelTier: analysis.modelTier,
+            modelId: APPOINTMENT_MODEL_ID,
+            tierReason: analysis.tierReason,
+            isNewCustomer: analysis.isNewCustomer,
+            conversationLength: analysis.conversationHistory.length,
+            knowledgeCategories: analysis.intentCategories,
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: pipelineTrace.responseStyle,
+          responseTime,
+        });
+        return;
+      }
+
+      if (earlyDeterministicCloseout?.action === 'skip_send') {
+        const safetyTokens = sexualIntentResult.totalTokens || 0;
+        const contextTokens = (analysis.usageTrace || []).reduce(
+          (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+          0,
+        );
+        const responseTime = Date.now() - startTime;
+        const uncategorizedMs = Math.max(
+          0,
+          responseTime - (sexualIntentResult.latencyMs || 0) - contextAnalysisMs,
+        );
+        const pipelineTrace = {
+          sexualIntent: sexualIntentResult,
+          intentCategories: analysis.intentCategories,
+          matchedKeywords: analysis.matchedKeywords,
+          modelTier: analysis.modelTier,
+          modelId: earlyDeterministicCloseout.modelId,
+          tierReason: analysis.tierReason,
+          isNewCustomer: analysis.isNewCustomer,
+          conversationHistory: {
+            messageCount: analysis.conversationHistory.length,
+            messages: analysis.conversationHistory.map(entry => ({
+              direction: entry.direction,
+              text: entry.messageText.substring(0, 100),
+              timestamp: entry.createdAt,
+              relativeTime: entry.relativeTime,
+            })),
+            formattedForAI: analysis.formattedHistory.substring(0, 500),
+            followUpHint: analysis.followUpHint,
+            activeState: analysis.conversationState,
+            responseDirective: analysis.responseDirective,
+          },
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped',
+          knowledgeEntriesCount: 0,
+          semanticRetrieval: {
+            enabled: true,
+            strategy: 'sparse_tfidf_chargram',
+            queryText: '',
+            candidateCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            refreshedIndex: false,
+            skippedReason: 'fast_lane_no_reply',
+          },
+          semanticRerank: {
+            enabled: true,
+            modelId: 'disabled',
+            candidateCount: 0,
+            selectedCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            skippedReason: 'fast_lane_no_reply',
+            rationale: null,
+          },
+          conductControl: {
+            state: conductStateForReply,
+            shouldReply: conductForReply?.shouldReply !== false,
+            offenseCount: conductForReply?.offenseCount || 0,
+            manualMode: conductForReply?.manualMode || 'auto',
+            silentUntil: conductForReply?.silentUntil || null,
+            reason: conductForReply?.reason,
+          },
+          responseStyle: styleProfile.trace,
+          fastLane: {
+            used: true,
+            kind: 'deterministic_closeout',
+            skippedStages: ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation', 'meta_send'],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible',
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped',
+          openclawSessionKey: 'deterministic-closeout',
+          agentPollDurationMs: 0,
+          directResponse: {
+            used: true,
+            latencyMs: 0,
+            modelId: earlyDeterministicCloseout.modelId,
+            tokensEstimated: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+          },
+          policyValidation: { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped',
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: safetyTokens + contextTokens,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: sexualIntentResult.latencyMs || 0,
+            contextAnalysisMs,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs,
+          },
+          tokenBreakdown: {
+            safetyTokens,
+            contextTokens,
+            rerankTokens: 0,
+            directTokens: 0,
+            directInputTokens: 0,
+            directOutputTokens: 0,
+            policyTokens: 0,
+            totalTokens: safetyTokens + contextTokens,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET pipeline_trace = ?, model_tier = ?, model_used = ?
+          WHERE id = ?
+        `).run(JSON.stringify(pipelineTrace), analysis.modelTier, earlyDeterministicCloseout.modelId, inboundId);
+
+        try {
+          contextService.clearConversationState(senderId);
+        } catch (stateErr) {
+          console.error('[Simulator] Failed to clear conversation state:', stateErr);
+        }
+
+        res.json({
+          status: 'success',
+          response: null,
+          replySkipped: true,
+          senderId,
+          sexualIntent: sexualIntentResult,
+          analysis: {
+            intentCategories: analysis.intentCategories,
+            matchedKeywords: analysis.matchedKeywords,
+            modelTier: analysis.modelTier,
+            modelId: earlyDeterministicCloseout.modelId,
+            tierReason: analysis.tierReason,
+            isNewCustomer: analysis.isNewCustomer,
+            conversationLength: analysis.conversationHistory.length,
+            knowledgeCategories: analysis.intentCategories,
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: pipelineTrace.responseStyle,
+          responseTime,
+        });
+        return;
+      }
+
+      if (earlyDeterministicContactFallback) {
+        const safetyTokens = sexualIntentResult.totalTokens || 0;
+        const contextTokens = (analysis.usageTrace || []).reduce(
+          (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+          0,
+        );
+        const responseTokens = estimateTokens(earlyDeterministicContactFallback.response);
+        const responseTime = Date.now() - startTime;
+        const uncategorizedMs = Math.max(
+          0,
+          responseTime - (sexualIntentResult.latencyMs || 0) - contextAnalysisMs,
+        );
+        const pipelineTrace = {
+          sexualIntent: sexualIntentResult,
+          intentCategories: analysis.intentCategories,
+          matchedKeywords: analysis.matchedKeywords,
+          modelTier: analysis.modelTier,
+          modelId: CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+          tierReason: analysis.tierReason,
+          isNewCustomer: analysis.isNewCustomer,
+          conversationHistory: {
+            messageCount: analysis.conversationHistory.length,
+            messages: analysis.conversationHistory.map(entry => ({
+              direction: entry.direction,
+              text: entry.messageText.substring(0, 100),
+              timestamp: entry.createdAt,
+              relativeTime: entry.relativeTime,
+            })),
+            formattedForAI: analysis.formattedHistory.substring(0, 500),
+            followUpHint: analysis.followUpHint,
+            activeState: analysis.conversationState,
+            responseDirective: analysis.responseDirective,
+          },
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped',
+          knowledgeEntriesCount: 0,
+          semanticRetrieval: {
+            enabled: true,
+            strategy: 'sparse_tfidf_chargram',
+            queryText: '',
+            candidateCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            refreshedIndex: false,
+            skippedReason: 'fast_lane_skip',
+          },
+          semanticRerank: {
+            enabled: true,
+            modelId: 'disabled',
+            candidateCount: 0,
+            selectedCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            skippedReason: 'fast_lane_skip',
+            rationale: null,
+          },
+          conductControl: {
+            state: conductStateForReply,
+            shouldReply: conductForReply?.shouldReply !== false,
+            offenseCount: conductForReply?.offenseCount || 0,
+            manualMode: conductForReply?.manualMode || 'auto',
+            silentUntil: conductForReply?.silentUntil || null,
+            reason: conductForReply?.reason,
+          },
+          responseStyle: styleProfile.trace,
+          fastLane: {
+            used: true,
+            kind: 'deterministic_contact_fallback',
+            skippedStages: ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation'],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible',
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped',
+          openclawSessionKey: 'deterministic-contact-fallback',
+          agentPollDurationMs: 0,
+          directResponse: {
+            used: true,
+            latencyMs: 0,
+            modelId: CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+            tokensEstimated: responseTokens,
+            inputTokens: 0,
+            outputTokens: responseTokens,
+          },
+          policyValidation: { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped',
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: safetyTokens + contextTokens + responseTokens,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: sexualIntentResult.latencyMs || 0,
+            contextAnalysisMs,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs,
+          },
+          tokenBreakdown: {
+            safetyTokens,
+            contextTokens,
+            rerankTokens: 0,
+            directTokens: responseTokens,
+            directInputTokens: 0,
+            directOutputTokens: responseTokens,
+            policyTokens: 0,
+            totalTokens: safetyTokens + contextTokens + responseTokens,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET pipeline_trace = ?, model_tier = ?, model_used = ?
+          WHERE id = ?
+        `).run(JSON.stringify(pipelineTrace), analysis.modelTier, CLARIFY_EXHAUSTED_CONTACT_MODEL_ID, inboundId);
+
+        res.json({
+          status: 'success',
+          response: earlyDeterministicContactFallback.response,
+          senderId,
+          sexualIntent: sexualIntentResult,
+          analysis: {
+            intentCategories: analysis.intentCategories,
+            matchedKeywords: analysis.matchedKeywords,
+            modelTier: analysis.modelTier,
+            modelId: CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+            tierReason: analysis.tierReason,
+            isNewCustomer: analysis.isNewCustomer,
+            conversationLength: analysis.conversationHistory.length,
+            knowledgeCategories: analysis.intentCategories,
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: pipelineTrace.responseStyle,
+          responseTime,
+          pipelineTrace,
+        });
+        return;
+      }
 
       // ═══ STAGE 2: Knowledge Fetch + Format (same as webhook) ═══
       // Always include 'contact' — phone/address are in system prompt and fallback
@@ -382,8 +1314,6 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         kbCategories.add('policies');
       }
       kbCategories.add('contact');
-      const categoriesParam = Array.from(kbCategories).join(',');
-      const API_KEY = process.env.KIO_API_KEY || '';
       let knowledgeContext = '';
       let knowledgeEntriesCount = 0;
       let selectedEvidence = '';
@@ -407,22 +1337,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         skippedReason: 'not_run' as string | null,
         rationale: null as string | null,
       };
-      try {
-        const kRes = await fetch(
-          `http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
-          { headers: { 'Authorization': `Bearer ${API_KEY}` } }
-        );
-        if (kRes.ok) {
-          const kData = await kRes.json() as Record<string, unknown>;
-          knowledgeContext = JSON.stringify(kData);
-          for (const val of Object.values(kData)) {
-            if (Array.isArray(val)) knowledgeEntriesCount += val.length;
-            else knowledgeEntriesCount += 1;
-          }
-        }
-      } catch { /* knowledge fetch failed, continue */ }
+      const enrichKnowledge = shouldRunSemanticEnrichment(text, analysis, simpleTurnUsed);
+      const filteredKnowledge = knowledgeContextService.getFilteredContext(kbCategories);
+      knowledgeContext = filteredKnowledge.json;
+      knowledgeEntriesCount = filteredKnowledge.entryCount;
 
-      try {
+      if (enrichKnowledge) {
+        try {
         const semanticRetrieval = semanticKnowledgeService.findCandidates({
           baseContextJson: knowledgeContext,
           messageText: text,
@@ -478,12 +1399,10 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           skippedReason: 'error',
           rationale: null,
         };
-      }
+        }
 
-      try {
-        const supportEntries = knowledgeBaseService.getAll().filter(entry =>
-          ['faq', 'hours', 'policies'].includes(entry.category),
-        );
+        try {
+        const supportEntries = knowledgeContextService.getSupportEntries().entries;
         const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
         const augmentedKnowledge = knowledgeSelector.augmentContext({
           baseContextJson: knowledgeContext,
@@ -499,8 +1418,30 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             kbCategories.add(addedCategory);
           }
         }
-      } catch (knowledgeSelectionErr) {
-        console.error('[Simulator] Knowledge selection supplement failed:', knowledgeSelectionErr);
+        } catch (knowledgeSelectionErr) {
+          console.error('[Simulator] Knowledge selection supplement failed:', knowledgeSelectionErr);
+        }
+      } else {
+        semanticRetrievalTrace = {
+          enabled: true,
+          strategy: 'sparse_tfidf_chargram',
+          queryText: '',
+          candidateCount: 0,
+          selectedEntries: [],
+          latencyMs: 0,
+          refreshedIndex: false,
+          skippedReason: 'simple_turn_skip',
+        };
+        semanticRerankTrace = {
+          enabled: true,
+          modelId: 'disabled',
+          candidateCount: 0,
+          selectedCount: 0,
+          selectedEntries: [],
+          latencyMs: 0,
+          skippedReason: 'simple_turn_skip',
+          rationale: null,
+        };
       }
 
       // Format KB from raw JSON to clean labeled text (anti-hallucination)
@@ -508,35 +1449,78 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const knowledgeAssemblyMs = Date.now() - knowledgeStartTime;
 
       // ═══ STAGE 3: Direct Response via OpenRouter (same as webhook) ═══
-      const pipelineConfig = pipelineConfigService.getConfig();
+      const configSignature = pipelineConfigService.getConfigSignature(pipelineConfig);
       const tierConfig = pipelineConfig.directResponse.tiers[analysis.modelTier];
-      const systemPrompt = pipelineConfigService.buildDirectSystemPrompt(formattedKnowledge);
-      let skipPolicy = pipelineConfigService.shouldSkipPolicy(analysis.modelTier);
+      const systemPrompt = pipelineConfigService.buildDirectSystemPromptForConfig(pipelineConfig, formattedKnowledge);
+      const useDirectResponse = pipelineConfigService.shouldUseDirectResponseForConfig(pipelineConfig, analysis.modelTier);
+      let skipPolicy = !pipelineConfig.policy.enabled;
 
       const customerSummary = analysis.isNewCustomer
         ? 'YENI MUSTERI'
         : `Etkilesim: ${analysis.totalInteractions}`;
-      const conductForReply = _dmConductService?.checkSuspicious('instagram', senderId);
-      const conductStateForReply: ConductState = conductForReply?.conductState || 'normal';
-      const styleProfile = buildDMStyleProfile({
-        customerMessage: text,
-        conversationHistory: analysis.conversationHistory,
-        isNewCustomer: analysis.isNewCustomer,
-        followUpHint: analysis.followUpHint,
-        conductState: conductStateForReply,
-      });
 
       const directService = new DirectResponseService();
+      const responseCacheClass = simpleTurnUsed ? getResponseCacheClass(text, analysis) : null;
       const deterministicConductResponse = getDeterministicConductResponse({
         conductState: conductStateForReply,
         customerMessage: text,
         matchedKeywords: analysis.matchedKeywords,
         intentCategories: analysis.intentCategories,
       });
-      const deterministicInfoResponse = conductStateForReply !== 'silent' && isGenericInfoRequest(text)
+      const deterministicInfoResponse = conductStateForReply === 'normal' && isGenericInfoFastLaneRequest(text)
         ? buildGenericInfoTemplateFromKnowledge()
         : null;
-      const deterministicClarifier = deterministicConductResponse || deterministicInfoResponse || conductStateForReply !== 'normal'
+      const deterministicPilatesResponse = conductStateForReply === 'normal' && isPilatesInfoRequest(text)
+        ? deterministicTemplates.pilatesInfo
+        : null;
+      const deterministicLocationResponse = conductStateForReply === 'normal' && isDirectLocationQuestion(text)
+        ? deterministicTemplates.contactLocation
+        : null;
+      const deterministicPhoneResponse = conductStateForReply === 'normal' && isDirectPhoneQuestion(text)
+        ? deterministicTemplates.contactPhone
+        : null;
+      const deterministicHoursAppointmentResponse = conductStateForReply === 'normal'
+        && analysis.matchedKeywords.includes('standalone_hours_request')
+        && analysis.matchedKeywords.includes('standalone_appointment_request')
+        ? deterministicTemplates.hoursWithAppointment
+        : null;
+      const deterministicHoursResponse = conductStateForReply === 'normal' && analysis.matchedKeywords.includes('standalone_hours_request')
+        ? deterministicTemplates.generalHours
+        : null;
+      const deterministicAppointmentResponse = conductStateForReply === 'normal' && isStandaloneAppointmentRequest(text)
+        ? deterministicTemplates.appointmentBooking
+        : null;
+      const deterministicCloseout = conductStateForReply === 'normal'
+        ? buildDeterministicCloseoutResponse(text)
+        : null;
+      const deterministicContactFallback = deterministicConductResponse
+        || deterministicInfoResponse
+        || deterministicPilatesResponse
+        || deterministicLocationResponse
+        || deterministicPhoneResponse
+        || deterministicHoursAppointmentResponse
+        || deterministicHoursResponse
+        || deterministicAppointmentResponse
+        || deterministicCloseout
+        || conductStateForReply !== 'normal'
+        ? null
+        : buildClarifyExhaustedContactResponse({
+            messageText: text,
+            conversationHistory: analysis.conversationHistory,
+            responseMode: analysis.responseDirective.mode,
+            fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+          });
+      const deterministicClarifier = deterministicConductResponse
+        || deterministicInfoResponse
+        || deterministicPilatesResponse
+        || deterministicLocationResponse
+        || deterministicPhoneResponse
+        || deterministicHoursAppointmentResponse
+        || deterministicHoursResponse
+        || deterministicAppointmentResponse
+        || deterministicCloseout
+        || deterministicContactFallback
+        || conductStateForReply !== 'normal'
         ? null
         : buildDeterministicClarifierResponse({
             messageText: text,
@@ -544,17 +1528,120 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             responseMode: analysis.responseDirective.mode,
             semanticSignals: analysis.matchedKeywords,
           });
-      const deterministicResponse = deterministicConductResponse?.response || deterministicInfoResponse || deterministicClarifier?.response || null;
-      const deterministicModelId = deterministicConductResponse?.modelId || (deterministicInfoResponse
+      let deterministicResponse = deterministicConductResponse?.response
+        || deterministicInfoResponse
+        || deterministicPilatesResponse
+        || deterministicLocationResponse
+        || deterministicPhoneResponse
+        || deterministicHoursAppointmentResponse
+        || deterministicHoursResponse
+        || deterministicAppointmentResponse
+        || (deterministicCloseout?.action === 'reply' ? deterministicCloseout.response : null)
+        || deterministicContactFallback?.response
+        || deterministicClarifier?.response
+        || null;
+      let deterministicModelId = deterministicConductResponse?.modelId || (deterministicInfoResponse
         ? 'deterministic/info-template-v1'
-        : deterministicClarifier?.modelId || null);
-      const deterministicSessionKey = deterministicConductResponse
+        : deterministicLocationResponse
+          ? 'deterministic/contact-location-v1'
+            : deterministicPilatesResponse
+              ? PILATES_INFO_MODEL_ID
+            : deterministicPhoneResponse
+              ? 'deterministic/contact-phone-v1'
+            : deterministicHoursAppointmentResponse
+              ? HOURS_APPOINTMENT_MODEL_ID
+            : deterministicHoursResponse
+              ? 'deterministic/hours-general-v1'
+              : deterministicAppointmentResponse
+                ? APPOINTMENT_MODEL_ID
+              : deterministicCloseout?.action === 'reply'
+                ? deterministicCloseout.modelId
+                : deterministicContactFallback
+                  ? CLARIFY_EXHAUSTED_CONTACT_MODEL_ID
+                : deterministicClarifier?.modelId || null);
+      let deterministicSessionKey = deterministicConductResponse
         ? 'deterministic-conduct'
         : deterministicInfoResponse
         ? 'deterministic-info-template'
+        : deterministicPilatesResponse
+        ? 'deterministic-pilates-info'
+        : deterministicLocationResponse
+          ? 'deterministic-contact-location'
+          : deterministicPhoneResponse
+          ? 'deterministic-contact-phone'
+            : deterministicHoursAppointmentResponse
+              ? 'deterministic-hours-appointment'
+            : deterministicHoursResponse
+              ? 'deterministic-hours-general'
+              : deterministicAppointmentResponse
+                ? 'deterministic-appointment'
+              : deterministicCloseout?.action === 'reply'
+                ? 'deterministic-closeout'
+              : deterministicContactFallback
+                ? 'deterministic-contact-fallback'
         : deterministicClarifier
           ? 'deterministic-clarifier'
-          : 'simulator';
+          : useDirectResponse ? 'direct' : 'simulated-openclaw';
+      let cacheTrace = {
+        eligible: false,
+        hit: false,
+        cacheClass: responseCacheClass,
+        lookupKey: null as string | null,
+        sourceExecutionId: null as string | null,
+        status: 'ineligible' as 'active' | 'candidate' | 'miss' | 'ineligible',
+        observationCount: null as number | null,
+      };
+      if (!deterministicResponse && responseCacheClass) {
+        const lookupParams = {
+          cacheClass: responseCacheClass as any,
+          normalizedMessage: DMResponseCacheService.normalizeMessage(text),
+          kbSignature: knowledgeContextService.getActiveSignature(),
+          configSignature,
+          conductState: conductStateForReply,
+        };
+        if (shouldLookupResponseCache({
+          messageText: text,
+          analysis,
+          conductState: conductStateForReply,
+          sexualAction: sexualIntentResult.action,
+        })) {
+          cacheTrace = {
+            eligible: true,
+            hit: false,
+            cacheClass: responseCacheClass,
+            lookupKey: responseCacheService.buildLookupKey(lookupParams),
+            sourceExecutionId: null,
+            status: 'miss',
+            observationCount: null,
+          };
+          const cacheHit = responseCacheService.lookupActive(lookupParams);
+          if (cacheHit) {
+            deterministicResponse = cacheHit.responseText;
+            deterministicModelId = `cache/${responseCacheClass}`;
+            deterministicSessionKey = 'response-cache';
+            skipPolicy = true;
+            cacheTrace = {
+              eligible: true,
+              hit: true,
+              cacheClass: responseCacheClass,
+              lookupKey: cacheHit.lookupKey,
+              sourceExecutionId: cacheHit.sourceExecutionId,
+              status: cacheHit.status,
+              observationCount: cacheHit.observationCount,
+            };
+          }
+        } else {
+          cacheTrace = {
+            eligible: false,
+            hit: false,
+            cacheClass: responseCacheClass,
+            lookupKey: responseCacheService.buildLookupKey(lookupParams),
+            sourceExecutionId: null,
+            status: 'ineligible',
+            observationCount: null,
+          };
+        }
+      }
       if (deterministicResponse) {
         skipPolicy = true;
         console.log('[Simulator] Using deterministic response path (%s)', deterministicModelId);
@@ -620,7 +1707,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
         if (!validation.valid) {
           // Try correction
-          const correctionModelId = pipelineConfigService.getCorrectionModel(analysis.modelId);
+          const correctionModelId = pipelineConfigService.getCorrectionModelForConfig(pipelineConfig, analysis.modelId);
           const correction = await policyService.generateCorrectedResponse(
             text,
             finalResponse,
@@ -700,7 +1787,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           responseDirective: analysis.responseDirective,
         },
         knowledgeCategoriesFetched: Array.from(kbCategories),
-        knowledgeFetchStatus: knowledgeContext ? 'success' : 'fail',
+        knowledgeFetchStatus: deterministicResponse ? 'skipped' : (knowledgeContext ? 'success' : 'fail'),
         knowledgeEntriesCount,
         semanticRetrieval: semanticRetrievalTrace,
         semanticRerank: semanticRerankTrace,
@@ -713,7 +1800,45 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           reason: conductForReply?.reason,
         },
         responseStyle: styleProfile.trace,
-        openclawDispatchStatus: 'skipped',
+        fastLane: deterministicResponse ? {
+          used: true,
+          kind: deterministicSessionKey === 'response-cache'
+            ? 'response_cache'
+            : deterministicSessionKey === 'deterministic-conduct'
+              ? 'deterministic_conduct'
+              : deterministicSessionKey === 'deterministic-info-template'
+                ? 'deterministic_info_template'
+                : deterministicSessionKey === 'deterministic-pilates-info'
+                  ? 'deterministic_pilates_info'
+                : deterministicSessionKey === 'deterministic-contact-location'
+                    ? 'deterministic_contact_location'
+                  : deterministicSessionKey === 'deterministic-contact-phone'
+                    ? 'deterministic_contact_phone'
+                    : deterministicSessionKey === 'deterministic-contact-fallback'
+                      ? 'deterministic_contact_fallback'
+                    : deterministicSessionKey === 'deterministic-hours-appointment'
+                      ? 'deterministic_hours_appointment'
+                    : deterministicSessionKey === 'deterministic-hours-general'
+                      ? 'deterministic_hours'
+                      : deterministicSessionKey === 'deterministic-appointment'
+                        ? 'deterministic_appointment'
+                      : deterministicSessionKey === 'deterministic-closeout'
+                        ? 'deterministic_closeout'
+                        : deterministicSessionKey === 'deterministic-clarifier'
+                          ? 'deterministic_clarifier'
+                          : 'simple_analysis',
+          skippedStages: ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation'],
+        } : simpleTurnUsed ? {
+          used: true,
+          kind: 'simple_analysis',
+          skippedStages: ['context_planner'],
+        } : {
+          used: false,
+          kind: 'none',
+          skippedStages: [],
+        },
+        cache: cacheTrace,
+        openclawDispatchStatus: useDirectResponse || deterministicSessionKey !== 'simulated-openclaw' ? 'skipped' : 'success',
         openclawSessionKey: deterministicSessionKey,
         agentPollDurationMs: 0,
         directResponse: {

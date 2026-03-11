@@ -66,6 +66,7 @@ export default function Header({ onSearchClick, onMobileMenuToggle }: HeaderProp
       '/admin/mc/jarvis': 'Jarvis AI',
       '/admin/mc/dm-kontrol': 'DM Kontrol',
       '/admin/mc/dm-conduct': 'DM Davranis',
+      '/admin/mc/dm-review': 'DM Review',
       '/admin/mc/autopilot': 'AutoPilot',
       '/admin/mc/activity': 'Canli Akis',
       '/admin/mc/cron': 'Zamanlayici',

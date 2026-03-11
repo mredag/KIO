@@ -42,6 +42,17 @@ describe('sexualIntentFilter', () => {
     expect(getSexualIntentReply('retry_question')).toContain('profesyonel spa ve spor');
   });
 
+  it('force-allows real business hours questions without calling the classifier', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await evaluateSexualIntent('saat kaça kadar açıksınız');
+
+    expect(result.action).toBe('allow');
+    expect(result.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('treats near-block sexual scores as a hard block instead of clarification', () => {
     const decision = decideSexualIntent({
       isSexual: true,
@@ -392,6 +403,54 @@ describe('sexualIntentFilter', () => {
     expect(decision.action).toBe('allow');
     expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
     expect(decision.reason).toContain('short neutral inquiry');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows benign closeout confirmations without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('Gelecegim');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('closeout / acknowledgement');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows gratitude-prefixed acknowledgement closeouts without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('Tesekkurler arayacagim');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('closeout / acknowledgement');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows reservation questions without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('Rezervasyon yapabilir miyim');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('appointment / reservation inquiry');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it('allows acknowledgement fragments like \"Ilginize\" without hitting the model', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const decision = await evaluateSexualIntent('Ilginize');
+
+    expect(decision.action).toBe('allow');
+    expect(decision.modelUsed).toBe('heuristic-clear-business-guard');
+    expect(decision.reason).toContain('closeout / acknowledgement');
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 

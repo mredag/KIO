@@ -3,12 +3,14 @@ import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type Database from 'better-sqlite3';
 import { DmSSEManager } from '../services/DmSSEManager.js';
+import { DMResponseCacheService } from '../services/DMResponseCacheService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { WhatsAppPipelineConfigService } from '../services/WhatsAppPipelineConfigService.js';
 
 let _db: Database.Database | null = null;
 let _pipelineConfig: PipelineConfigService | null = null;
 let _waPipelineConfig: WhatsAppPipelineConfigService | null = null;
+let _responseCache: DMResponseCacheService | null = null;
 
 function getDb(): Database.Database {
   if (!_db) throw new Error('DM Kontrol routes not initialized');
@@ -618,12 +620,59 @@ router.post('/wa-pipeline-config/reset', (_req: Request, res: Response) => {
   }
 });
 
+// 15. GET /response-cache/stats — Exact-match DM response cache stats
+router.get('/response-cache/stats', (_req: Request, res: Response) => {
+  try {
+    if (!_responseCache) {
+      return res.status(500).json({ error: 'Response cache not initialized' });
+    }
+    res.json(_responseCache.getStats());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 16. POST /response-cache/clear — Clear exact-match DM response cache
+router.post('/response-cache/clear', (_req: Request, res: Response) => {
+  try {
+    if (!_responseCache) {
+      return res.status(500).json({ error: 'Response cache not initialized' });
+    }
+    res.json(_responseCache.clear());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 17. POST /response-cache/seed — Seed exact-match DM response cache from recent safe Instagram history
+router.post('/response-cache/seed', (req: Request, res: Response) => {
+  try {
+    if (!_responseCache || !_pipelineConfig) {
+      return res.status(500).json({ error: 'Response cache not initialized' });
+    }
+
+    const config = _pipelineConfig.getConfig();
+    const result = _responseCache.seedFromInstagramHistory({
+      configSignature: _pipelineConfig.getConfigSignature(config),
+      days: typeof req.body?.days === 'number' ? req.body.days : undefined,
+      dryRun: req.body?.dryRun === true,
+      directOnly: req.body?.directOnly !== false,
+      limit: typeof req.body?.limit === 'number' ? req.body.limit : undefined,
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Factory export ---
 
 export function createDmKontrolRoutes(db: Database.Database): Router {
   _db = db;
   _pipelineConfig = new PipelineConfigService(db);
   _waPipelineConfig = new WhatsAppPipelineConfigService(db);
+  _responseCache = new DMResponseCacheService(db);
   runDmKontrolMigration(db);
   return router;
 }

@@ -1,8 +1,27 @@
 import { normalizeTurkish } from './InstagramContextService.js';
-import type { ResponseMode } from './InstagramContextService.js';
+import type { ConversationEntry, ResponseMode } from './InstagramContextService.js';
+import { buildDeterministicCloseoutTemplate } from './GenericInfoTemplateService.js';
 
 export const PRICING_CLARIFIER_MODEL_ID = 'deterministic/clarifier-pricing-v1';
 export const TOPIC_SELECTION_CLARIFIER_MODEL_ID = 'deterministic/clarifier-topic-menu-v1';
+export const APPOINTMENT_MODEL_ID = 'deterministic/appointment-booking-v1';
+export const HOURS_APPOINTMENT_MODEL_ID = 'deterministic/hours-appointment-v1';
+export const PILATES_INFO_MODEL_ID = 'deterministic/pilates-info-v1';
+export const CLOSEOUT_MODEL_ID = 'deterministic/closeout-v1';
+export const NO_REPLY_MODEL_ID = 'deterministic/no-reply-v1';
+export const CLARIFY_EXHAUSTED_CONTACT_MODEL_ID = 'deterministic/clarify-exhausted-contact-v1';
+
+export interface DeterministicCloseoutDecision {
+  action: 'reply' | 'skip_send';
+  response: string | null;
+  modelId: string;
+}
+
+export interface ClarifyExhaustedContactDecision {
+  response: string;
+  modelId: string;
+  clarificationCount: number;
+}
 
 const PRICING_SIGNAL_PATTERNS = [
   'fiyat',
@@ -12,13 +31,47 @@ const PRICING_SIGNAL_PATTERNS = [
   'fiyat list',
   'tarife',
 ];
+const POLITE_LEAD_IN_PATTERN = /^(?:tesekkur(?:ler)?|sag ?ol(?:un)?|saol|eyvallah|tamam(?:dir)?|peki|ok(?:ay)?|anladim|olur|rica ederim)\b\s*/;
+const SPECIFIC_TOPIC_ANCHOR_PATTERN = /\b(?:masaj|klasik|medikal|mix|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/;
+const VAGUE_CLARIFICATION_FOLLOW_UP_PATTERN = /\b(?:bu|bunu|bundan|bunda|bu hizmet|bu paket|bu seans|o|onu|ondan|onda|o hizmet|istiyorum|istedigim|istedigimi|yani|bundaki|ondaki)\b/;
+const CLARIFICATION_REPLY_PATTERNS = [
+  /\bhangi\b.*\bbelirtir misiniz\b/,
+  /\bhangi\b.*\bogrenmek istersiniz\b/,
+  /\bmesajinizi daha acik yazar misiniz\b/,
+  /\bneyi kastettiginizi\b/,
+  /\bne hakkinda konustugunuzu belirtir misiniz\b/,
+  /\bhangi konuda bilgi almak istediginizi belirtirseniz\b/,
+  /\bhangi alt bilgiyi ogrenmek istersiniz\b/,
+];
+
+function stripPoliteLeadIn(normalized: string): string {
+  let stripped = normalized.trim();
+  while (POLITE_LEAD_IN_PATTERN.test(stripped)) {
+    stripped = stripped.replace(POLITE_LEAD_IN_PATTERN, '').trim();
+  }
+  return stripped;
+}
+
+function isStandaloneAcknowledgementMessage(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  if (!normalized) {
+    return false;
+  }
+
+  const stripped = stripPoliteLeadIn(normalized);
+  if (/^(?:ilginize|bilginize)$/.test(normalized)) {
+    return true;
+  }
+
+  return /^(?:gelecegim|gelicem|ugrayacagim|ugrayacam|arayacagim|arayicam|geri donecegim|donus yapacagim|haber verecegim)$/.test(stripped);
+}
 
 function isGenericPricingClarifier(params: {
   intentCategories: string[];
   responseMode?: ResponseMode | null;
   semanticSignals?: string[];
 }): boolean {
-  if (params.responseMode !== 'clarify_only') {
+  if (!params.responseMode || !['clarify_only', 'answer_then_clarify'].includes(params.responseMode)) {
     return false;
   }
 
@@ -56,15 +109,235 @@ function shouldBuildTopicSelectionClarifier(params: {
 }
 
 function hasPricingSignal(messageText: string): boolean {
-  const normalizedMessage = normalizeTurkish(messageText.toLowerCase())
-    .replace(/\s+/g, ' ')
-    .trim();
+  const normalizedMessage = normalizeTemplateText(messageText);
 
   if (!normalizedMessage) {
     return false;
   }
 
   return PRICING_SIGNAL_PATTERNS.some(pattern => normalizedMessage.includes(pattern));
+}
+
+export function normalizeTemplateText(text: string): string {
+  return normalizeTurkish(text.toLocaleLowerCase('tr-TR'))
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isGenericInfoRequest(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  if (!normalized) {
+    return false;
+  }
+
+  const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
+    || /\bbilgi\s+(al|ver)/.test(normalized);
+  if (!hasInfoIntent) {
+    return false;
+  }
+
+  const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
+
+  return !hasSpecificAnchor;
+}
+
+export function isStandaloneCloseoutMessage(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  if (!normalized) {
+    return false;
+  }
+
+  if (isStandaloneAcknowledgementMessage(messageText)) {
+    return true;
+  }
+
+  const closeoutPatterns = [
+    /^(tesekkur(?:ler)?)$/,
+    /^(sag ?ol(?:un)?)$/,
+    /^(saol)$/,
+    /^(eyvallah)$/,
+    /^(rica ederim)$/,
+    /^(anladim)$/,
+    /^(tamam(?:dir)?)$/,
+    /^(peki)$/,
+    /^(olur)$/,
+    /^(ok(?:ay)?)$/,
+    /^(baska sorum yok)$/,
+    /^(baska bir sorum yok)$/,
+    /^(anladim tesekkur(?:ler)?)$/,
+    /^(tamam tesekkur(?:ler)?)$/,
+    /^(yok tesekkur(?:ler)?)$/,
+    /^(gerek yok tesekkur(?:ler)?)$/,
+    /^(sorun degil)$/,
+    /^(problem degil)$/,
+    /^(bir sey degil)$/,
+    /^(?:size|siz)\s?de$/,
+    /^(?:size|siz)\s?de iyi gunler$/,
+    /^(?:size|siz)\s?de tesekkur(?:ler)?$/,
+  ];
+
+  return closeoutPatterns.some(pattern => pattern.test(normalized));
+}
+
+function shouldSuppressCloseoutReply(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  if (!normalized) {
+    return false;
+  }
+
+  if (isStandaloneAcknowledgementMessage(messageText)) {
+    return true;
+  }
+
+  return [
+    /^(anladim)$/,
+    /^(tamam(?:dir)?)$/,
+    /^(peki)$/,
+    /^(olur)$/,
+    /^(ok(?:ay)?)$/,
+    /^(baska sorum yok)$/,
+    /^(baska bir sorum yok)$/,
+    /^(anladim tesekkur(?:ler)?)$/,
+    /^(tamam tesekkur(?:ler)?)$/,
+    /^(yok tesekkur(?:ler)?)$/,
+    /^(gerek yok tesekkur(?:ler)?)$/,
+    /^(sorun degil)$/,
+    /^(problem degil)$/,
+    /^(bir sey degil)$/,
+    /^(?:size|siz)\s?de$/,
+    /^(?:size|siz)\s?de iyi gunler$/,
+    /^(?:size|siz)\s?de tesekkur(?:ler)?$/,
+  ].some(pattern => pattern.test(normalized));
+}
+
+export function isDirectLocationQuestion(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  return /\b(adres|konum|nerede|neredesiniz|neresindesiniz|ulasim|yol tarifi|harita|maps)\b/.test(normalized);
+}
+
+export function isDirectPhoneQuestion(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  return /\b(telefon|numara|iletisim|whatsapp|arayabilir miyim|telefon numaraniz)\b/.test(normalized);
+}
+
+export function isPilatesInfoRequest(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  if (!normalized || !/\b(?:pilates|reformer)\b/.test(normalized)) {
+    return false;
+  }
+
+  if (/\b(?:fiyat|ucret|ne kadar|kac|tl|lira|adres|konum|telefon|numara|iletisim|whatsapp|saat|acik|kapali|randevu|rezervasyon|kampanya|indirim)\b/.test(normalized)) {
+    return false;
+  }
+
+  return /^(?:pilates|reformer|reformer pilates)$/.test(normalized)
+    || /\b(?:pilates|reformer)\b.*\b(?:var mi|nedir|nasil|bilgi|detay|detaylar)\b/.test(normalized)
+    || /\b(?:bilgi|detay)\b.*\b(?:pilates|reformer)\b/.test(normalized);
+}
+
+export function hasAppointmentIntentSignal(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  return /\b(randevu|rezervasyon|rezerv)\b/.test(normalized);
+}
+
+export function isStandaloneAppointmentRequest(messageText: string): boolean {
+  const normalized = normalizeTemplateText(messageText);
+  if (!normalized) {
+    return false;
+  }
+
+  const stripped = stripPoliteLeadIn(normalized);
+  if (!hasAppointmentIntentSignal(stripped)) {
+    return false;
+  }
+
+  const tokenCount = stripped.split(/\s+/).filter(Boolean).length;
+  if (tokenCount > 8) {
+    return false;
+  }
+
+  if (/\b(?:masaj|hamam|sauna|fitness|pilates|reformer|pt|kurs|ders|uyelik|medikal|klasik|mix|havuz|yuzme)\b/.test(stripped)) {
+    return false;
+  }
+
+  if (/\b(?:saat|kacta|kaca|bugun|yarin|aksam|sabah|ogle|gece|uygun|musait)\b/.test(stripped) || /\b\d{1,2}(?::|\.)\d{2}\b/.test(stripped)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function buildDeterministicCloseoutResponse(messageText: string): DeterministicCloseoutDecision | null {
+  if (!isStandaloneCloseoutMessage(messageText)) {
+    return null;
+  }
+
+  if (shouldSuppressCloseoutReply(messageText)) {
+    return {
+      action: 'skip_send',
+      response: null,
+      modelId: NO_REPLY_MODEL_ID,
+    };
+  }
+
+  return {
+    action: 'reply',
+    response: buildDeterministicCloseoutTemplate(),
+    modelId: CLOSEOUT_MODEL_ID,
+  };
+}
+
+export function countRecentClarificationReplies(conversationHistory: ConversationEntry[]): number {
+  return conversationHistory
+    .slice(-6)
+    .filter(entry => entry.direction === 'outbound')
+    .reduce((count, entry) => {
+      const normalized = normalizeTemplateText(entry.messageText || '');
+      if (!normalized) {
+        return count;
+      }
+      return CLARIFICATION_REPLY_PATTERNS.some(pattern => pattern.test(normalized))
+        ? count + 1
+        : count;
+    }, 0);
+}
+
+export function buildClarifyExhaustedContactResponse(params: {
+  messageText?: string;
+  conversationHistory: ConversationEntry[];
+  responseMode?: ResponseMode | null;
+  fallbackMessage?: string | null;
+}): ClarifyExhaustedContactDecision | null {
+  if (!params.responseMode || !['clarify_only', 'answer_then_clarify'].includes(params.responseMode)) {
+    return null;
+  }
+
+  const fallbackMessage = String(params.fallbackMessage || '').trim();
+  if (!fallbackMessage) {
+    return null;
+  }
+
+  const clarificationCount = countRecentClarificationReplies(params.conversationHistory);
+  if (clarificationCount < 1) {
+    return null;
+  }
+
+  const normalizedMessage = normalizeTemplateText(params.messageText || '');
+  if (params.responseMode === 'answer_then_clarify') {
+    const hasPricingSignal = PRICING_SIGNAL_PATTERNS.some(pattern => normalizedMessage.includes(pattern));
+    const hasVagueFollowUp = VAGUE_CLARIFICATION_FOLLOW_UP_PATTERN.test(normalizedMessage);
+    const hasSpecificAnchor = SPECIFIC_TOPIC_ANCHOR_PATTERN.test(normalizedMessage);
+    if (!hasPricingSignal || !hasVagueFollowUp || hasSpecificAnchor) {
+      return null;
+    }
+  }
+
+  return {
+    response: fallbackMessage,
+    modelId: CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+    clarificationCount,
+  };
 }
 
 export function buildDeterministicClarifierResponse(params: {

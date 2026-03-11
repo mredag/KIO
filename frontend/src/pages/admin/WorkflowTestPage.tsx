@@ -89,6 +89,11 @@ export default function WorkflowTestPage() {
         return;
       }
 
+      if (data.replySkipped) {
+        setMessages(prev => prev.filter(m => !m.loading));
+        return;
+      }
+
       setMessages(prev => prev.map(m => m.loading ? {
         ...m,
         loading: false,

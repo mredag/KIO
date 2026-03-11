@@ -1567,6 +1567,18 @@ export function createAdminRoutes(
     try {
       const platform = typeof req.query.platform === 'string' ? req.query.platform : undefined;
       const searchQuery = typeof req.query.q === 'string' ? req.query.q : undefined;
+      const conductState = typeof req.query.state === 'string'
+        && ['normal', 'guarded', 'final_warning', 'silent'].includes(req.query.state)
+        ? req.query.state as 'normal' | 'guarded' | 'final_warning' | 'silent'
+        : undefined;
+      const manualMode = typeof req.query.manualMode === 'string'
+        && ['auto', 'force_normal', 'force_silent', 'manual_only'].includes(req.query.manualMode)
+        ? req.query.manualMode as 'auto' | 'force_normal' | 'force_silent' | 'manual_only'
+        : undefined;
+      const testLikeFilter = typeof req.query.testLike === 'string'
+        && ['real_only', 'test_only'].includes(req.query.testLike)
+        ? req.query.testLike as 'real_only' | 'test_only'
+        : undefined;
       const limit = typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : undefined;
       const offset = typeof req.query.offset === 'string' ? Number.parseInt(req.query.offset, 10) : undefined;
 
@@ -1575,6 +1587,9 @@ export function createAdminRoutes(
       const result = suspiciousService.listSuspiciousUsers({
         platform,
         searchQuery,
+        conductState,
+        manualMode,
+        testLikeFilter,
         limit: Number.isFinite(limit) ? limit : undefined,
         offset: Number.isFinite(offset) ? offset : undefined,
       });

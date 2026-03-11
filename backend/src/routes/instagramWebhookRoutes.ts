@@ -4,19 +4,36 @@ import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import Database from 'better-sqlite3';
-import { InstagramContextService, type AIUsageTrace } from '../services/InstagramContextService.js';
+import { InstagramContextService, type AIUsageTrace, type MessageAnalysis } from '../services/InstagramContextService.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
 import { ResponsePolicyService } from '../services/ResponsePolicyService.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { DirectResponseService } from '../services/DirectResponseService.js';
+import { DMKnowledgeContextService } from '../services/DMKnowledgeContextService.js';
+import { DMResponseCacheService, type DMResponseCacheClass } from '../services/DMResponseCacheService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
 import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
-import { buildDeterministicClarifierResponse } from '../services/DMPipelineHeuristics.js';
+import { UserBlockService } from '../services/UserBlockService.js';
+import { evaluatePermanentBanCandidate } from '../services/PermanentBanHeuristics.js';
+import {
+  APPOINTMENT_MODEL_ID,
+  buildClarifyExhaustedContactResponse,
+  buildDeterministicClarifierResponse,
+  buildDeterministicCloseoutResponse,
+  CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+  HOURS_APPOINTMENT_MODEL_ID,
+  isDirectLocationQuestion,
+  isDirectPhoneQuestion,
+  isPilatesInfoRequest,
+  isStandaloneAppointmentRequest,
+  normalizeTemplateText as normalizeFastLaneText,
+  PILATES_INFO_MODEL_ID,
+} from '../services/DMPipelineHeuristics.js';
 import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
-import { formatMassagePricingTemplate } from '../services/GenericInfoTemplateService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
+import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import {
@@ -170,6 +187,20 @@ export interface PipelineTrace {
     ctaPolicy: 'only_when_needed' | 'minimal';
     antiRepeatSignals: string[];
   };
+  fastLane?: {
+    used: boolean;
+    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
+    skippedStages: string[];
+  };
+  cache?: {
+    eligible: boolean;
+    hit: boolean;
+    cacheClass: string | null;
+    lookupKey: string | null;
+    sourceExecutionId: string | null;
+    status: 'active' | 'candidate' | 'miss' | 'ineligible';
+    observationCount: number | null;
+  };
   openclawDispatchStatus: 'success' | 'fail' | 'skipped';
   openclawSessionKey: string;
   agentPollDurationMs: number;
@@ -240,6 +271,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const router = Router();
   const semanticKnowledgeService = new DMKnowledgeRetrievalService(db);
   const semanticReranker = new DMKnowledgeRerankerService();
+  const knowledgeContextService = new DMKnowledgeContextService(db);
+  const responseCacheService = new DMResponseCacheService(db);
+  const userBlockService = new UserBlockService(db);
   
   const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'kio-instagram-verify';
   const OPENCLAW_WEBHOOK_URL = process.env.OPENCLAW_IG_WEBHOOK_URL || '';
@@ -317,48 +351,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     return !hasSpecificAnchor;
   }
 
-  function clipTemplateBlock(value: string, maxLines: number, maxChars: number): string {
-    const cleaned = value.replace(/\r/g, '').trim();
-    if (!cleaned) return '';
-
-    const lines = cleaned
-      .split('\n')
-      .map(line => line.trimEnd())
-      .filter(Boolean)
-      .slice(0, Math.max(1, maxLines));
-    let block = lines.join('\n');
-    if (block.length > maxChars) {
-      block = `${block.slice(0, maxChars - 3).trimEnd()}...`;
-    }
-    return block;
-  }
-
-  function buildGenericInfoTemplateFromKnowledge(): string | null {
-    try {
-      const rows = db.prepare(`
-        SELECT category, key_name, value
-        FROM knowledge_base
-        WHERE is_active = 1 AND (
-          (category = 'pricing' AND (key_name = 'complete_massage_pricing' OR key_name LIKE '%massage%' OR key_name LIKE '%masaj%'))
-          OR (category = 'services' AND key_name IN ('therapist_info', 'complete_customer_bring_guide'))
-          OR (category = 'contact' AND key_name = 'phone')
-        )
-        ORDER BY updated_at DESC
-      `).all() as Array<{
-        category: string;
-        key_name: string;
-        value: string;
-      }>;
-
-      const massagePricing = rows.find(row => row.category === 'pricing' && row.key_name === 'complete_massage_pricing')
-        || rows.find(row => row.category === 'pricing');
-      const therapistInfo = rows.find(row => row.category === 'services' && row.key_name === 'therapist_info');
-      const bringInfo = rows.find(row => row.category === 'services' && row.key_name === 'complete_customer_bring_guide');
-      const phoneInfo = rows.find(row => row.category === 'contact' && row.key_name === 'phone');
-
-      if (!massagePricing && !therapistInfo && !bringInfo) {
-        return null;
-      }
+  /*
 
       const sections: string[] = ['Elbette, size hızlıca temel bilgileri paylaşayım 👇'];
 
@@ -382,6 +375,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     }
   }
 
+  */
+
   function buildConductReply(
     action: 'retry_question' | 'block_message',
     conductState: ConductState,
@@ -393,6 +388,134 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     }
 
     return getSexualIntentReply(action);
+  }
+
+  function markFastLane(
+    trace: Partial<PipelineTrace>,
+    kind: NonNullable<PipelineTrace['fastLane']>['kind'],
+    skippedStages: string[],
+  ): void {
+    trace.fastLane = {
+      used: kind !== 'none',
+      kind,
+      skippedStages,
+    };
+  }
+
+  function setCacheTrace(trace: Partial<PipelineTrace>, payload: Partial<NonNullable<PipelineTrace['cache']>>): void {
+    trace.cache = {
+      eligible: false,
+      hit: false,
+      cacheClass: null,
+      lookupKey: null,
+      sourceExecutionId: null,
+      status: 'miss',
+      observationCount: null,
+      ...trace.cache,
+      ...payload,
+    };
+  }
+
+  function getResponseCacheClass(messageText: string, analysis: MessageAnalysis | null): DMResponseCacheClass | null {
+    if (!analysis) {
+      return null;
+    }
+
+    const normalized = normalizeFastLaneText(messageText);
+    if (analysis.matchedKeywords.includes('gratitude_message')) {
+      return 'gratitude_closeout';
+    }
+    if (isDirectLocationQuestion(messageText)) {
+      return 'direct_location';
+    }
+    if (isDirectPhoneQuestion(messageText)) {
+      return 'direct_phone';
+    }
+    if (analysis.matchedKeywords.includes('standalone_hours_request')) {
+      return 'direct_hours';
+    }
+    if (isGenericInfoRequest(messageText)) {
+      return 'general_info';
+    }
+    if (analysis.intentCategories.includes('services')
+      && analysis.intentCategories.every(category => ['services', 'general', 'faq'].includes(category))
+      && /\b(?:nedir|nasil bir|ne ise yarar|detay|detaylari|icerik|icerigi|anlatir misiniz|var mi|neler var)\b/.test(normalized)) {
+      return /\bneler var\b/.test(normalized) ? 'service_list' : 'service_definition';
+    }
+    if (analysis.intentCategories.includes('pricing') && analysis.intentCategories.includes('services')) {
+      return /fiyatlar|ucretler|price|fiyat list/.test(normalized)
+        ? 'topic_price_list'
+        : 'exact_price_answer';
+    }
+
+    return null;
+  }
+
+  function shouldLookupResponseCache(params: {
+    messageText: string;
+    analysis: MessageAnalysis;
+    conductState: ConductState;
+    sexualAction: 'allow' | 'retry_question' | 'block_message';
+  }): boolean {
+    const normalized = normalizeFastLaneText(params.messageText);
+    return params.conductState === 'normal'
+      && params.sexualAction === 'allow'
+      && !params.analysis.followUpHint
+      && params.analysis.modelTier !== 'advanced'
+      && !hasAgePolicySignals(params.messageText, params.analysis.followUpHint?.rewrittenQuestion, params.analysis.activeTopicLabel)
+      && !hasRoomAvailabilitySignals(params.messageText, params.analysis.followUpHint?.rewrittenQuestion, params.analysis.activeTopicLabel)
+      && !/\b(?:randevu|rezervasyon|uygun musait)\b/.test(normalized);
+  }
+
+  function shouldWriteResponseCache(params: {
+    cacheClass: DMResponseCacheClass | null;
+    messageText: string;
+    analysis: MessageAnalysis | null;
+    conductState: ConductState;
+    sexualAction: 'allow' | 'retry_question' | 'block_message';
+    metaSendStatus: 'success' | 'fail' | 'skipped';
+    policyStatus: 'pass' | 'fail' | 'corrected' | 'fallback' | 'skipped';
+    policyAttempts: number;
+    pipelineError: PipelineError | null;
+    cacheHit: boolean;
+  }): params is typeof params & {
+    cacheClass: DMResponseCacheClass;
+    analysis: NonNullable<typeof params.analysis>;
+  } {
+    return !!params.cacheClass
+      && !!params.analysis
+      && params.conductState === 'normal'
+      && params.sexualAction === 'allow'
+      && params.metaSendStatus === 'success'
+      && params.policyStatus === 'pass'
+      && params.policyAttempts === 1
+      && !params.pipelineError
+      && !params.cacheHit;
+  }
+
+  function shouldRunSemanticEnrichment(messageText: string, analysis: MessageAnalysis, simpleTurnUsed: boolean): boolean {
+    const deterministicCloseout = buildDeterministicCloseoutResponse(messageText);
+    if (deterministicCloseout?.action === 'skip_send') {
+      return false;
+    }
+
+    if (!simpleTurnUsed) {
+      return true;
+    }
+
+    if (analysis.matchedKeywords.includes('gratitude_message')
+      || analysis.matchedKeywords.includes('standalone_hours_request')
+      || isDirectLocationQuestion(messageText)
+      || isDirectPhoneQuestion(messageText)) {
+      return false;
+    }
+
+    if (analysis.intentCategories.every(category => ['general', 'faq'].includes(category))) {
+      return false;
+    }
+
+    return !(analysis.intentCategories.includes('services')
+      && analysis.intentCategories.every(category => ['services', 'general', 'faq'].includes(category)));
   }
 
   function normalizeMetaTimestampMs(value: unknown): number | null {
@@ -809,6 +932,214 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           // Initialize trace and error tracking
           const trace: Partial<PipelineTrace> = {};
           let pipelineError: PipelineError | null = null;
+          markFastLane(trace, 'none', []);
+          setCacheTrace(trace, {});
+
+          const activeBlock = userBlockService.checkBlock('instagram', senderId);
+          if (activeBlock.isBlocked) {
+            const now = new Date().toISOString();
+            const blockedModelId = activeBlock.isPermanent ? 'blocked/permanent' : 'blocked/temporary';
+            const blockedReason = activeBlock.reason || 'Blocked user';
+            const totalResponseTimeMs = Date.now() - startTime;
+            trace.conductControl = {
+              state: 'silent',
+              shouldReply: false,
+              offenseCount: 0,
+              manualMode: 'auto',
+              silentUntil: activeBlock.expiresAt || null,
+              reason: blockedReason,
+            };
+            trace.knowledgeCategoriesFetched = [];
+            trace.knowledgeFetchStatus = 'skipped';
+            trace.knowledgeEntriesCount = 0;
+            trace.openclawDispatchStatus = 'skipped';
+            trace.openclawSessionKey = 'blocked-user';
+            trace.agentPollDurationMs = 0;
+            trace.modelTier = 'light';
+            trace.modelId = blockedModelId;
+            trace.tierReason = activeBlock.isPermanent ? 'Active permanent block' : 'Active temporary block';
+            trace.intentCategories = [];
+            trace.matchedKeywords = [];
+            trace.metaSendStatus = 'skipped';
+            trace.totalResponseTimeMs = totalResponseTimeMs;
+            trace.tokensEstimated = 0;
+            trace.isNewCustomer = false;
+            trace.policyValidation = {
+              status: 'skipped',
+              attempts: 0,
+              totalLatencyMs: 0,
+              totalTokens: 0,
+            };
+            trace.timingBreakdown = {
+              ingestDelayMs,
+              customerPerceivedTotalMs: ingestDelayMs != null ? ingestDelayMs + totalResponseTimeMs : null,
+              safetyFilterMs: 0,
+              contextAnalysisMs: 0,
+              knowledgeAssemblyMs: 0,
+              openclawDispatchMs: 0,
+              metaSendMs: 0,
+              uncategorizedMs: totalResponseTimeMs,
+            };
+            trace.tokenBreakdown = {
+              policyTokens: 0,
+              totalTokens: 0,
+            };
+
+            db.prepare(`
+              INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
+              VALUES (?, 0, ?, ?)
+              ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
+            `).run(senderId, now, now);
+
+            db.prepare(`
+              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, model_used, model_tier, pipeline_trace, created_at)
+              VALUES (?, ?, 'inbound', ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              randomUUID(),
+              senderId,
+              messageText,
+              activeBlock.isPermanent ? 'hard_blocked_user' : 'blocked_user',
+              executionId,
+              blockedModelId,
+              'light',
+              JSON.stringify(trace),
+              now,
+            );
+
+            console.log(
+              '[Instagram Webhook] Ignoring blocked user %s (%s, permanent=%s)',
+              senderId,
+              blockedReason,
+              activeBlock.isPermanent === true,
+            );
+            return;
+          }
+
+          const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
+          const permanentBanCheckStartedAt = Date.now();
+          const permanentBanEvaluation = evaluatePermanentBanCandidate({
+            messageText,
+            conductStateBefore: conductBefore?.conductState || 'normal',
+            offenseCountAfter: (conductBefore?.offenseCount || 0) + 1,
+          });
+          const permanentBanLatency = Date.now() - permanentBanCheckStartedAt;
+          if (permanentBanEvaluation.shouldBan) {
+            const now = new Date().toISOString();
+            const permanentBanReason = permanentBanEvaluation.reason || 'Automatic permanent block';
+            const conductAfter = _dmConductService?.flagUser('instagram', senderId, permanentBanReason, {
+              action: 'block_message',
+              severity: 'high',
+              source: 'heuristic-permanent-ban',
+              messageText,
+            });
+            const blockedUser = userBlockService.permanentBlock('instagram', senderId, permanentBanReason);
+            const totalResponseTimeMs = Date.now() - startTime;
+            trace.sexualIntent = {
+              action: 'block_message',
+              confidence: 1,
+              reason: permanentBanReason,
+              modelUsed: 'heuristic-permanent-ban',
+              latencyMs: permanentBanLatency,
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+            };
+            trace.conductControl = {
+              state: conductAfter?.conductState || 'silent',
+              shouldReply: false,
+              offenseCount: conductAfter?.offenseCount || ((conductBefore?.offenseCount || 0) + 1),
+              manualMode: conductAfter?.manualMode || conductBefore?.manualMode || 'auto',
+              silentUntil: conductAfter?.silentUntil || blockedUser.expiresAt,
+              reason: permanentBanReason,
+            };
+            trace.knowledgeCategoriesFetched = [];
+            trace.knowledgeFetchStatus = 'skipped';
+            trace.knowledgeEntriesCount = 0;
+            trace.openclawDispatchStatus = 'skipped';
+            trace.openclawSessionKey = 'blocked-user';
+            trace.agentPollDurationMs = 0;
+            trace.modelTier = 'light';
+            trace.modelId = 'blocked/permanent';
+            trace.tierReason = 'Automatic permanent block';
+            trace.intentCategories = [];
+            trace.matchedKeywords = [];
+            trace.metaSendStatus = 'skipped';
+            trace.totalResponseTimeMs = totalResponseTimeMs;
+            trace.tokensEstimated = 0;
+            trace.isNewCustomer = false;
+            trace.policyValidation = {
+              status: 'skipped',
+              attempts: 0,
+              totalLatencyMs: 0,
+              totalTokens: 0,
+            };
+            trace.timingBreakdown = {
+              ingestDelayMs,
+              customerPerceivedTotalMs: ingestDelayMs != null ? ingestDelayMs + totalResponseTimeMs : null,
+              safetyFilterMs: permanentBanLatency,
+              contextAnalysisMs: 0,
+              knowledgeAssemblyMs: 0,
+              openclawDispatchMs: 0,
+              metaSendMs: 0,
+              uncategorizedMs: Math.max(0, totalResponseTimeMs - permanentBanLatency),
+            };
+            trace.tokenBreakdown = {
+              policyTokens: 0,
+              totalTokens: 0,
+            };
+
+            db.prepare(`
+              INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)
+              VALUES (?, 0, ?, ?)
+              ON CONFLICT(instagram_id) DO UPDATE SET updated_at = excluded.updated_at
+            `).run(senderId, now, now);
+
+            db.prepare(`
+              INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, model_used, model_tier, pipeline_trace, created_at)
+              VALUES (?, ?, 'inbound', ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              randomUUID(),
+              senderId,
+              messageText,
+              'hard_blocked_user',
+              executionId,
+              'blocked/permanent',
+              'light',
+              JSON.stringify(trace),
+              now,
+            );
+
+            console.log(
+              '[Instagram Webhook] Permanent block applied to %s (%s, category=%s)',
+              senderId,
+              permanentBanReason,
+              permanentBanEvaluation.category,
+            );
+
+            if (_escalationService) {
+              void _escalationService.escalate({
+                source: 'dm_pipeline',
+                type: 'permanent_ban_applied',
+                severity: 'critical',
+                title: `Instagram kullanici kalici engellendi - ${senderId}`,
+                details: permanentBanReason,
+                metadata: {
+                  sender_id: senderId,
+                  platform: 'instagram',
+                  reason: permanentBanReason,
+                  message_excerpt: messageText.substring(0, 200),
+                  matched_terms: permanentBanEvaluation.matchedTerms,
+                  category: permanentBanEvaluation.category,
+                  conduct_state_before: conductBefore?.conductState || 'normal',
+                  offense_count_after: conductAfter?.offenseCount || ((conductBefore?.offenseCount || 0) + 1),
+                },
+              }).catch((escalationErr) => {
+                console.error('[Instagram Webhook] Permanent ban escalation failed:', escalationErr);
+              });
+            }
+
+            return;
+          }
 
           // Safety filter + conduct ladder
           const sexualIntentStartTime = Date.now();
@@ -826,7 +1157,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 };
             const sexualDecision = safetyResult.decision;
             const sexualIntentLatency = Date.now() - sexualIntentStartTime;
-            const conductBefore = _dmConductService?.checkSuspicious('instagram', senderId);
 
             trace.sexualIntent = {
               action: sexualDecision.action,
@@ -957,12 +1287,19 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
           // Context service: analyze message for intent, model routing, and conversation history
           const contextService = new InstagramContextService(db);
-          let analysis;
+          let analysis: MessageAnalysis;
+          let simpleTurnUsed = false;
           const contextStartTime = Date.now();
-
-          const knowledgeStartTime = Date.now();
+          let inboundInteractionId: string | null = null;
           try {
-            analysis = await contextService.analyzeMessage(senderId, messageText);
+            const simpleAnalysis = contextService.analyzeSimpleTurn(senderId, messageText);
+            if (simpleAnalysis) {
+              analysis = simpleAnalysis;
+              simpleTurnUsed = true;
+              markFastLane(trace, 'simple_analysis', ['context_planner']);
+            } else {
+              analysis = await contextService.analyzeMessage(senderId, messageText);
+            }
             // Initialize trace from analysis
             trace.intentCategories = analysis.intentCategories;
             trace.matchedKeywords = analysis.matchedKeywords;
@@ -1042,6 +1379,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, execution_id, created_at)
               VALUES (?, ?, 'inbound', ?, ?, ?, ?)
             `).run(inboundId, senderId, messageText, intentStr, executionId, now);
+            inboundInteractionId = inboundId;
             console.log('[Instagram Webhook] Inbound message logged to DB (execution: %s)', executionId);
           } catch (inboundLogErr) {
             console.error('[Instagram Webhook] Failed to log inbound message:', inboundLogErr);
@@ -1066,7 +1404,460 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             });
           } catch { /* non-fatal */ }
 
+          const categories: Set<string> = new Set(analysis.intentCategories);
+          if (hasAgePolicySignals(messageText, analysis.followUpHint?.rewrittenQuestion, analysis.activeTopicLabel)) {
+            categories.add('policies');
+          }
+          categories.add('contact');
+
+          const customerSummary = analysis.isNewCustomer
+            ? 'YENI MUSTERI'
+            : analysis.totalInteractions > 0 && analysis.conversationHistory.length === 0
+              ? `Geri gelen musteri (toplam ${analysis.totalInteractions} mesaj, son 24 saatte mesaj yok)`
+              : `Etkilesim: ${analysis.totalInteractions}`;
+          const conductStateForReply = trace.conductControl?.state || 'normal';
+          const styleProfile = buildDMStyleProfile({
+            customerMessage: messageText,
+            conversationHistory: analysis.conversationHistory,
+            isNewCustomer: analysis.isNewCustomer,
+            followUpHint: analysis.followUpHint,
+            conductState: conductStateForReply,
+          });
+          trace.responseStyle = styleProfile.trace;
+
+          const pipelineConfigService = new PipelineConfigService(db);
+          const pipelineConfig = pipelineConfigService.getConfig();
+          const configSignature = pipelineConfigService.getConfigSignature(pipelineConfig);
+          const useDirectResponse = pipelineConfigService.shouldUseDirectResponseForConfig(pipelineConfig, analysis.modelTier);
+          let precomputedSkipPolicy = !pipelineConfig.policy.enabled;
+          let precomputedAgentResponse: string | null = null;
+          const deterministicTemplates = knowledgeContextService.getDeterministicTemplates();
+          const responseCacheClass = simpleTurnUsed ? getResponseCacheClass(messageText, analysis) : null;
+
+          trace.semanticRetrieval = {
+            enabled: true,
+            strategy: 'sparse_tfidf_chargram',
+            queryText: '',
+            candidateCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            refreshedIndex: false,
+            skippedReason: 'not_run',
+          };
+          trace.semanticRerank = {
+            enabled: true,
+            modelId: 'disabled',
+            candidateCount: 0,
+            selectedCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            skippedReason: 'not_run',
+            rationale: null,
+          };
+
+          const deterministicConductResponse = getDeterministicConductResponse({
+            conductState: conductStateForReply,
+            customerMessage: messageText,
+            matchedKeywords: analysis.matchedKeywords,
+            intentCategories: analysis.intentCategories,
+          });
+
+          if (deterministicConductResponse) {
+            console.log('[Instagram Webhook] Using deterministic conduct response (%s)', deterministicConductResponse.modelId);
+            precomputedAgentResponse = deterministicConductResponse.response;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: deterministicConductResponse.modelId,
+              tokensEstimated: estimateTokens(deterministicConductResponse.response),
+              inputTokens: 0,
+              outputTokens: estimateTokens(deterministicConductResponse.response),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-conduct';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = deterministicConductResponse.modelId;
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_conduct', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && deterministicTemplates.genericInfo && isGenericInfoRequest(messageText)) {
+            console.log('[Instagram Webhook] Using deterministic info template response');
+            precomputedAgentResponse = deterministicTemplates.genericInfo;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: 'deterministic/info-template-v1',
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-info-template';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = 'deterministic/info-template-v1';
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_info_template', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && deterministicTemplates.pilatesInfo && isPilatesInfoRequest(messageText)) {
+            console.log('[Instagram Webhook] Using deterministic pilates template response');
+            precomputedAgentResponse = deterministicTemplates.pilatesInfo;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: PILATES_INFO_MODEL_ID,
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-pilates-info';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = PILATES_INFO_MODEL_ID;
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_pilates_info', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && isDirectLocationQuestion(messageText) && deterministicTemplates.contactLocation) {
+            precomputedAgentResponse = deterministicTemplates.contactLocation;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: 'deterministic/contact-location-v1',
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-contact-location';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = 'deterministic/contact-location-v1';
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_contact_location', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && isDirectPhoneQuestion(messageText) && deterministicTemplates.contactPhone) {
+            precomputedAgentResponse = deterministicTemplates.contactPhone;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: 'deterministic/contact-phone-v1',
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-contact-phone';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = 'deterministic/contact-phone-v1';
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_contact_phone', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse
+            && conductStateForReply === 'normal'
+            && analysis.matchedKeywords.includes('standalone_hours_request')
+            && analysis.matchedKeywords.includes('standalone_appointment_request')
+            && deterministicTemplates.hoursWithAppointment) {
+            precomputedAgentResponse = deterministicTemplates.hoursWithAppointment;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: HOURS_APPOINTMENT_MODEL_ID,
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-hours-appointment';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = HOURS_APPOINTMENT_MODEL_ID;
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_hours_appointment', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && analysis.matchedKeywords.includes('standalone_hours_request') && deterministicTemplates.generalHours) {
+            precomputedAgentResponse = deterministicTemplates.generalHours;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: 'deterministic/hours-general-v1',
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-hours-general';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = 'deterministic/hours-general-v1';
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_hours', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && isStandaloneAppointmentRequest(messageText) && deterministicTemplates.appointmentBooking) {
+            precomputedAgentResponse = deterministicTemplates.appointmentBooking;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: APPOINTMENT_MODEL_ID,
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-appointment';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = APPOINTMENT_MODEL_ID;
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_appointment', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal') {
+            const deterministicCloseout = buildDeterministicCloseoutResponse(messageText);
+            if (deterministicCloseout) {
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: deterministicCloseout.modelId,
+                tokensEstimated: estimateTokens(deterministicCloseout.response || ''),
+                inputTokens: 0,
+                outputTokens: estimateTokens(deterministicCloseout.response || ''),
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-closeout';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = deterministicCloseout.modelId;
+              precomputedSkipPolicy = true;
+
+              if (deterministicCloseout.action === 'skip_send') {
+                trace.knowledgeCategoriesFetched = [];
+                trace.knowledgeFetchStatus = 'skipped';
+                trace.knowledgeEntriesCount = 0;
+                trace.semanticRetrieval.skippedReason = 'fast_lane_no_reply';
+                trace.semanticRerank.skippedReason = 'fast_lane_no_reply';
+                trace.policyValidation = {
+                  status: 'skipped',
+                  attempts: 0,
+                  totalLatencyMs: 0,
+                  totalTokens: 0,
+                };
+                trace.metaSendStatus = 'skipped';
+                markFastLane(trace, 'deterministic_closeout', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation', 'meta_send']);
+
+                const safetyTokens = trace.sexualIntent?.totalTokens || 0;
+                const contextTokens = (analysis.usageTrace || []).reduce(
+                  (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+                  0,
+                );
+                trace.tokensEstimated = safetyTokens + contextTokens;
+                trace.totalResponseTimeMs = Date.now() - startTime;
+                const safetyFilterMs = trace.sexualIntent?.latencyMs || 0;
+                const uncategorizedMs = Math.max(0, trace.totalResponseTimeMs - safetyFilterMs - contextAnalysisMs);
+                trace.timingBreakdown = {
+                  ingestDelayMs,
+                  customerPerceivedTotalMs: ingestDelayMs != null ? ingestDelayMs + trace.totalResponseTimeMs : null,
+                  safetyFilterMs,
+                  contextAnalysisMs,
+                  knowledgeAssemblyMs: 0,
+                  openclawDispatchMs: 0,
+                  metaSendMs: 0,
+                  uncategorizedMs,
+                };
+                trace.tokenBreakdown = {
+                  safetyTokens,
+                  contextTokens,
+                  rerankTokens: 0,
+                  directTokens: 0,
+                  directInputTokens: 0,
+                  directOutputTokens: 0,
+                  policyTokens: 0,
+                  totalTokens: trace.tokensEstimated,
+                };
+
+                try {
+                  contextService.clearConversationState(senderId);
+                } catch (stateErr) {
+                  console.error('[Instagram Webhook] Failed to clear conversation state:', stateErr);
+                }
+
+                if (inboundInteractionId) {
+                  try {
+                    db.prepare(`
+                      UPDATE instagram_interactions
+                      SET pipeline_trace = ?, pipeline_error = ?, model_tier = ?, model_used = ?
+                      WHERE id = ?
+                    `).run(
+                      JSON.stringify(trace),
+                      pipelineError ? JSON.stringify(pipelineError) : null,
+                      analysis.modelTier,
+                      deterministicCloseout.modelId,
+                      inboundInteractionId,
+                    );
+                  } catch (traceStoreErr) {
+                    console.error('[Instagram Webhook] Failed to store no-reply pipeline trace:', traceStoreErr);
+                  }
+                }
+
+                return;
+              }
+
+              precomputedAgentResponse = deterministicCloseout.response;
+              markFastLane(trace, 'deterministic_closeout', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+            }
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal') {
+            const clarifyExhaustedContact = buildClarifyExhaustedContactResponse({
+              messageText,
+              conversationHistory: analysis.conversationHistory,
+              responseMode: analysis.responseDirective.mode,
+              fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+            });
+
+            if (clarifyExhaustedContact) {
+              console.log(
+                '[Instagram Webhook] Clarification budget exhausted, using contact fallback (%s clarifications)',
+                clarifyExhaustedContact.clarificationCount,
+              );
+              precomputedAgentResponse = clarifyExhaustedContact.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+                tokensEstimated: estimateTokens(clarifyExhaustedContact.response),
+                inputTokens: 0,
+                outputTokens: estimateTokens(clarifyExhaustedContact.response),
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-contact-fallback';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = CLARIFY_EXHAUSTED_CONTACT_MODEL_ID;
+              precomputedSkipPolicy = true;
+              markFastLane(trace, 'deterministic_contact_fallback', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+            }
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal') {
+            const deterministicClarifier = buildDeterministicClarifierResponse({
+              messageText,
+              intentCategories: analysis.intentCategories,
+              responseMode: analysis.responseDirective.mode,
+              semanticSignals: analysis.matchedKeywords,
+            });
+
+            if (deterministicClarifier) {
+              console.log('[Instagram Webhook] Using deterministic clarifier response (%s)', deterministicClarifier.modelId);
+              precomputedAgentResponse = deterministicClarifier.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: deterministicClarifier.modelId,
+                tokensEstimated: estimateTokens(deterministicClarifier.response),
+                inputTokens: 0,
+                outputTokens: estimateTokens(deterministicClarifier.response),
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-clarifier';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = deterministicClarifier.modelId;
+              precomputedSkipPolicy = true;
+              markFastLane(trace, 'deterministic_clarifier', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+            }
+          }
+
+          if (!precomputedAgentResponse && responseCacheClass) {
+            const lookupParams = {
+              cacheClass: responseCacheClass,
+              normalizedMessage: DMResponseCacheService.normalizeMessage(messageText),
+              kbSignature: knowledgeContextService.getActiveSignature(),
+              configSignature,
+              conductState: conductStateForReply,
+            };
+
+            if (shouldLookupResponseCache({
+              messageText,
+              analysis,
+              conductState: conductStateForReply,
+              sexualAction: trace.sexualIntent?.action || 'allow',
+            })) {
+              setCacheTrace(trace, {
+                eligible: true,
+                cacheClass: responseCacheClass,
+                lookupKey: responseCacheService.buildLookupKey(lookupParams),
+              });
+              const cacheHit = responseCacheService.lookupActive(lookupParams);
+              if (cacheHit) {
+                precomputedAgentResponse = cacheHit.responseText;
+                trace.directResponse = {
+                  used: true,
+                  latencyMs: 0,
+                  modelId: `cache/${responseCacheClass}`,
+                  tokensEstimated: estimateTokens(precomputedAgentResponse),
+                  inputTokens: 0,
+                  outputTokens: estimateTokens(precomputedAgentResponse),
+                };
+                trace.openclawDispatchStatus = 'skipped' as any;
+                trace.openclawSessionKey = 'response-cache';
+                trace.agentPollDurationMs = 0;
+                trace.modelId = `cache/${responseCacheClass}`;
+                precomputedSkipPolicy = true;
+                markFastLane(trace, 'response_cache', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+                setCacheTrace(trace, {
+                  hit: true,
+                  status: cacheHit.status,
+                  sourceExecutionId: cacheHit.sourceExecutionId,
+                  observationCount: cacheHit.observationCount,
+                });
+              } else {
+                setCacheTrace(trace, {
+                  eligible: true,
+                  cacheClass: responseCacheClass,
+                  hit: false,
+                  status: 'miss',
+                });
+              }
+            } else {
+              setCacheTrace(trace, {
+                eligible: false,
+                cacheClass: responseCacheClass,
+                lookupKey: responseCacheService.buildLookupKey(lookupParams),
+                status: 'ineligible',
+              });
+            }
+          }
+
           try {
+            const knowledgeStartTime = Date.now();
+            let knowledgeContext = '';
+            let knowledgeEntriesCount = 0;
+            let selectedEvidence = '';
+            let formattedKnowledge = '';
+            if (precomputedAgentResponse) {
+              trace.knowledgeCategoriesFetched = [];
+              trace.knowledgeFetchStatus = 'skipped';
+              trace.knowledgeEntriesCount = 0;
+              trace.semanticRetrieval = {
+                enabled: true,
+                strategy: 'sparse_tfidf_chargram',
+                queryText: '',
+                candidateCount: 0,
+                selectedEntries: [],
+                latencyMs: 0,
+                refreshedIndex: false,
+                skippedReason: 'fast_lane_skip',
+              };
+              trace.semanticRerank = {
+                enabled: true,
+                modelId: 'disabled',
+                candidateCount: 0,
+                selectedCount: 0,
+                selectedEntries: [],
+                latencyMs: 0,
+                skippedReason: 'fast_lane_skip',
+                rationale: null,
+              };
+            } else {
             // Fetch category-filtered knowledge context
             // Always include 'contact' — the phone number and address are referenced
             // in the system prompt and fallback message, so the policy agent needs
@@ -1076,15 +1867,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               categories.add('policies');
             }
             categories.add('contact');
-            const categoriesParam = Array.from(categories).join(',');
-            const [knowledgeRes] = await Promise.allSettled([
-              fetch(`http://localhost:3001/api/integrations/knowledge/context?categories=${categoriesParam}`,
-                { headers: { 'Authorization': `Bearer ${API_KEY}` } }),
-            ]);
-
-            let knowledgeContext = '';
-            let knowledgeEntriesCount = 0;
-            let selectedEvidence = '';
+            const enrichKnowledge = shouldRunSemanticEnrichment(messageText, analysis, simpleTurnUsed);
             trace.semanticRetrieval = {
               enabled: true,
               strategy: 'sparse_tfidf_chargram',
@@ -1105,53 +1888,90 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               skippedReason: 'not_run',
               rationale: null,
             };
-            if (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) {
-              const kData = await knowledgeRes.value.json() as Record<string, unknown>;
-              knowledgeContext = typeof kData === 'object' ? JSON.stringify(kData) : String(kData);
-              if (typeof kData === 'object' && kData !== null) {
-                for (const val of Object.values(kData)) {
-                  if (Array.isArray(val)) knowledgeEntriesCount += val.length;
-                  else knowledgeEntriesCount += 1;
+            const filteredKnowledge = knowledgeContextService.getFilteredContext(categories);
+            knowledgeContext = filteredKnowledge.json;
+            knowledgeEntriesCount = filteredKnowledge.entryCount;
+
+            if (enrichKnowledge) {
+              try {
+                const semanticRetrieval = semanticKnowledgeService.findCandidates({
+                  baseContextJson: knowledgeContext,
+                  messageText,
+                  followUpHint: analysis.followUpHint,
+                  activeTopic: analysis.activeTopicLabel,
+                  primaryCategories: categories,
+                  maxCandidates: 8,
+                });
+
+                trace.semanticRetrieval = semanticRetrieval.trace;
+
+                const rerankResult = await semanticReranker.rerank({
+                  messageText,
+                  followUpHint: analysis.followUpHint,
+                  activeTopic: analysis.activeTopicLabel,
+                  requestedCategories: Array.from(categories),
+                  candidates: semanticRetrieval.candidates,
+                  maxSelections: 3,
+                });
+                trace.semanticRerank = rerankResult.trace;
+                selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
+
+                if (rerankResult.selectedCandidates.length > 0) {
+                  const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
+                    knowledgeContext,
+                    rerankResult.selectedCandidates,
+                  );
+                  knowledgeContext = mergedKnowledge.knowledgeContext;
+                  knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
+                  for (const addedCategory of mergedKnowledge.addedCategories) {
+                    categories.add(addedCategory);
+                  }
                 }
+              } catch (semanticRetrievalErr) {
+                console.error('[Instagram Webhook] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
+                trace.semanticRetrieval = {
+                  enabled: true,
+                  strategy: 'sparse_tfidf_chargram',
+                  queryText: '',
+                  candidateCount: 0,
+                  selectedEntries: [],
+                  latencyMs: 0,
+                  refreshedIndex: false,
+                  skippedReason: 'error',
+                };
+                trace.semanticRerank = {
+                  enabled: true,
+                  modelId: 'disabled',
+                  candidateCount: 0,
+                  selectedCount: 0,
+                  selectedEntries: [],
+                  latencyMs: 0,
+                  skippedReason: 'error',
+                  rationale: null,
+                };
               }
-            }
 
-            try {
-              const semanticRetrieval = semanticKnowledgeService.findCandidates({
-                baseContextJson: knowledgeContext,
-                messageText,
-                followUpHint: analysis.followUpHint,
-                activeTopic: analysis.activeTopicLabel,
-                primaryCategories: categories,
-                maxCandidates: 8,
-              });
+              try {
+                const supportEntries = knowledgeContextService.getSupportEntries().entries;
+                const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
+                const augmentedKnowledge = knowledgeSelector.augmentContext({
+                  baseContextJson: knowledgeContext,
+                  messageText,
+                  followUpHint: analysis.followUpHint,
+                  primaryCategories: categories,
+                });
 
-              trace.semanticRetrieval = semanticRetrieval.trace;
-
-              const rerankResult = await semanticReranker.rerank({
-                messageText,
-                followUpHint: analysis.followUpHint,
-                activeTopic: analysis.activeTopicLabel,
-                requestedCategories: Array.from(categories),
-                candidates: semanticRetrieval.candidates,
-                maxSelections: 3,
-              });
-              trace.semanticRerank = rerankResult.trace;
-              selectedEvidence = formatSelectedEvidenceBlock(rerankResult.selectedCandidates);
-
-              if (rerankResult.selectedCandidates.length > 0) {
-                const mergedKnowledge = semanticKnowledgeService.applyCandidatesToContext(
-                  knowledgeContext,
-                  rerankResult.selectedCandidates,
-                );
-                knowledgeContext = mergedKnowledge.knowledgeContext;
-                knowledgeEntriesCount += mergedKnowledge.addedEntriesCount;
-                for (const addedCategory of mergedKnowledge.addedCategories) {
-                  categories.add(addedCategory);
+                if (augmentedKnowledge.addedEntriesCount > 0) {
+                  knowledgeContext = augmentedKnowledge.knowledgeContext;
+                  knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
+                  for (const addedCategory of augmentedKnowledge.addedCategories) {
+                    categories.add(addedCategory);
+                  }
                 }
+              } catch (knowledgeSelectionErr) {
+                console.error('[Instagram Webhook] Knowledge selection supplement failed:', knowledgeSelectionErr);
               }
-            } catch (semanticRetrievalErr) {
-              console.error('[Instagram Webhook] Semantic KB retrieval/rerank failed:', semanticRetrievalErr);
+            } else {
               trace.semanticRetrieval = {
                 enabled: true,
                 strategy: 'sparse_tfidf_chargram',
@@ -1160,7 +1980,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 selectedEntries: [],
                 latencyMs: 0,
                 refreshedIndex: false,
-                skippedReason: 'error',
+                skippedReason: 'simple_turn_skip',
               };
               trace.semanticRerank = {
                 enabled: true,
@@ -1169,155 +1989,33 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 selectedCount: 0,
                 selectedEntries: [],
                 latencyMs: 0,
-                skippedReason: 'error',
+                skippedReason: 'simple_turn_skip',
                 rationale: null,
               };
             }
 
-            try {
-              const supportEntries = db.prepare(`
-                SELECT category, key_name, value, description
-                FROM knowledge_base
-                WHERE is_active = 1 AND category IN ('faq', 'hours', 'policies')
-                ORDER BY category, key_name
-              `).all() as Array<{
-                category: string;
-                key_name: string;
-                value: string;
-                description: string | null;
-              }>;
-
-              const knowledgeSelector = new KnowledgeSelectionService(supportEntries);
-              const augmentedKnowledge = knowledgeSelector.augmentContext({
-                baseContextJson: knowledgeContext,
-                messageText,
-                followUpHint: analysis.followUpHint,
-                primaryCategories: categories,
-              });
-
-              if (augmentedKnowledge.addedEntriesCount > 0) {
-                knowledgeContext = augmentedKnowledge.knowledgeContext;
-                knowledgeEntriesCount += augmentedKnowledge.addedEntriesCount;
-                for (const addedCategory of augmentedKnowledge.addedCategories) {
-                  categories.add(addedCategory);
-                }
-              }
-            } catch (knowledgeSelectionErr) {
-              console.error('[Instagram Webhook] Knowledge selection supplement failed:', knowledgeSelectionErr);
-            }
-
             // Update trace — knowledge fetch stage
             trace.knowledgeCategoriesFetched = Array.from(categories);
-            trace.knowledgeFetchStatus = (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) ? 'success' : 'fail';
+            trace.knowledgeFetchStatus = 'success';
             trace.knowledgeEntriesCount = knowledgeEntriesCount;
 
             // Format KB from raw JSON into clean labeled Turkish text.
             // Raw JSON like {"contact":{"address":"..."}} is hard for LLMs to parse —
             // they sometimes ignore JSON values and hallucinate from training data.
             // Plain text with clear labels eliminates this failure mode.
-            const formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
+            formattedKnowledge = await InstagramContextService.formatKnowledgeForPrompt(knowledgeContext);
             knowledgeAssemblyMs = Date.now() - knowledgeStartTime;
+            }
 
             // Build enriched message — agent just needs to generate Turkish text
             // Keep prompt minimal to save tokens — instructions are in AGENTS.md core files
-            const customerSummary = analysis.isNewCustomer
-              ? 'YENI MUSTERI'
-              : analysis.totalInteractions > 0 && analysis.conversationHistory.length === 0
-                ? `Geri gelen musteri (toplam ${analysis.totalInteractions} mesaj, son 24 saatte mesaj yok)`
-                : `Etkilesim: ${analysis.totalInteractions}`;
-            const conductStateForReply = trace.conductControl?.state || 'normal';
-            const styleProfile = buildDMStyleProfile({
-              customerMessage: messageText,
-              conversationHistory: analysis.conversationHistory,
-              isNewCustomer: analysis.isNewCustomer,
-              followUpHint: analysis.followUpHint,
-              conductState: conductStateForReply,
-            });
-            trace.responseStyle = styleProfile.trace;
+            const skipPolicy = precomputedSkipPolicy;
+            let agentResponse: string | null = precomputedAgentResponse;
 
             // ═══════════════════════════════════════════════════════════════
             // PIPELINE CONFIG — Dynamic routing (direct vs OpenClaw)
             // Config stored in mc_policies, editable via /dm-kontrol/pipeline-config
             // ═══════════════════════════════════════════════════════════════
-            const pipelineConfigService = new PipelineConfigService(db);
-            const pipelineConfig = pipelineConfigService.getConfig();
-            const useDirectResponse = pipelineConfigService.shouldUseDirectResponse(analysis.modelTier);
-            let skipPolicy = pipelineConfigService.shouldSkipPolicy(analysis.modelTier);
-
-            let agentResponse: string | null = null;
-            const deterministicConductResponse = getDeterministicConductResponse({
-              conductState: conductStateForReply,
-              customerMessage: messageText,
-              matchedKeywords: analysis.matchedKeywords,
-              intentCategories: analysis.intentCategories,
-            });
-
-            if (deterministicConductResponse) {
-              console.log('[Instagram Webhook] Using deterministic conduct response (%s)', deterministicConductResponse.modelId);
-              agentResponse = deterministicConductResponse.response;
-              trace.directResponse = {
-                used: true,
-                latencyMs: 0,
-                modelId: deterministicConductResponse.modelId,
-                tokensEstimated: estimateTokens(deterministicConductResponse.response),
-                inputTokens: 0,
-                outputTokens: estimateTokens(deterministicConductResponse.response),
-              };
-              trace.openclawDispatchStatus = 'skipped' as any;
-              trace.openclawSessionKey = 'deterministic-conduct';
-              trace.agentPollDurationMs = 0;
-              trace.modelId = deterministicConductResponse.modelId;
-              skipPolicy = true;
-            }
-
-            if (!agentResponse && conductStateForReply !== 'silent' && isGenericInfoRequest(messageText)) {
-              const deterministicInfoResponse = buildGenericInfoTemplateFromKnowledge();
-              if (deterministicInfoResponse) {
-                console.log('[Instagram Webhook] Using deterministic info template response');
-                agentResponse = deterministicInfoResponse;
-                trace.directResponse = {
-                  used: true,
-                  latencyMs: 0,
-                  modelId: 'deterministic/info-template-v1',
-                  tokensEstimated: estimateTokens(deterministicInfoResponse),
-                  inputTokens: 0,
-                  outputTokens: estimateTokens(deterministicInfoResponse),
-                };
-                trace.openclawDispatchStatus = 'skipped' as any;
-                trace.openclawSessionKey = 'deterministic-info-template';
-                trace.agentPollDurationMs = 0;
-                trace.modelId = 'deterministic/info-template-v1';
-                skipPolicy = true;
-              }
-            }
-
-            if (!agentResponse && conductStateForReply === 'normal') {
-              const deterministicClarifier = buildDeterministicClarifierResponse({
-                messageText,
-                intentCategories: analysis.intentCategories,
-                responseMode: analysis.responseDirective.mode,
-                semanticSignals: analysis.matchedKeywords,
-              });
-
-              if (deterministicClarifier) {
-                console.log('[Instagram Webhook] Using deterministic clarifier response (%s)', deterministicClarifier.modelId);
-                agentResponse = deterministicClarifier.response;
-                trace.directResponse = {
-                  used: true,
-                  latencyMs: 0,
-                  modelId: deterministicClarifier.modelId,
-                  tokensEstimated: estimateTokens(deterministicClarifier.response),
-                  inputTokens: 0,
-                  outputTokens: estimateTokens(deterministicClarifier.response),
-                };
-                trace.openclawDispatchStatus = 'skipped' as any;
-                trace.openclawSessionKey = 'deterministic-clarifier';
-                trace.agentPollDurationMs = 0;
-                trace.modelId = deterministicClarifier.modelId;
-                skipPolicy = true;
-              }
-            }
-
             if (!agentResponse && useDirectResponse) {
               // ═══════════════════════════════════════════════════════════
               // DIRECT RESPONSE PATH — Bypass OpenClaw for eligible tiers
@@ -1325,7 +2023,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               // ═══════════════════════════════════════════════════════════
               const directService = new DirectResponseService();
               const tierConfig = pipelineConfig.directResponse.tiers[analysis.modelTier];
-              const systemPrompt = pipelineConfigService.buildDirectSystemPrompt(formattedKnowledge);
+              const systemPrompt = pipelineConfigService.buildDirectSystemPromptForConfig(pipelineConfig, formattedKnowledge);
 
               console.log('[Instagram Webhook] Using DIRECT response path (tier: %s, model: %s)', analysis.modelTier, tierConfig.modelId);
 
@@ -1489,7 +2187,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             const validationModelId = pipelineConfig.policy.validationModel;
 
             if (skipPolicy) {
-              console.log('[PolicyAgent] Skipped for tier=%s (config)', analysis.modelTier);
+              console.log('[PolicyAgent] Skipped for fast-lane/config path (tier=%s)', analysis.modelTier);
             } else {
               // Validation + retry loop
               for (let attempt = 1; attempt <= MAX_POLICY_RETRIES + 1; attempt++) {
@@ -1533,7 +2231,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
                 // If we have retries left, generate corrected response directly via OpenRouter
                 if (attempt <= MAX_POLICY_RETRIES) {
-                  const correctionModelId = pipelineConfigService.getCorrectionModel(analysis.modelId);
+                  const correctionModelId = pipelineConfigService.getCorrectionModelForConfig(pipelineConfig, analysis.modelId);
                   const correction = await policyService.generateCorrectedResponse(
                     messageText,
                     finalResponse,
@@ -1631,6 +2329,41 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 timestamp: new Date().toISOString(),
                 partialTrace: { ...trace },
               };
+            }
+
+            if (shouldWriteResponseCache({
+              cacheClass: responseCacheClass,
+              messageText,
+              analysis: simpleTurnUsed ? analysis : null,
+              conductState: conductStateForReply,
+              sexualAction: trace.sexualIntent?.action || 'allow',
+              metaSendStatus: trace.metaSendStatus || 'skipped',
+              policyStatus,
+              policyAttempts,
+              pipelineError,
+              cacheHit: trace.cache?.hit === true,
+            })) {
+              responseCacheService.recordObservation({
+                cacheClass: responseCacheClass,
+                normalizedMessage: DMResponseCacheService.normalizeMessage(messageText),
+                kbSignature: knowledgeContextService.getActiveSignature(),
+                configSignature,
+                conductState: conductStateForReply,
+                responseText: finalResponse,
+                sourceExecutionId: executionId,
+              });
+              setCacheTrace(trace, {
+                eligible: true,
+                cacheClass: responseCacheClass,
+                lookupKey: responseCacheService.buildLookupKey({
+                  cacheClass: responseCacheClass,
+                  normalizedMessage: DMResponseCacheService.normalizeMessage(messageText),
+                  kbSignature: knowledgeContextService.getActiveSignature(),
+                  configSignature,
+                  conductState: conductStateForReply,
+                }),
+                status: trace.cache?.hit ? trace.cache.status : 'candidate',
+              });
             }
 
             // Compute tokens and finalize trace

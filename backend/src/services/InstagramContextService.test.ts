@@ -34,6 +34,16 @@ function createAiResponse(payload: Record<string, unknown>) {
   };
 }
 
+function createMockDb(): any {
+  return {
+    prepare: () => ({
+      all: () => [],
+      get: () => ({ c: 0 }),
+      run: () => undefined,
+    }),
+  };
+}
+
 describe('InstagramContextService AI context planner', () => {
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY;
@@ -146,6 +156,24 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('bagimsiz bir saat sorusu');
   });
 
+  it('keeps generic hours plus appointment turns on the simple-turn path', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Saat 2 de randevu almak istiyorum');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('hours');
+    expect(result?.intentCategories).toContain('contact');
+    expect(result?.intentCategories).toContain('faq');
+    expect(result?.matchedKeywords).toContain('standalone_hours_request');
+    expect(result?.matchedKeywords).toContain('standalone_appointment_request');
+    expect(result?.responseDirective.mode).toBe('answer_directly');
+    expect(result?.responseDirective.instruction).toContain('telefon ya da WhatsApp');
+  });
+
   it('treats pure gratitude as a short closure instead of reviving the prior topic', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
@@ -180,6 +208,42 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.keywords).toContain('gratitude_message');
     expect(result.responseDirective.mode).toBe('answer_directly');
     expect(result.responseDirective.instruction).toContain('cok kisa ve dogal bir nezaket cevabi');
+  });
+
+  it('treats acknowledgement fragments like "İlginize" as a closeout instead of reviving stale context', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['hours', 'general'],
+      semanticSignals: ['recent_follow_up'],
+      followUpHint: {
+        topicLabel: 'calisma saatleri',
+        rewrittenQuestion: 'calisma saatleri icin ilginize',
+        sourceMessage: 'calisma saatleri nedir',
+      },
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Aktif konuya gore saat bilgisini hatirlat.',
+        rationale: 'Planner eski konuyu tasidi.',
+      },
+      tier: 'light',
+      tierReason: 'Kisa baglamli mesaj',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'İlginize',
+      createHistory([
+        { text: 'Calisma saatleri nedir', minutesAgo: 2 },
+        { direction: 'outbound', text: 'Tesisimiz 08:00-00:00 saatleri arasinda aciktir.', minutesAgo: 1 },
+      ]),
+    );
+
+    expect(result.followUpHint).toBeNull();
+    expect(result.categories).toEqual(['general']);
+    expect(result.keywords).toContain('terminal_acknowledgement');
+    expect(result.keywords).toContain('gratitude_message');
+    expect(result.responseDirective.mode).toBe('answer_directly');
   });
 
   it('forces direct answers for plain location questions instead of asking the customer for their area', async () => {
@@ -915,5 +979,254 @@ describe('InstagramContextService AI context planner', () => {
     expect(analysis.intentCategories).toEqual(['general', 'faq']);
     expect(analysis.matchedKeywords).toEqual([]);
     expect(analysis.modelTier).toBe('light');
+  });
+});
+
+describe('InstagramContextService.analyzeSimpleTurn', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('handles direct location questions without the planner', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Adresiniz nerede?');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('contact');
+    expect(result?.matchedKeywords).toContain('direct_location_answer_signal');
+    expect(result?.responseDirective.mode).toBe('answer_directly');
+  });
+
+  it('treats neresindesiniz phrasing as a direct location simple turn', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', "Iskenderun'un neresindesiniz?");
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('contact');
+    expect(result?.matchedKeywords).toContain('direct_location_answer_signal');
+    expect(result?.responseDirective.mode).toBe('answer_directly');
+  });
+
+  it('treats pure gratitude as a simple closeout turn', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue(createHistory([
+      { text: 'Medical masaj paketiniz fiyati nekadar', minutesAgo: 2 },
+      { direction: 'outbound', text: 'Medikal 30dk ve 50dk seceneklerimiz var.', minutesAgo: 1 },
+    ]));
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(4);
+    (service as any).conversationStateService = {
+      getState: vi.fn().mockReturnValue({
+        channel: 'instagram',
+        customerId: 'ig-1',
+        activeTopic: 'medical masaj paketleri',
+        activeTopicConfidence: 0.92,
+        topicSourceMessage: 'Medical masaj paketiniz fiyati nekadar',
+        lastQuestionType: 'pricing',
+        pendingCategories: ['pricing'],
+        lastCustomerMessage: 'Medical masaj paketiniz fiyati nekadar',
+        lastAssistantMessage: 'Medikal 30dk ve 50dk seceneklerimiz var.',
+        turnCount: 1,
+        expiresAt: minutesFromNow(10),
+        createdAt: minutesAgo(2),
+        updatedAt: minutesAgo(1),
+      }),
+    };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Tesekkurler');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('general');
+    expect(result?.matchedKeywords).toContain('gratitude_message');
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('treats terminal courtesy like "size de" as a simple closeout turn', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue(createHistory([
+      { direction: 'outbound', text: 'Anladim, iyi gunler dilerim.', minutesAgo: 1 },
+    ]));
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(2);
+    (service as any).conversationStateService = {
+      getState: vi.fn().mockReturnValue({
+        channel: 'instagram',
+        customerId: 'ig-1',
+        activeTopic: 'spa saatleri',
+        activeTopicConfidence: 0.88,
+        topicSourceMessage: 'Saat kaça kadar açıksınız?',
+        lastQuestionType: 'hours',
+        pendingCategories: ['hours'],
+        lastCustomerMessage: 'Saat kaça kadar açıksınız?',
+        lastAssistantMessage: 'Tesisimiz 08:00-00:00 saatleri arasinda aciktir.',
+        turnCount: 1,
+        expiresAt: minutesFromNow(10),
+        createdAt: minutesAgo(2),
+        updatedAt: minutesAgo(1),
+      }),
+    };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Size de');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toEqual(['general']);
+    expect(result?.matchedKeywords).toContain('gratitude_message');
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('treats low-signal confirmations like "gelecegim" as a simple closeout turn', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue(createHistory([
+      { text: 'Saat kaca kadar aciksiniz?', minutesAgo: 2 },
+      { direction: 'outbound', text: 'Tesisimiz 08:00-00:00 saatleri arasinda aciktir.', minutesAgo: 1 },
+    ]));
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(3);
+    (service as any).conversationStateService = {
+      getState: vi.fn().mockReturnValue({
+        channel: 'instagram',
+        customerId: 'ig-1',
+        activeTopic: 'spa saatleri',
+        activeTopicConfidence: 0.88,
+        topicSourceMessage: 'Saat kaca kadar aciksiniz?',
+        lastQuestionType: 'hours',
+        pendingCategories: ['hours'],
+        lastCustomerMessage: 'Saat kaca kadar aciksiniz?',
+        lastAssistantMessage: 'Tesisimiz 08:00-00:00 saatleri arasinda aciktir.',
+        turnCount: 1,
+        expiresAt: minutesFromNow(10),
+        createdAt: minutesAgo(2),
+        updatedAt: minutesAgo(1),
+      }),
+    };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Gelecegim');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toEqual(['general']);
+    expect(result?.matchedKeywords).toContain('terminal_acknowledgement');
+    expect(result?.matchedKeywords).toContain('gratitude_message');
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('treats Turkish-character acknowledgement fragments like "İlginize" as a simple closeout turn', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue(createHistory([
+      { direction: 'outbound', text: 'Rica ederiz.', minutesAgo: 1 },
+    ]));
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(2);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'İlginize');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toEqual(['general']);
+    expect(result?.matchedKeywords).toContain('terminal_acknowledgement');
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('treats generic info requests as simple turns', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'bilgi alabilir miyim');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('general');
+    expect(['answer_directly', 'answer_then_clarify', 'clarify_only']).toContain(result?.responseDirective.mode);
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('treats short appointment asks as simple turns', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Randevu alabilir miyim?');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toEqual(['faq', 'contact']);
+    expect(result?.matchedKeywords).toContain('standalone_appointment_request');
+    expect(result?.responseDirective.mode).toBe('answer_directly');
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('returns null for modifier-only follow-ups that still need planner/state repair', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue(createHistory([
+      { text: 'Mix masaj nedir', minutesAgo: 2 },
+      { direction: 'outbound', text: 'Mix masaj 7 teknikten olusur.', minutesAgo: 1 },
+    ]));
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(4);
+    (service as any).conversationStateService = {
+      getState: vi.fn().mockReturnValue({
+        channel: 'instagram',
+        customerId: 'ig-1',
+        activeTopic: 'mix masaj',
+        activeTopicConfidence: 0.88,
+        topicSourceMessage: 'Mix masaj nedir',
+        lastQuestionType: 'services',
+        pendingCategories: ['services'],
+        lastCustomerMessage: 'Mix masaj nedir',
+        lastAssistantMessage: 'Mix masaj 7 teknikten olusur.',
+        turnCount: 1,
+        expiresAt: minutesFromNow(10),
+        createdAt: minutesAgo(2),
+        updatedAt: minutesAgo(1),
+      }),
+    };
+
+    expect(service.analyzeSimpleTurn('ig-1', 'fiyat')).toBeNull();
+  });
+
+  it('treats standalone pricing clarifiers as simple turns when there is no active context', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'fiyatlari nedir');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('pricing');
+    expect(['answer_then_clarify', 'clarify_only']).toContain(result?.responseDirective.mode);
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('ignores the just-inserted inbound message when checking pricing follow-up risk', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue(createHistory([
+      { text: 'fiyatlari nedir', minutesAgo: 0 },
+    ]));
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(1);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'fiyatlari nedir');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('pricing');
+    expect(result?.followUpHint).toBeNull();
+  });
+
+  it('allows explicit service definition questions through simple analysis', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Mix masaj nedir?');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('services');
+    expect(result?.followUpHint).toBeNull();
+    expect(result?.responseDirective.mode).toBe('answer_directly');
   });
 });

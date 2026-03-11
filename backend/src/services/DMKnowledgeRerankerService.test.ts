@@ -113,10 +113,10 @@ describe('DMKnowledgeRerankerService', () => {
       maxSelections: 3,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(result.selectedCandidates).toEqual([]);
     expect(result.trace.selectedCount).toBe(0);
-    expect(result.trace.rationale).toContain('dogrudan yardim etmiyor');
+    expect(result.trace.skippedReason).toBe('weak_single_candidate');
   });
 
   it('keeps a single room-availability faq candidate without calling the reranker model', async () => {
@@ -165,6 +165,82 @@ describe('DMKnowledgeRerankerService', () => {
     expect(result.selectedCandidates).toHaveLength(1);
     expect(result.selectedCandidates[0].id).toBe('c2');
     expect(result.trace.skippedReason).toBe('no_api_key');
+  });
+
+  it('drops weak single non-priority candidates in fallback mode', async () => {
+    delete process.env.OPENROUTER_API_KEY;
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'fiyat nedir saat kacta',
+      followUpHint: null,
+      activeTopic: null,
+      requestedCategories: ['pricing', 'hours'],
+      candidates: [
+        createCandidate('c1', 'policies', 'age_groups', 0.24, '18 yas ve uzeri.'),
+      ],
+      maxSelections: 2,
+    });
+
+    expect(result.selectedCandidates).toEqual([]);
+    expect(result.trace.skippedReason).toBe('weak_single_candidate');
+  });
+
+  it('does not guess support evidence when rerank is needed but api key is missing', async () => {
+    delete process.env.OPENROUTER_API_KEY;
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'fiyat nedir saatleri nedir',
+      followUpHint: {
+        topicLabel: 'taekwondo dersleri',
+        rewrittenQuestion: 'taekwondo dersleri icin fiyat nedir saatleri nedir',
+        sourceMessage: 'taekwondo dersleri',
+      },
+      activeTopic: 'taekwondo dersleri',
+      requestedCategories: ['pricing', 'hours'],
+      candidates: [
+        createCandidate('c1', 'faq', 'pool_rules', 0.44, 'Bone zorunludur.'),
+        createCandidate('c2', 'policies', 'age_groups', 0.41, 'Taekwondo 8+'),
+      ],
+      maxSelections: 2,
+    });
+
+    expect(result.selectedCandidates).toEqual([]);
+    expect(result.trace.skippedReason).toBe('no_api_key');
+    expect(result.trace.selectedCount).toBe(0);
+  });
+
+  it('does not re-add weak support entries when the rerank provider errors', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new DMKnowledgeRerankerService();
+    const result = await service.rerank({
+      messageText: 'fiyat nedir saatleri nedir',
+      followUpHint: {
+        topicLabel: 'taekwondo dersleri',
+        rewrittenQuestion: 'taekwondo dersleri icin fiyat nedir saatleri nedir',
+        sourceMessage: 'taekwondo dersleri',
+      },
+      activeTopic: 'taekwondo dersleri',
+      requestedCategories: ['pricing', 'hours'],
+      candidates: [
+        createCandidate('c1', 'faq', 'pool_rules', 0.44, 'Bone zorunludur.'),
+        createCandidate('c2', 'general', 'parking', 0.39, 'Otopark vardir.'),
+      ],
+      maxSelections: 2,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.selectedCandidates).toEqual([]);
+    expect(result.trace.skippedReason).toBe('api_error_503');
+    expect(result.trace.selectedCount).toBe(0);
   });
 
   it('formats selected evidence into a compact prompt block', () => {

@@ -72,6 +72,9 @@ export interface SuspiciousUser {
 export interface SuspiciousUserListOptions {
   platform?: string;
   searchQuery?: string;
+  conductState?: ConductState;
+  manualMode?: ManualConductMode | 'manual_only';
+  testLikeFilter?: 'real_only' | 'test_only';
   limit?: number;
   offset?: number;
 }
@@ -143,9 +146,13 @@ interface SuspiciousUserListStatsRow {
 
 const GUARDED_SCORE = 1;
 const FINAL_WARNING_SCORE = 2;
-const SILENT_SCORE = 3;
+const SILENT_SCORE = 5;
+const MIN_OFFENSES_FOR_SILENT = 3;
 const FIRST_SILENT_HOURS = 24;
 const REPEAT_SILENT_HOURS = 7 * 24;
+
+const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
+const HARD_EUPHEMISM_PATTERN = /\b(mutlu\s*son|happy\s*ending|guzel\s*son|ozel\s*muamele|mutluluk\s*var|sonunda\s*mutlu)\b/u;
 
 export class SuspiciousUserService {
   private db: Database.Database;
@@ -321,16 +328,52 @@ export class SuspiciousUserService {
     `).run(now, now);
   }
 
-  private buildListWhereClause(platform?: string, searchQuery?: string): { sql: string; params: unknown[] } {
+  private buildTestLikeSql(): string {
+    return `(
+      s.platform_user_id LIKE 'conduct_%'
+      OR s.platform_user_id LIKE 'test-%'
+      OR lower(COALESCE(c.name, '')) LIKE '%dm simulator%'
+    )`;
+  }
+
+  private buildListWhereClause(options: {
+    platform?: string;
+    searchQuery?: string;
+    conductState?: ConductState;
+    manualMode?: ManualConductMode | 'manual_only';
+    testLikeFilter?: 'real_only' | 'test_only';
+  }, nowIso: string): { sql: string; params: unknown[] } {
     const clauses = [`(s.is_active = 1 OR COALESCE(s.manual_mode, 'auto') != 'auto')`];
     const params: unknown[] = [];
+    const effectiveStateSql = this.buildEffectiveStateSql(nowIso);
+    const testLikeSql = this.buildTestLikeSql();
 
-    if (platform) {
+    if (options.platform) {
       clauses.push('s.platform = ?');
-      params.push(platform);
+      params.push(options.platform);
     }
 
-    const normalizedQuery = searchQuery?.trim().toLocaleLowerCase('tr-TR');
+    if (options.conductState) {
+      clauses.push(`${effectiveStateSql} = ?`);
+      params.push(options.conductState);
+    }
+
+    if (options.manualMode === 'manual_only') {
+      clauses.push(`COALESCE(s.manual_mode, 'auto') != 'auto'`);
+    } else if (options.manualMode && options.manualMode !== 'auto') {
+      clauses.push(`COALESCE(s.manual_mode, 'auto') = ?`);
+      params.push(options.manualMode);
+    } else if (options.manualMode === 'auto') {
+      clauses.push(`COALESCE(s.manual_mode, 'auto') = 'auto'`);
+    }
+
+    if (options.testLikeFilter === 'real_only') {
+      clauses.push(`NOT ${testLikeSql}`);
+    } else if (options.testLikeFilter === 'test_only') {
+      clauses.push(testLikeSql);
+    }
+
+    const normalizedQuery = options.searchQuery?.trim().toLocaleLowerCase('tr-TR');
     if (normalizedQuery) {
       const likeValue = `%${normalizedQuery}%`;
       clauses.push(`(
@@ -412,9 +455,6 @@ export class SuspiciousUserService {
   }
 
   private calculateNewState(score: number): ConductState {
-    if (score >= SILENT_SCORE) {
-      return 'silent';
-    }
     if (score >= FINAL_WARNING_SCORE) {
       return 'final_warning';
     }
@@ -425,10 +465,53 @@ export class SuspiciousUserService {
   }
 
   private calculateScoreDelta(options?: FlagUserOptions): number {
-    if (options?.severity === 'high' || options?.action === 'block_message') {
+    if (this.isNearCertainAbuse(options?.messageText)) {
       return 2;
     }
     return 1;
+  }
+
+  private normalizeConductText(value?: string | null): string {
+    return (value || '')
+      .toLocaleLowerCase('tr-TR')
+      .replace(/\u00e7/g, 'c')
+      .replace(/\u011f/g, 'g')
+      .replace(/\u0131/g, 'i')
+      .replace(/\u00f6/g, 'o')
+      .replace(/\u015f/g, 's')
+      .replace(/\u00fc/g, 'u')
+      .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private isNearCertainAbuse(messageText?: string | null): boolean {
+    const normalized = this.normalizeConductText(messageText);
+    if (!normalized) {
+      return false;
+    }
+
+    return EXPLICIT_SEXUAL_PATTERN.test(normalized)
+      || HARD_EUPHEMISM_PATTERN.test(normalized);
+  }
+
+  private shouldEnterSilent(params: {
+    offenseCount: number;
+    score: number;
+    stateBefore: ConductState;
+    options?: FlagUserOptions;
+  }): boolean {
+    if (params.offenseCount < MIN_OFFENSES_FOR_SILENT) {
+      return false;
+    }
+
+    if (this.isNearCertainAbuse(params.options?.messageText)) {
+      return true;
+    }
+
+    return params.stateBefore === 'final_warning'
+      && params.options?.action === 'block_message'
+      && params.score >= FINAL_WARNING_SCORE + 1;
   }
 
   private calculateSilentHours(existing: SuspiciousUserRow | null, offenseCount: number): number {
@@ -520,7 +603,14 @@ export class SuspiciousUserService {
     const offenseCount = (Number(existing?.offense_count) || 0) + 1;
     const currentScore = Number(existing?.conduct_score ?? existing?.offense_count ?? 0) || 0;
     const nextScore = currentScore + scoreDelta;
-    const nextState = this.calculateNewState(nextScore);
+    const nextState = this.shouldEnterSilent({
+      offenseCount,
+      score: nextScore,
+      stateBefore,
+      options,
+    })
+      ? 'silent'
+      : this.calculateNewState(nextScore);
     const silentUntil = nextState === 'silent'
       ? new Date(Date.now() + (this.calculateSilentHours(existing, offenseCount) * 60 * 60 * 1000)).toISOString()
       : null;
@@ -746,7 +836,8 @@ export class SuspiciousUserService {
 
   getSuspiciousUsers(platform?: string): SuspiciousUser[] {
     this.clearExpiredManualModes();
-    const { sql: whereSql, params } = this.buildListWhereClause(platform);
+    const nowIso = new Date().toISOString();
+    const { sql: whereSql, params } = this.buildListWhereClause({ platform }, nowIso);
     const rows = this.db.prepare(`
       SELECT s.*, c.name as username
       FROM suspicious_users s
@@ -762,9 +853,10 @@ export class SuspiciousUserService {
 
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
     const offset = Math.max(options.offset ?? 0, 0);
-    const { sql: whereSql, params } = this.buildListWhereClause(options.platform, options.searchQuery);
     const nowIso = new Date().toISOString();
+    const { sql: whereSql, params } = this.buildListWhereClause(options, nowIso);
     const effectiveStateSql = this.buildEffectiveStateSql(nowIso);
+    const testLikeSql = this.buildTestLikeSql();
 
     const rows = this.db.prepare(`
       SELECT s.*, c.name as username
@@ -791,12 +883,7 @@ export class SuspiciousUserService {
         SUM(CASE WHEN ${effectiveStateSql} = 'silent' THEN 1 ELSE 0 END) as silent_count,
         SUM(CASE WHEN COALESCE(s.manual_mode, 'auto') != 'auto' THEN 1 ELSE 0 END) as manual_count,
         SUM(CASE WHEN COALESCE(s.manual_mode, 'auto') = 'force_normal' THEN 1 ELSE 0 END) as testing_count,
-        SUM(CASE
-          WHEN s.platform_user_id LIKE 'conduct_%'
-            OR s.platform_user_id LIKE 'test-%'
-            OR lower(COALESCE(c.name, '')) LIKE '%dm simulator%'
-          THEN 1 ELSE 0
-        END) as test_like_count
+        SUM(CASE WHEN ${testLikeSql} THEN 1 ELSE 0 END) as test_like_count
       FROM suspicious_users s
       LEFT JOIN instagram_customers c ON s.platform = 'instagram' AND s.platform_user_id = c.instagram_id
       WHERE ${whereSql}

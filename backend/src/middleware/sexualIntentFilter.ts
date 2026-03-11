@@ -42,11 +42,13 @@ const NEAR_BLOCK_THRESHOLD = 0.80;
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
 const SEXUAL_BLOCK_REPLY = 'Bizde o dediginiz sey yoktur. Yalnizca profesyonel spa ve spor hizmetleri veriyoruz.';
 const SEXUAL_RETRY_REPLY = 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.';
-const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist)\b/u;
+const SAFE_BUSINESS_ANCHOR_PATTERN = /\b(masaj|massage|spa|hamam|sauna|havuz|pool|fitness|pilates|reformer|ders|kurs|uyelik|membership|randevu|rezervasyon|rezerv|fiyat|ucret|price|kampanya|adres|telefon|konum|paket|sure|dakika|seans|terapist|saat|acik|kapali|acilis|kapanis|calisma)\b/u;
 const SHORT_PROBE_PATTERN = /\b(nasil|oluyor|olur|var|varmi|nedir|ne)\b/u;
 const PRICE_QUESTION_PATTERN = /\b(fiyat\w*|ucret\w*|price|ne\s*kadar|kac\s*(tl|lira))\b/u;
 const PRICE_COMPARISON_PATTERN = /\b(fark|farki|farkli|aradaki|ara\s*daki|arasindaki|arasinda|difference|karsilastir|anlamadim)\b/u;
 const DURATION_PATTERN = /\b\d{1,3}\s*(dk|dak|daka|dakika|min|minute)\b/u;
+const APPOINTMENT_QUESTION_PATTERN = /\b(randevu|rezervasyon|rezerv)\b/u;
+const HOURS_QUESTION_PATTERN = /\b(saat\w*|kacta|kaca|acilis|kapanis|calisma|acik\w*|kapali\w*|musait)\b/u;
 const LOCATION_QUESTION_PATTERN = /\b(nerede|neredesiniz|neresindesiniz|adres|konum|lokasyon|harita|yol\s*tarifi)\b/u;
 const CONTACT_QUESTION_PATTERN = /\b(telefon|numara|iletisim|ulasim|ulasabilir|whatsapp)\b/u;
 const BENIGN_INFO_REQUEST_PATTERN = /\b(bilgi|detay|yardim|yardım|yardimci|yardımcı|ogren|öğren|sorabilir|alabilir)\b/u;
@@ -58,6 +60,9 @@ const COMPANION_PATTERN = /\b(esim|esimle|partner|partnerim|partnerimle|sevgilim
 const SAME_ROOM_PATTERN = /\b(ayni\s+odada|same\s+room|cift\s+oda|iki\s+kisilik\s+oda|tek\s+kisilik\s+oda)\b/u;
 const EXPLICIT_SEXUAL_PATTERN = /\b(sex|seks|sikis|sakso|erotik|escort|oral|anal)\b/u;
 const BOUNDARY_SUSPICIOUS_CUE_PATTERN = /\b(mutlu|extra|ekstra|ozel|muamele|sonunda)\b/u;
+const ACKNOWLEDGEMENT_LEAD_IN_PATTERN = /^(?:tesekkur(?:ler)?|sag ?ol(?:un)?|saol|eyvallah|tamam(?:dir)?|peki|ok(?:ay)?|anladim|olur|rica ederim)\b\s*/u;
+const BENIGN_CLOSEOUT_PATTERN = /^(?:tesekkur(?:ler)?|sag ?ol(?:un)?|saol|eyvallah|rica ederim|anladim|tamam(?:dir)?|peki|olur|ok(?:ay)?|baska sorum yok|baska bir sorum yok|anladim tesekkur(?:ler)?|tamam tesekkur(?:ler)?|yok tesekkur(?:ler)?|gerek yok tesekkur(?:ler)?|sorun degil|problem degil|bir sey degil|(?:size|siz)\s?de|(?:size|siz)\s?de iyi gunler|(?:size|siz)\s?de tesekkur(?:ler)?|ilginize|bilginize)$/u;
+const BENIGN_ACKNOWLEDGEMENT_PATTERN = /^(?:gelecegim|gelicem|ugrayacagim|ugrayacam|arayacagim|arayicam|geri donecegim|donus yapacagim|haber verecegim)$/u;
 
 function hasHappyEndingCue(compact: string): boolean {
   return compact.includes('mutluson')
@@ -205,6 +210,26 @@ function buildBoundaryProbeContext(messageText: string): BoundaryProbeContext {
   };
 }
 
+function stripAcknowledgementLeadIn(spaced: string): string {
+  let stripped = spaced.trim();
+  while (ACKNOWLEDGEMENT_LEAD_IN_PATTERN.test(stripped)) {
+    stripped = stripped.replace(ACKNOWLEDGEMENT_LEAD_IN_PATTERN, '').trim();
+  }
+  return stripped;
+}
+
+function isBenignCloseoutMessage(spaced: string): boolean {
+  if (!spaced) {
+    return false;
+  }
+
+  if (BENIGN_CLOSEOUT_PATTERN.test(spaced)) {
+    return true;
+  }
+
+  return BENIGN_ACKNOWLEDGEMENT_PATTERN.test(stripAcknowledgementLeadIn(spaced));
+}
+
 function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecision | null {
   const { spaced, compact } = normalizeEuphemismText(messageText);
   if (!spaced) {
@@ -225,6 +250,8 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
   const hasPriceQuestion = PRICE_QUESTION_PATTERN.test(spaced);
   const hasPriceComparisonCue = PRICE_COMPARISON_PATTERN.test(spaced);
   const hasDurationToken = DURATION_PATTERN.test(spaced);
+  const hasAppointmentQuestion = APPOINTMENT_QUESTION_PATTERN.test(spaced);
+  const hasHoursQuestion = HOURS_QUESTION_PATTERN.test(spaced);
   const hasNumericToken = /\b\d{1,4}\b/.test(spaced);
   const numericTokens = spaced.match(/\b\d{3,4}\b/g) || [];
   const hasMultipleNumericTokens = new Set(numericTokens).size >= 2;
@@ -268,6 +295,24 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
     };
   }
 
+  if (hasHoursQuestion) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected clear business hours/availability inquiry.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  if (hasAppointmentQuestion) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected clear business appointment / reservation inquiry.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
   // Allow clear location/contact asks so they are never treated as vague boundary probes.
   if (hasLocationQuestion || hasContactQuestion) {
     return {
@@ -293,6 +338,15 @@ function detectClearBusinessIntentGuard(messageText: string): SexualIntentDecisi
       action: 'allow',
       confidence: 0,
       reason: 'Detected benign greeting/opening message.',
+      modelUsed: 'heuristic-clear-business-guard',
+    };
+  }
+
+  if (isBenignCloseoutMessage(spaced)) {
+    return {
+      action: 'allow',
+      confidence: 0,
+      reason: 'Detected benign closeout / acknowledgement message.',
       modelUsed: 'heuristic-clear-business-guard',
     };
   }

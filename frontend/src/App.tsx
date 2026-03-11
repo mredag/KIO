@@ -240,6 +240,14 @@ function App() {
               }
             />
             <Route
+              path="/admin/mc/dm-review"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCDMReviewPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/mc/autopilot"
               element={
                 <ProtectedRoute>

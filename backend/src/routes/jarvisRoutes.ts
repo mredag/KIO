@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3';
 import { OpenClawClientService } from '../services/OpenClawClientService.js';
 import { JarvisSSEManager } from '../services/JarvisSSEManager.js';
 import { DataBridgeService } from '../services/DataBridgeService.js';
+import { getDMConversationReviewService } from '../services/DMConversationReviewService.js';
 import { checkApprovalGate, extractConfidence } from './missionControlRoutes.js';
 import { PipelineConfigService } from '../services/PipelineConfigService.js';
 import { HardwareWatchdogService } from '../services/HardwareWatchdogService.js';
@@ -631,6 +632,18 @@ function buildSystemContext(userMessage: string): string {
       }
     } catch (err: any) {
       console.warn('[Jarvis] Failed to fetch Instagram context:', err.message);
+    }
+  }
+
+  if (msg.match(/review|kalite|quality|halluc|halusin|tekrar|annoy|sinir boz|conversation|konusma/)) {
+    try {
+      const reviewService = getDMConversationReviewService();
+      const latestSummary = reviewService?.getLatestSummaryForSystemContext();
+      if (latestSummary) {
+        parts.push(latestSummary);
+      }
+    } catch (err: any) {
+      console.warn('[Jarvis] Failed to fetch DM review summary:', err.message);
     }
   }
 
@@ -1580,14 +1593,41 @@ async function handleExecutionTimeout(sessionId: string, jobId: string, agentId:
 router.post('/dm-review', async (req: Request, res: Response) => {
   try {
     const db = getDb();
-    const daysBack = Number(req.body.daysBack) || 30;
+    const reviewService = getDMConversationReviewService();
 
-    // 1. Fetch all DM data via DataBridgeService
-    const bridge = new DataBridgeService(db);
-    const data = bridge.fetchDMReviewData(daysBack);
-    const dataPrompt = bridge.formatDMReviewPrompt(data);
+    if (!reviewService) {
+      res.status(503).json({ error: 'DM review service is not initialized.' });
+      return;
+    }
 
-    if (data.conversations.length === 0) {
+    const requestedRunId = typeof req.body.runId === 'string' ? req.body.runId : null;
+    const run = requestedRunId
+      ? reviewService.getRun(requestedRunId)
+      : reviewService.getLatestCompletedRun('instagram');
+
+    const dataPrompt = run ? reviewService.buildJarvisReviewPacket(run.id, 10) : '';
+
+    if (!run) {
+      res.status(400).json({ error: 'Analiz icin kayitli bir DM review run bulunamadi. Once manuel bir run baslatin.' });
+      return;
+    }
+    if (run.status !== 'completed') {
+      res.status(409).json({ error: 'Secilen DM review run henuz tamamlanmadi.', runId: run.id, status: run.status });
+      return;
+    }
+
+    const findings = reviewService.listFindings(run.id, { limit: 10 });
+    const daysBack = run.daysBack;
+    const data = {
+      conversations: new Array(run.totalThreads).fill(null),
+      stats: {
+        totalMessages: run.totalMessages,
+        totalThreads: run.totalThreads,
+        totalCustomers: run.totalCustomers,
+      },
+    };
+
+    if (!run) {
       res.status(400).json({ error: 'Analiz edilecek konuşma bulunamadı.' });
       return;
     }
@@ -1633,6 +1673,14 @@ router.post('/dm-review', async (req: Request, res: Response) => {
       '',
       dataPrompt,
     ].join('\n');
+    const reviewTaskMessage = [
+      'Kayitli DM conversation review run sonucumuzu analiz et.',
+      'Ayni anda pipeline, KB ve ton kaynakli problemleri ayir.',
+      'Asagidaki paket ham DB dump degil, kayitli bir DM review run ozetidir.',
+      'Mumkun oldugunca bu paketten ilerle; gerekirse /api/mc/dm-review endpointlerini kullan.',
+      '',
+      dataPrompt,
+    ].join('\n');
 
     // 4. Persist user message
     const userMsgId = generateId();
@@ -1645,7 +1693,7 @@ router.post('/dm-review', async (req: Request, res: Response) => {
       try {
         const ocClient = await getOpenClawClient();
         if (ocClient) {
-          const fullMessage = `${PLANNING_SYSTEM_PROMPT}\n\n---\n\n${taskMessage}`;
+          const fullMessage = `${PLANNING_SYSTEM_PROMPT}\n\n---\n\n${reviewTaskMessage}`;
 
           // Snapshot JSONL line count before sending (new session, should be 0)
           const linesBefore = getSessionLineCount(openclawSessionKey);

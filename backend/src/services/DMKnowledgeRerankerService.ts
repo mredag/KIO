@@ -90,6 +90,18 @@ export class DMKnowledgeRerankerService {
       };
     }
 
+    if (this.shouldDropWeakSingleCandidate(params)) {
+      return {
+        selectedCandidates: [],
+        trace: {
+          ...baseTrace,
+          latencyMs: Date.now() - startedAt,
+          skippedReason: 'weak_single_candidate',
+          rationale: 'Zayif tek aday dogrudan destek sunmuyor; secim bos birakildi.',
+        },
+      };
+    }
+
     if (!this.shouldRunRerank(params)) {
       const selected = this.fallbackSelect(params, maxSelections);
       return {
@@ -107,7 +119,7 @@ export class DMKnowledgeRerankerService {
     }
 
     if (!this.apiKey) {
-      const selected = this.fallbackSelect(params, maxSelections);
+      const selected = this.safeFailureFallbackSelect(params, maxSelections);
       return {
         selectedCandidates: selected,
         trace: {
@@ -116,7 +128,9 @@ export class DMKnowledgeRerankerService {
           selectedEntries: this.toTraceEntries(selected),
           latencyMs: Date.now() - startedAt,
           skippedReason: 'no_api_key',
-          rationale: 'API anahtari yok; skor bazli siralama kullanildi.',
+          rationale: selected.length > 0
+            ? 'API anahtari yok; yalnizca guvenli fallback secimi kullanildi.'
+            : 'API anahtari yok; belirsiz destek adaylari prompta eklenmedi.',
         },
       };
     }
@@ -147,7 +161,7 @@ export class DMKnowledgeRerankerService {
       });
 
       if (!response.ok) {
-        const selected = this.fallbackSelect(params, maxSelections);
+        const selected = this.safeFailureFallbackSelect(params, maxSelections);
         return {
           selectedCandidates: selected,
           trace: {
@@ -156,7 +170,9 @@ export class DMKnowledgeRerankerService {
             selectedEntries: this.toTraceEntries(selected),
             latencyMs: Date.now() - startedAt,
             skippedReason: `api_error_${response.status}`,
-            rationale: 'Rerank API hatasi; skor bazli secim kullanildi.',
+            rationale: selected.length > 0
+              ? 'Rerank API hatasi; yalnizca guvenli fallback secimi kullanildi.'
+              : 'Rerank API hatasi; belirsiz destek adaylari prompta eklenmedi.',
           },
         };
       }
@@ -205,7 +221,7 @@ export class DMKnowledgeRerankerService {
         },
       };
     } catch {
-      const selected = this.fallbackSelect(params, maxSelections);
+      const selected = this.safeFailureFallbackSelect(params, maxSelections);
       return {
         selectedCandidates: selected,
         trace: {
@@ -214,7 +230,9 @@ export class DMKnowledgeRerankerService {
           selectedEntries: this.toTraceEntries(selected),
           latencyMs: Date.now() - startedAt,
           skippedReason: 'parse_or_network_error',
-          rationale: 'Rerank yaniti kullanilamadi; skor bazli secim kullanildi.',
+          rationale: selected.length > 0
+            ? 'Rerank yaniti kullanilamadi; yalnizca guvenli fallback secimi kullanildi.'
+            : 'Rerank yaniti kullanilamadi; belirsiz destek adaylari prompta eklenmedi.',
         },
       };
     }
@@ -246,6 +264,36 @@ export class DMKnowledgeRerankerService {
 
     const requested = new Set(params.requestedCategories);
     return requested.has('pricing') || requested.has('hours') || requested.has('policies');
+  }
+
+  private shouldDropWeakSingleCandidate(params: {
+    messageText: string;
+    followUpHint: FollowUpContextHint | null;
+    activeTopic: string | null;
+    candidates: SemanticRetrievalCandidate[];
+  }): boolean {
+    if (params.candidates.length !== 1) {
+      return false;
+    }
+
+    const prioritizeAgePolicies = hasAgePolicySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
+    const prioritizeRoomAvailability = hasRoomAvailabilitySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
+
+    if (prioritizeAgePolicies || prioritizeRoomAvailability) {
+      return false;
+    }
+
+    return params.candidates[0].score < 0.30;
   }
 
   private buildPrompt(
@@ -334,6 +382,9 @@ export class DMKnowledgeRerankerService {
     );
 
     if (!prioritizeAgePolicies && !prioritizeRoomAvailability) {
+      if (params.candidates.length === 1 && params.candidates[0].score < 0.30) {
+        return [];
+      }
       return params.candidates.slice(0, maxSelections);
     }
 
@@ -360,6 +411,41 @@ export class DMKnowledgeRerankerService {
         return (rightBoost - leftBoost) || (right.score - left.score);
       })
       .slice(0, maxSelections);
+  }
+
+  private safeFailureFallbackSelect(
+    params: {
+      messageText: string;
+      followUpHint: FollowUpContextHint | null;
+      activeTopic: string | null;
+      requestedCategories: string[];
+      candidates: SemanticRetrievalCandidate[];
+    },
+    maxSelections: number,
+  ): SemanticRetrievalCandidate[] {
+    if (!this.hasPriorityFallbackSignals(params)) {
+      return [];
+    }
+
+    return this.fallbackSelect(params, maxSelections);
+  }
+
+  private hasPriorityFallbackSignals(params: {
+    messageText: string;
+    followUpHint: FollowUpContextHint | null;
+    activeTopic: string | null;
+  }): boolean {
+    return hasAgePolicySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    ) || hasRoomAvailabilitySignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
   }
 
   private getAgePolicyCandidateBoost(candidate: SemanticRetrievalCandidate, topicTokens: Set<string>): number {

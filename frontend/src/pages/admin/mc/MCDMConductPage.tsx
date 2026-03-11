@@ -8,6 +8,9 @@ import { formatDateTime, formatRelativeTime } from '../../../lib/dateFormatter';
 type ConductState = 'normal' | 'guarded' | 'final_warning' | 'silent';
 type ManualMode = 'auto' | 'force_normal' | 'force_silent';
 type Platform = 'instagram' | 'whatsapp';
+type ConductStateFilter = 'all' | ConductState;
+type ConductManualFilter = 'all' | ManualMode | 'manual_only';
+type ConductRecordFilter = 'all' | 'real_only' | 'test_only';
 
 interface ConductUser {
   id: string;
@@ -87,7 +90,7 @@ const stateLabels: Record<ConductState, string> = {
   normal: 'Normal',
   guarded: 'Guarded',
   final_warning: 'Final warning',
-  silent: 'Bad customer',
+  silent: 'Silent',
 };
 
 const stateDescriptions: Record<ConductState, string> = {
@@ -101,6 +104,20 @@ const manualModeLabels: Record<ManualMode, string> = {
   auto: 'Auto',
   force_normal: 'Force normal',
   force_silent: 'Force bad customer',
+};
+
+const manualFilterLabels: Record<ConductManualFilter, string> = {
+  all: 'All overrides',
+  auto: 'Auto only',
+  manual_only: 'Manual only',
+  force_normal: 'Force normal',
+  force_silent: 'Force silent',
+};
+
+const recordFilterLabels: Record<ConductRecordFilter, string> = {
+  all: 'All records',
+  real_only: 'Real only',
+  test_only: 'Test / Sim only',
 };
 
 const platformLabels: Record<Platform, string> = {
@@ -124,12 +141,18 @@ const conductApi = {
   async getUsers(input: {
     platform?: Platform;
     q?: string;
+    state?: ConductState;
+    manualMode?: ConductManualFilter;
+    testLike?: Exclude<ConductRecordFilter, 'all'>;
     limit?: number;
     offset?: number;
   }): Promise<ConductUserListResponse> {
     const params = {
       ...(input.platform ? { platform: input.platform } : {}),
       ...(input.q ? { q: input.q } : {}),
+      ...(input.state ? { state: input.state } : {}),
+      ...(input.manualMode && input.manualMode !== 'all' ? { manualMode: input.manualMode } : {}),
+      ...(input.testLike ? { testLike: input.testLike } : {}),
       ...(typeof input.limit === 'number' ? { limit: input.limit } : {}),
       ...(typeof input.offset === 'number' ? { offset: input.offset } : {}),
     };
@@ -172,6 +195,18 @@ function userKey(platform: Platform, platformUserId: string): string {
 
 const PAGE_SIZE = 50;
 
+function isSilentActive(user: ConductUser): boolean {
+  if (user.conductState !== 'silent') {
+    return false;
+  }
+
+  if (!user.silentUntil) {
+    return true;
+  }
+
+  return new Date(user.silentUntil).getTime() > Date.now();
+}
+
 function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
     <GlassCard className="p-5" hover={false}>
@@ -185,6 +220,9 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint: 
 export default function MCDMConductPage() {
   const queryClient = useQueryClient();
   const [platformFilter, setPlatformFilter] = useState<'all' | Platform>('all');
+  const [stateFilter, setStateFilter] = useState<ConductStateFilter>('all');
+  const [manualFilter, setManualFilter] = useState<ConductManualFilter>('all');
+  const [recordFilter, setRecordFilter] = useState<ConductRecordFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -206,13 +244,16 @@ export default function MCDMConductPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [platformFilter]);
+  }, [platformFilter, stateFilter, manualFilter, recordFilter]);
 
   const usersQuery = useQuery({
-    queryKey: ['mc', 'dm-conduct', 'users', platformFilter, debouncedSearchQuery, page],
+    queryKey: ['mc', 'dm-conduct', 'users', platformFilter, stateFilter, manualFilter, recordFilter, debouncedSearchQuery, page],
     queryFn: () => conductApi.getUsers({
       platform: platformFilter === 'all' ? undefined : platformFilter,
       q: debouncedSearchQuery || undefined,
+      state: stateFilter === 'all' ? undefined : stateFilter,
+      manualMode: manualFilter,
+      testLike: recordFilter === 'all' ? undefined : recordFilter,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
     }),
@@ -327,6 +368,21 @@ export default function MCDMConductPage() {
   const visibleEnd = Math.min((page * PAGE_SIZE) + users.length, totalCount);
   const hasPreviousPage = page > 0;
   const hasNextPage = (page + 1) * PAGE_SIZE < totalCount;
+  const hasActiveFilters = platformFilter !== 'all'
+    || stateFilter !== 'all'
+    || manualFilter !== 'all'
+    || recordFilter !== 'all'
+    || !!debouncedSearchQuery;
+
+  const resetFilters = () => {
+    setPlatformFilter('all');
+    setStateFilter('all');
+    setManualFilter('all');
+    setRecordFilter('all');
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
+    setPage(0);
+  };
 
   const handleSelectUser = (user: ConductUser) => {
     setSelectedUserKey(userKey(user.platform, user.platformUserId));
@@ -383,8 +439,8 @@ export default function MCDMConductPage() {
           />
           <StatCard label="Normal" value={stats.normal} hint="Su anda normal tonda cevap alanlar" />
           <StatCard label="Guarded" value={stats.guarded} hint="Kisa ve mesafeli moda alinmis kullanicilar" />
-          <StatCard label="Final/Bad" value={stats.finalWarning + stats.silent} hint="Sert uyarida veya bad-customer modunda olanlar" />
-          <StatCard label="Bad customer" value={stats.silent} hint="En kisa ve en duz cevap modunda olanlar" />
+          <StatCard label="Final/Silent" value={stats.finalWarning + stats.silent} hint="Sert uyarida veya silent modunda olanlar" />
+          <StatCard label="Silent" value={stats.silent} hint="Bad customer modunda olanlar" />
           <StatCard label="Test / Sim" value={stats.testLike} hint="Test veya simulator olarak gorunen kayitlar" />
         </div>
 
@@ -466,20 +522,14 @@ export default function MCDMConductPage() {
                 <div className="text-sm font-semibold text-gray-100">Kullanicilar</div>
                 <div className="text-xs text-gray-400">Conduct listesine girmis kayitlar. Satira tikladiginizda detay ve aksiyonlar sagdan acilir.</div>
               </div>
-              <select
-                value={platformFilter}
-                onChange={(event) => setPlatformFilter(event.target.value as 'all' | Platform)}
-                className="mc-input w-40"
-              >
-                <option value="all">Tum kanallar</option>
-                <option value="instagram">Instagram</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
+              <div className="text-xs text-gray-500">
+                {hasActiveFilters ? 'Filtreli gorunum aktif' : 'Tum aktif conduct kayitlari'}
+              </div>
             </div>
 
             <div className="px-5 py-4 border-b border-white/10 bg-white/[0.02]">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr_140px_120px_auto]">
-                <div className="md:col-span-5">
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,2fr)_180px_180px_180px_180px_auto]">
+                <div className="xl:col-span-6">
                   <label className="mc-label mb-1.5 block">Ara</label>
                   <input
                     value={searchQuery}
@@ -489,7 +539,85 @@ export default function MCDMConductPage() {
                   />
                 </div>
                 <div>
-                  <label className="mc-label mb-1.5 block">Platform</label>
+                  <label className="mc-label mb-1.5 block">Kanal</label>
+                  <select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value as 'all' | Platform)} className="mc-input">
+                    <option value="all">Tum kanallar</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="whatsapp">WhatsApp</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mc-label mb-1.5 block">State</label>
+                  <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as ConductStateFilter)} className="mc-input">
+                    <option value="all">All states</option>
+                    <option value="guarded">Guarded</option>
+                    <option value="final_warning">Final warning</option>
+                    <option value="silent">Silent</option>
+                    <option value="normal">Normal</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mc-label mb-1.5 block">Override</label>
+                  <select value={manualFilter} onChange={(event) => setManualFilter(event.target.value as ConductManualFilter)} className="mc-input">
+                    <option value="all">All overrides</option>
+                    <option value="auto">Auto only</option>
+                    <option value="manual_only">Manual only</option>
+                    <option value="force_normal">Force normal</option>
+                    <option value="force_silent">Force silent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mc-label mb-1.5 block">Kayit tipi</label>
+                  <select value={recordFilter} onChange={(event) => setRecordFilter(event.target.value as ConductRecordFilter)} className="mc-input">
+                    <option value="all">All records</option>
+                    <option value="real_only">Real only</option>
+                    <option value="test_only">Test / Sim only</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button onClick={resetFilters} className="mc-btn mc-btn--ghost text-xs w-full" disabled={!hasActiveFilters}>
+                    Filtreleri temizle
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => setStateFilter('silent')}
+                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium ${stateFilter === 'silent' ? 'border-red-400/40 bg-red-500/15 text-red-200' : 'border-white/10 bg-white/[0.03] text-gray-300 hover:bg-white/[0.06]'}`}
+                >
+                  Silent only
+                </button>
+                <button
+                  onClick={() => setManualFilter('manual_only')}
+                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium ${manualFilter === 'manual_only' ? 'border-sky-400/40 bg-sky-500/15 text-sky-200' : 'border-white/10 bg-white/[0.03] text-gray-300 hover:bg-white/[0.06]'}`}
+                >
+                  Manual only
+                </button>
+                <button
+                  onClick={() => setRecordFilter('real_only')}
+                  className={`rounded-full border px-3 py-1.5 text-[11px] font-medium ${recordFilter === 'real_only' ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-white/[0.03] text-gray-300 hover:bg-white/[0.06]'}`}
+                >
+                  Real only
+                </button>
+                {hasActiveFilters && (
+                  <div className="flex items-center text-[11px] text-gray-500">
+                    {platformFilter !== 'all' ? platformLabels[platformFilter] : 'All channels'}
+                    <span className="mx-2">•</span>
+                    {stateFilter === 'all' ? 'All states' : stateLabels[stateFilter]}
+                    <span className="mx-2">•</span>
+                    {manualFilterLabels[manualFilter]}
+                    <span className="mx-2">•</span>
+                    {recordFilterLabels[recordFilter]}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-b border-white/10 bg-white/[0.015]">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[160px_minmax(0,1fr)_minmax(0,2fr)_160px]">
+                <div>
+                  <label className="mc-label mb-1.5 block">Test lift kanal</label>
                   <select value={newPlatform} onChange={(event) => setNewPlatform(event.target.value as Platform)} className="mc-input">
                     <option value="instagram">Instagram</option>
                     <option value="whatsapp">WhatsApp</option>
@@ -504,15 +632,17 @@ export default function MCDMConductPage() {
                     placeholder="instagram id veya telefon"
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div>
                   <label className="mc-label mb-1.5 block">Ne yapar?</label>
                   <div className="text-xs text-gray-400 leading-5">
-                    Bu buton kullaniciyi 24 saat force normal yapar. Test hesabiniz bad-customer moduna dusmeden canli akista denenebilir.
+                    Bu arac yalnizca test hesaplarini 24 saat force normal yapar. Canli kullanicilari conduct modundan cikarmak icin secili kullanici panelindeki override aksiyonlarini kullanin.
                   </div>
                 </div>
-                <button onClick={handleCreateOverride} className="mc-btn mc-btn--primary text-xs" disabled={overrideMutation.isPending || !newUserId.trim()}>
-                  {overrideMutation.isPending ? 'Isleniyor...' : 'Test Lift 24h'}
-                </button>
+                <div className="flex items-end">
+                  <button onClick={handleCreateOverride} className="mc-btn mc-btn--primary text-xs w-full" disabled={overrideMutation.isPending || !newUserId.trim()}>
+                    {overrideMutation.isPending ? 'Isleniyor...' : 'Test Lift 24h'}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -540,11 +670,12 @@ export default function MCDMConductPage() {
                 <tbody>
                   {users.map((user) => {
                     const active = selectedUser && userKey(user.platform, user.platformUserId) === userKey(selectedUser.platform, selectedUser.platformUserId);
+                    const silentActive = isSilentActive(user);
                     return (
                       <tr
                         key={user.id}
                         onClick={() => handleSelectUser(user)}
-                        className={`cursor-pointer border-t border-white/5 ${active ? 'bg-sky-500/10' : 'hover:bg-white/[0.03]'}`}
+                        className={`cursor-pointer border-t border-white/5 ${active ? 'bg-sky-500/10' : silentActive ? 'bg-red-500/[0.04] hover:bg-red-500/[0.06]' : 'hover:bg-white/[0.03]'}`}
                       >
                         <td className="px-5 py-4 align-top">
                           <div className="flex flex-wrap items-center gap-2">
@@ -564,8 +695,22 @@ export default function MCDMConductPage() {
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${stateBadgeClasses[user.conductState]}`}>
                             {stateLabels[user.conductState]}
                           </span>
-                          {user.conductState === 'silent' && (
-                            <div className="mt-2 text-xs text-red-300">Minimal reply mode</div>
+                          {silentActive && (
+                            <>
+                              <div className="mt-2 text-xs font-medium text-red-200">Bad customer mode active</div>
+                              {user.silentUntil && (
+                                <div className="mt-1 text-xs text-red-300">until {formatDateTime(new Date(user.silentUntil))}</div>
+                              )}
+                            </>
+                          )}
+                          {!silentActive && user.conductState === 'silent' && (
+                            <div className="mt-2 text-xs text-red-300">Silent state stored</div>
+                          )}
+                          {user.conductState === 'final_warning' && (
+                            <div className="mt-2 text-xs text-orange-200">High-risk warning state</div>
+                          )}
+                          {user.manualMode === 'force_silent' && (
+                            <div className="mt-1 text-xs text-sky-200">Manual silent override</div>
                           )}
                         </td>
                         <td className="px-5 py-4 align-top">
@@ -581,8 +726,8 @@ export default function MCDMConductPage() {
                         <td className="px-5 py-4 align-top text-xs text-gray-400">
                           <div>{formatRelativeTime(new Date(user.lastOffenseAt))}</div>
                           <div className="mt-1">{formatDateTime(new Date(user.lastOffenseAt))}</div>
-                          {user.silentUntil && (
-                            <div className="mt-2 text-red-300">bad customer until {formatDateTime(new Date(user.silentUntil))}</div>
+                          {silentActive && user.silentUntil && (
+                            <div className="mt-2 font-medium text-red-300">silent until {formatDateTime(new Date(user.silentUntil))}</div>
                           )}
                         </td>
                         <td className="px-5 py-4 align-top text-xs text-gray-300 max-w-sm">
@@ -660,6 +805,28 @@ export default function MCDMConductPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+                  {isSilentActive(selectedUser) && (
+                    <div className="rounded-2xl border border-red-500/25 bg-red-500/10 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.16em] text-red-200/80">Silent active</div>
+                          <div className="mt-2 text-lg font-semibold text-red-100">Bad customer mode is active for this user.</div>
+                        </div>
+                        <span className="inline-flex items-center rounded-full border border-red-400/30 bg-red-500/15 px-2.5 py-1 text-xs font-medium text-red-100">
+                          Silent
+                        </span>
+                      </div>
+                      <div className="mt-3 text-sm text-red-100/90">
+                        {selectedUser.silentUntil
+                          ? `Current silent window ends at ${formatDateTime(new Date(selectedUser.silentUntil))}.`
+                          : 'This user is currently locked to silent conduct replies.'}
+                      </div>
+                      {selectedUser.manualMode === 'force_silent' && (
+                        <div className="mt-2 text-xs text-red-100/70">Manual override: Force bad customer</div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                       <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Manual mode</div>
@@ -667,9 +834,11 @@ export default function MCDMConductPage() {
                       <div className="mt-1 text-xs text-gray-400">{selectedUser.manualNote || 'No note'}</div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Bad customer window</div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Silent window</div>
                       <div className="mt-2 text-gray-100">{selectedUser.silentUntil ? formatDateTime(new Date(selectedUser.silentUntil)) : 'Not active'}</div>
-                      <div className="mt-1 text-xs text-gray-400">reply style {selectedUser.conductState === 'silent' ? 'minimal' : 'normal'}</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        {isSilentActive(selectedUser) ? 'silent reply mode active' : `reply style ${selectedUser.conductState === 'silent' ? 'minimal' : 'normal'}`}
+                      </div>
                     </div>
                   </div>
 

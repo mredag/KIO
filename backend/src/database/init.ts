@@ -1,11 +1,13 @@
 import Database from 'better-sqlite3';
 import { readFileSync, mkdirSync, existsSync } from 'fs';
+import { createRequire } from 'module';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { seedDatabase } from './seed.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
 
 /**
  * Initialize the SQLite database with schema and default data
@@ -39,6 +41,32 @@ export function initializeDatabase(dbPath: string): Database.Database {
   // Read and execute schema
   const schemaPath = join(__dirname, 'schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
+
+  const dmResponseCacheTable = db.prepare(`
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'dm_response_cache'
+  `).get() as { name: string } | undefined;
+
+  if (dmResponseCacheTable) {
+    const dmResponseCacheColumns = db.prepare('PRAGMA table_info(dm_response_cache)').all() as Array<{ name: string }>;
+    const dmResponseCacheColumnNames = new Set(dmResponseCacheColumns.map(column => column.name));
+    const hasCurrentCacheShape = dmResponseCacheColumnNames.has('lookup_key')
+      && dmResponseCacheColumnNames.has('cache_class')
+      && dmResponseCacheColumnNames.has('expires_at');
+
+    if (!hasCurrentCacheShape) {
+      console.log('Dropping legacy dm_response_cache table before applying current schema');
+      db.exec(`
+        DROP INDEX IF EXISTS idx_dm_response_cache_unique;
+        DROP INDEX IF EXISTS idx_dm_response_cache_lookup;
+        DROP INDEX IF EXISTS idx_dm_response_cache_created;
+        DROP INDEX IF EXISTS idx_dm_response_cache_expires;
+        DROP INDEX IF EXISTS idx_dm_response_cache_class;
+        DROP TABLE IF EXISTS dm_response_cache;
+      `);
+    }
+  }
   
   // Execute schema (split by semicolon and execute each statement)
   const statements = schema
@@ -131,6 +159,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
   }
 
   const kbSafetyTables = [
+    'dm_response_cache',
     'knowledge_base_change_sets',
     'knowledge_base_history',
   ];
@@ -140,12 +169,34 @@ export function initializeDatabase(dbPath: string): Database.Database {
   if (missingKbSafetyTables.length > 0) {
     console.log(`Creating missing KB safety tables: ${missingKbSafetyTables.join(', ')}`);
     for (const statement of statements) {
-      if (statement.includes('knowledge_base_change_sets') ||
+      if (statement.includes('dm_response_cache') ||
+          statement.includes('idx_dm_response_cache_') ||
+          statement.includes('knowledge_base_change_sets') ||
           statement.includes('knowledge_base_history')) {
         db.exec(statement);
       }
     }
     console.log('KB safety tables created successfully');
+  }
+
+  const dmReviewTables = [
+    'dm_review_runs',
+    'dm_review_findings',
+  ];
+
+  const missingDmReviewTables = dmReviewTables.filter(table => !tableNames.includes(table));
+
+  if (missingDmReviewTables.length > 0) {
+    console.log(`Creating missing DM review tables: ${missingDmReviewTables.join(', ')}`);
+    for (const statement of statements) {
+      if (statement.includes('dm_review_runs')
+          || statement.includes('idx_dm_review_runs_')
+          || statement.includes('dm_review_findings')
+          || statement.includes('idx_dm_review_findings_')) {
+        db.exec(statement);
+      }
+    }
+    console.log('DM review tables created successfully');
   }
 
   // Check if unified_interactions view exists
@@ -179,7 +230,10 @@ export function initializeDatabase(dbPath: string): Database.Database {
   // Jarvis Task Orchestration tables (mc_jarvis_sessions, mc_jarvis_messages)
   // Uses CREATE TABLE IF NOT EXISTS — safe to run on every startup
   try {
-    const { runJarvisMigration } = require('./migrate-jarvis.cjs');
+    const jarvisMigrationPath = existsSync(join(__dirname, 'migrate-jarvis.cjs'))
+      ? join(__dirname, 'migrate-jarvis.cjs')
+      : join(__dirname, '..', '..', 'src', 'database', 'migrate-jarvis.cjs');
+    const { runJarvisMigration } = require(jarvisMigrationPath);
     runJarvisMigration(db);
   } catch (error: any) {
     console.error('Jarvis migration failed:', error.message);

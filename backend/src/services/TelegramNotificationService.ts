@@ -1,11 +1,3 @@
-/**
- * TelegramNotificationService — Sends actionable alerts to admin via Telegram Bot API.
- *
- * Shares the same bot as OpenClaw's Telegram channel (same bot token).
- * Because OpenClaw uses getUpdates long-polling, callback_query buttons are not
- * reliable on the shared bot. Admin actions must use text commands or URL
- * buttons that do not depend on callback_query delivery.
- */
 import Database from 'better-sqlite3';
 
 export interface TelegramMessage {
@@ -47,10 +39,10 @@ const SEVERITY_EMOJI: Record<string, string> = {
 };
 
 const SEVERITY_LABEL: Record<string, string> = {
-  critical: 'KRİTİK',
-  high: 'YÜKSEK',
+  critical: 'KRITIK',
+  high: 'YUKSEK',
   medium: 'ORTA',
-  low: 'DÜŞÜK',
+  low: 'DUSUK',
 };
 
 export class TelegramNotificationService {
@@ -67,20 +59,25 @@ export class TelegramNotificationService {
       enabled: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_ADMIN_CHAT_ID),
       maxMessagesPerHour: 30,
     };
-    this.hourResetTimer = setInterval(() => { this.sentThisHour = 0; }, 3600000);
+    this.hourResetTimer = setInterval(() => {
+      this.sentThisHour = 0;
+    }, 3600000);
+
     if (this.config.enabled) {
       console.log('[Telegram] Notification service ready (chat: %s)', this.config.adminChatId);
     } else {
-      console.log('[Telegram] Not configured — set TELEGRAM_BOT_TOKEN + TELEGRAM_ADMIN_CHAT_ID');
+      console.log('[Telegram] Not configured - set TELEGRAM_BOT_TOKEN + TELEGRAM_ADMIN_CHAT_ID');
     }
   }
 
-  isEnabled(): boolean { return this.config.enabled; }
-  getBotToken(): string { return this.config.botToken; }
+  isEnabled(): boolean {
+    return this.config.enabled;
+  }
 
-  /**
-   * Send a rich notification with inline keyboard buttons.
-   */
+  getBotToken(): string {
+    return this.config.botToken;
+  }
+
   async notify(msg: TelegramMessage): Promise<boolean> {
     if (!this.config.enabled) return false;
     if (this.sentThisHour >= this.config.maxMessagesPerHour) {
@@ -92,73 +89,53 @@ export class TelegramNotificationService {
     const label = SEVERITY_LABEL[msg.severity] || '';
     const lines: string[] = [];
 
-    // Header
     lines.push(`${emoji} <b>${this.escapeHtml(msg.title)}</b> [${label}]`);
     lines.push('');
 
-    // Customer info
     if (msg.customer) {
-      const c = msg.customer;
-      lines.push(`👤 <b>Müşteri:</b> ${this.escapeHtml(c.name || 'Bilinmiyor')}`);
-      lines.push(`🆔 <b>ID:</b> <code>${this.escapeHtml(c.instagramId)}</code>`);
-      if (c.username) {
-        lines.push(`📱 <a href="https://ig.me/m/${this.escapeHtml(c.username)}">Instagram DM Aç</a>`);
+      const customer = msg.customer;
+      lines.push(`👤 <b>Musteri:</b> ${this.escapeHtml(customer.name || 'Bilinmiyor')}`);
+      lines.push(`🆔 <b>ID:</b> <code>${this.escapeHtml(customer.instagramId)}</code>`);
+      if (customer.username) {
+        lines.push(`📱 <a href="https://ig.me/m/${this.escapeHtml(customer.username)}">Instagram DM Ac</a>`);
       }
       lines.push('');
     }
 
-    // Body
     lines.push(this.escapeHtml(msg.body));
 
-    // Job reference
     if (msg.jobId && msg.jobId !== 'no-job') {
       lines.push('');
       lines.push(`📋 <code>${msg.jobId.substring(0, 8)}</code>`);
       lines.push(...this.buildEscalationCommandLines(msg.jobId, msg.source));
     }
 
-    const text = lines.join('\n');
+    const payload: Record<string, unknown> = {
+      chat_id: this.config.adminChatId,
+      text: lines.join('\n'),
+      parse_mode: 'HTML',
+    };
 
-    // Only keep safe URL buttons on the shared Telegram bot.
     const keyboard = this.buildUrlKeyboard(msg.customer?.username);
+    if (keyboard) {
+      payload.reply_markup = JSON.stringify(keyboard);
+    }
 
-    try {
-      const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
-      const payload: Record<string, unknown> = {
-        chat_id: this.config.adminChatId,
-        text,
-        parse_mode: 'HTML',
-      };
-      if (keyboard) {
-        payload.reply_markup = JSON.stringify(keyboard);
-      }
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.error('[Telegram] Send failed:', res.status, err);
-        return false;
-      }
-
-      this.sentThisHour++;
-      this.logNotification(msg);
-      console.log('[Telegram] ✅ Notification sent: %s', msg.title);
-      return true;
-    } catch (err: any) {
-      console.error('[Telegram] Send error:', err.message);
+    const ok = await this.sendMessagePayload(payload, {
+      retryOnNetworkError: true,
+      retryOnHttpStatuses: [429, 500, 502, 503, 504],
+      failureLabel: 'Send',
+    });
+    if (!ok) {
       return false;
     }
+
+    this.sentThisHour++;
+    this.logNotification(msg);
+    console.log('[Telegram] ✅ Notification sent: %s', msg.title);
+    return true;
   }
 
-  /**
-   * Send a yes/no review prompt for a suspicious DM phrase.
-   */
   async notifySafetyPhraseReview(msg: DMSafetyPhraseReviewMessage): Promise<boolean> {
     if (!this.config.enabled) return false;
     if (this.sentThisHour >= this.config.maxMessagesPerHour) {
@@ -194,52 +171,44 @@ export class TelegramNotificationService {
       lines.splice(6, 0, `<b>Channel:</b> ${this.escapeHtml(msg.channel)}`);
     }
 
-    const text = lines.join('\n');
+    const ok = await this.sendMessagePayload(
+      {
+        chat_id: this.config.adminChatId,
+        text: lines.join('\n'),
+        parse_mode: 'HTML',
+      },
+      {
+        retryOnNetworkError: true,
+        retryOnHttpStatuses: [429, 500, 502, 503, 504],
+        failureLabel: 'Phrase review send',
+      },
+    );
+
+    if (!ok) {
+      return false;
+    }
+
+    this.sentThisHour++;
+    console.log('[Telegram] Phrase review sent: %s', msg.reviewId);
+    return true;
+  }
+
+  async editMessageAfterAction(chatId: string | number, messageId: number, resultText: string): Promise<void> {
+    if (!this.config.enabled) return;
 
     try {
-      const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
-      const res = await fetch(url, {
+      await fetch(`https://api.telegram.org/bot${this.config.botToken}/editMessageReplyMarkup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: this.config.adminChatId,
-          text,
-          parse_mode: 'HTML',
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: JSON.stringify({ inline_keyboard: [] }),
         }),
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.error('[Telegram] Phrase review send failed:', res.status, err);
-        return false;
-      }
-
-      this.sentThisHour++;
-      console.log('[Telegram] Phrase review sent: %s', msg.reviewId);
-      return true;
-    } catch (err: any) {
-      console.error('[Telegram] Phrase review send error:', err.message);
-      return false;
-    }
-  }
-
-  /**
-   * Update the message after admin clicks a button — replace buttons with result text.
-   */
-  async editMessageAfterAction(chatId: string | number, messageId: number, resultText: string): Promise<void> {
-    if (!this.config.enabled) return;
-    try {
-      const url = `https://api.telegram.org/bot${this.config.botToken}/editMessageReplyMarkup`;
-      await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: JSON.stringify({ inline_keyboard: [] }) }),
         signal: AbortSignal.timeout(5000),
       });
-      // Send follow-up with result
-      const replyUrl = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
-      await fetch(replyUrl, {
+
+      await fetch(`https://api.telegram.org/bot${this.config.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -255,20 +224,23 @@ export class TelegramNotificationService {
     }
   }
 
-  /**
-   * Answer a callback_query to dismiss the loading spinner on the button.
-   */
   async answerCallback(callbackQueryId: string, text: string): Promise<void> {
     if (!this.config.enabled) return;
+
     try {
-      const url = `https://api.telegram.org/bot${this.config.botToken}/answerCallbackQuery`;
-      await fetch(url, {
+      await fetch(`https://api.telegram.org/bot${this.config.botToken}/answerCallbackQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: true }),
+        body: JSON.stringify({
+          callback_query_id: callbackQueryId,
+          text,
+          show_alert: true,
+        }),
         signal: AbortSignal.timeout(5000),
       });
-    } catch { /* non-critical */ }
+    } catch {
+      // non-critical
+    }
   }
 
   private buildUrlKeyboard(username?: string): { inline_keyboard: Array<Array<{ text: string; url: string }>> } | null {
@@ -278,9 +250,19 @@ export class TelegramNotificationService {
       rows.push([{ text: 'Instagram DM', url: `https://ig.me/m/${encodeURIComponent(username)}` }]);
     }
 
-    rows.push([{ text: 'Panel', url: 'http://localhost:3001/admin/mc/workshop' }]);
-
+    rows.push([{ text: 'Panel', url: `${this.getPanelBaseUrl()}/admin/mc/workshop` }]);
     return { inline_keyboard: rows };
+  }
+
+  private getPanelBaseUrl(): string {
+    const configured = (
+      process.env.KIO_PANEL_BASE_URL
+      || process.env.PUBLIC_BASE_URL
+      || process.env.APP_BASE_URL
+      || 'https://webhook.eformspa.com'
+    ).trim();
+
+    return configured.replace(/\/+$/, '');
   }
 
   private buildEscalationCommandLines(jobId: string, source?: string): string[] {
@@ -301,9 +283,8 @@ export class TelegramNotificationService {
     return lines;
   }
 
-  // Keep buildActionUrls for backward compat (EscalationService references it)
   buildActionUrls(_jobId: string): never[] {
-    return []; // No longer used — inline keyboard replaces URL actions
+    return [];
   }
 
   private logNotification(msg: TelegramMessage): void {
@@ -314,20 +295,79 @@ export class TelegramNotificationService {
       `).run(
         msg.jobId || 'system',
         `Telegram bildirim: ${msg.title}`,
-        JSON.stringify({ severity: msg.severity, customer: msg.customer })
+        JSON.stringify({ severity: msg.severity, customer: msg.customer }),
       );
-    } catch { /* non-critical */ }
+    } catch {
+      // non-critical
+    }
+  }
+
+  private async sendMessagePayload(
+    payload: Record<string, unknown>,
+    options: {
+      retryOnNetworkError: boolean;
+      retryOnHttpStatuses: number[];
+      failureLabel: string;
+    },
+  ): Promise<boolean> {
+    const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) {
+          const err = await res.text();
+          const shouldRetry = attempt < 2 && options.retryOnHttpStatuses.includes(res.status);
+          if (shouldRetry) {
+            console.warn('[Telegram] %s failed (attempt %d), retrying: %s %s', options.failureLabel, attempt, res.status, err);
+            await this.delay(500);
+            continue;
+          }
+          console.error(`[Telegram] ${options.failureLabel} failed:`, res.status, err);
+          return false;
+        }
+
+        return true;
+      } catch (err: any) {
+        if (attempt < 2 && options.retryOnNetworkError) {
+          console.warn('[Telegram] %s error (attempt %d), retrying: %s', options.failureLabel, attempt, err.message);
+          await this.delay(500);
+          continue;
+        }
+        console.error(`[Telegram] ${options.failureLabel} error:`, err.message);
+        return false;
+      }
+    }
+
+    return false;
   }
 
   private escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private truncateText(text: string, max: number): string {
     return text.length > max ? `${text.slice(0, max - 3)}...` : text;
   }
 
+  private async delay(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   destroy(): void {
-    if (this.hourResetTimer) clearInterval(this.hourResetTimer);
+    if (this.hourResetTimer) {
+      clearInterval(this.hourResetTimer);
+    }
   }
 }

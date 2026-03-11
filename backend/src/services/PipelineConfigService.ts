@@ -10,6 +10,7 @@
  */
 
 import Database from 'better-sqlite3';
+import { createHash } from 'crypto';
 
 export interface DirectResponseTierConfig {
   enabled: boolean;
@@ -219,7 +220,7 @@ export class PipelineConfigService {
    */
   shouldUseDirectResponse(tier: 'light' | 'standard' | 'advanced'): boolean {
     const config = this.getConfig();
-    return config.directResponse.enabled && config.directResponse.tiers[tier].enabled;
+    return this.shouldUseDirectResponseForConfig(config, tier);
   }
 
   /**
@@ -227,12 +228,7 @@ export class PipelineConfigService {
    */
   shouldSkipPolicy(tier: 'light' | 'standard' | 'advanced'): boolean {
     const config = this.getConfig();
-    if (!config.policy.enabled) return true;
-    // If using direct response for this tier, check tier-specific skip
-    if (this.shouldUseDirectResponse(tier)) {
-      return config.directResponse.tiers[tier].skipPolicyValidation;
-    }
-    return false;
+    return this.shouldSkipPolicyForConfig(config, tier);
   }
 
   /**
@@ -240,10 +236,7 @@ export class PipelineConfigService {
    */
   getCorrectionModel(tierModelId: string): string {
     const config = this.getConfig();
-    if (config.policy.correctionModel === 'same_as_tier') {
-      return tierModelId;
-    }
-    return config.policy.correctionModel;
+    return this.getCorrectionModelForConfig(config, tierModelId);
   }
 
   /**
@@ -251,6 +244,37 @@ export class PipelineConfigService {
    */
   buildDirectSystemPrompt(knowledgeContext: string): string {
     const config = this.getConfig();
+    return this.buildDirectSystemPromptForConfig(config, knowledgeContext);
+  }
+
+  shouldUseDirectResponseForConfig(
+    config: PipelineConfig,
+    tier: 'light' | 'standard' | 'advanced',
+  ): boolean {
+    return config.directResponse.enabled && config.directResponse.tiers[tier].enabled;
+  }
+
+  shouldSkipPolicyForConfig(
+    config: PipelineConfig,
+    tier: 'light' | 'standard' | 'advanced',
+  ): boolean {
+    if (!config.policy.enabled) {
+      return true;
+    }
+    if (this.shouldUseDirectResponseForConfig(config, tier)) {
+      return config.directResponse.tiers[tier].skipPolicyValidation;
+    }
+    return false;
+  }
+
+  getCorrectionModelForConfig(config: PipelineConfig, tierModelId: string): string {
+    if (config.policy.correctionModel === 'same_as_tier') {
+      return tierModelId;
+    }
+    return config.policy.correctionModel;
+  }
+
+  buildDirectSystemPromptForConfig(config: PipelineConfig, knowledgeContext: string): string {
     return [
       config.directPrompt.systemTemplate.replace('{{knowledge}}', knowledgeContext || '(veri yok)'),
       '',
@@ -259,6 +283,12 @@ export class PipelineConfigService {
       '- Emoji zorunlu degildir; dogal ise en fazla 1 emoji kullan.',
       '- Telefon numarasini sadece gerekli oldugunda ekle; aliskanliktan ekleme.',
     ].join('\n');
+  }
+
+  getConfigSignature(config: PipelineConfig): string {
+    return createHash('sha1')
+      .update(JSON.stringify(config))
+      .digest('hex');
   }
 
   // --- Internal helpers ---

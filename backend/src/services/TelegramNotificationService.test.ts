@@ -95,6 +95,36 @@ describe('TelegramNotificationService', () => {
     expect(allButtons.every((button: Record<string, string>) => typeof button.url === 'string')).toBe(true);
     expect(allButtons.some((button: Record<string, string>) => button.url.includes('ig.me/m/customer_name'))).toBe(true);
     expect(allButtons.some((button: Record<string, string>) => button.url.includes('/admin/mc/workshop'))).toBe(true);
+    expect(allButtons.some((button: Record<string, string>) => button.url.startsWith('https://'))).toBe(true);
+    expect(allButtons.some((button: Record<string, string>) => button.url.includes('localhost'))).toBe(false);
     expect(allButtons.some((button: Record<string, string>) => 'callback_data' in button)).toBe(false);
+  });
+
+  it('retries escalation alerts once on transient fetch failure', async () => {
+    fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({
+        ok: true,
+        text: vi.fn().mockResolvedValue('ok'),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new TelegramNotificationService(new FakeDb() as any);
+
+    const ok = await service.notify({
+      jobId: 'job-retry-1',
+      severity: 'high',
+      title: 'Retry test',
+      body: 'Operator review needed',
+      source: 'dm_pipeline',
+      customer: {
+        instagramId: 'ig-2',
+      },
+    });
+
+    service.destroy();
+
+    expect(ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -34,6 +34,7 @@ import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductRe
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
+import { TurkishDMHumanizerService, type TurkishDMHumanizerTrace } from '../services/TurkishDMHumanizerService.js';
 import {
   evaluateSexualIntent,
   getSexualIntentReply,
@@ -72,6 +73,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   const semanticReranker = new DMKnowledgeRerankerService();
   const knowledgeContextService = new DMKnowledgeContextService(rawDb);
   const responseCacheService = new DMResponseCacheService(rawDb);
+  const humanizerService = new TurkishDMHumanizerService();
   const userBlockService = new UserBlockService(rawDb);
 
   // Middleware: session auth (admin panel) OR API key auth (external)
@@ -691,15 +693,51 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const contextAnalysisMs = Date.now() - contextStartTime;
       const conductForReply = _dmConductService?.checkSuspicious('instagram', senderId);
       const conductStateForReply: ConductState = conductForReply?.conductState || 'normal';
+      const pipelineConfig = pipelineConfigService.getConfig();
+      let humanizerFirstInputLength: number | null = null;
+      let humanizerLastOutputLength = 0;
+      let humanizerApplied = false;
+      const humanizerRuleIds = new Set<string>();
+      const updateHumanizerTrace = (humanizerTrace: TurkishDMHumanizerTrace): void => {
+        if (humanizerFirstInputLength === null) {
+          humanizerFirstInputLength = humanizerTrace.inputLength;
+        }
+        humanizerLastOutputLength = humanizerTrace.outputLength;
+        humanizerApplied = humanizerApplied || humanizerTrace.applied;
+        humanizerTrace.ruleIds.forEach(ruleId => humanizerRuleIds.add(ruleId));
+      };
+      const getHumanizerTrace = (): TurkishDMHumanizerTrace | undefined => {
+        if (!((pipelineConfig.humanizer.enabled && pipelineConfig.humanizer.traceEnabled) || humanizerApplied)) {
+          return undefined;
+        }
+
+        return {
+          enabled: pipelineConfig.humanizer.enabled,
+          mode: pipelineConfig.humanizer.mode,
+          applied: humanizerApplied,
+          ruleIds: Array.from(humanizerRuleIds),
+          inputLength: humanizerFirstInputLength ?? 0,
+          outputLength: humanizerLastOutputLength,
+        };
+      };
+      const finalizeResponseText = (responseText: string): string => {
+        const result = humanizerService.humanize({
+          text: sanitizeConductResponse(responseText, conductStateForReply),
+          config: pipelineConfig.humanizer,
+          conductState: conductStateForReply,
+        });
+        updateHumanizerTrace(result.trace);
+        return result.text;
+      };
       const styleProfile = buildDMStyleProfile({
         customerMessage: text,
         conversationHistory: analysis.conversationHistory,
         isNewCustomer: analysis.isNewCustomer,
         followUpHint: analysis.followUpHint,
         conductState: conductStateForReply,
+        humanizerEnabled: pipelineConfig.humanizer.enabled,
       });
       const deterministicTemplates = knowledgeContextService.getDeterministicTemplates();
-      const pipelineConfig = pipelineConfigService.getConfig();
       const earlyDeterministicPilates = conductStateForReply === 'normal' && isPilatesInfoRequest(text)
         ? deterministicTemplates.pilatesInfo
         : null;
@@ -719,12 +757,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         : null;
 
       if (earlyDeterministicPilates) {
+        const earlyPilatesResponse = finalizeResponseText(earlyDeterministicPilates);
         const safetyTokens = sexualIntentResult.totalTokens || 0;
         const contextTokens = (analysis.usageTrace || []).reduce(
           (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
           0,
         );
-        const pilatesTokens = estimateTokens(earlyDeterministicPilates);
+        const pilatesTokens = estimateTokens(earlyPilatesResponse);
         const responseTime = Date.now() - startTime;
         const uncategorizedMs = Math.max(
           0,
@@ -783,6 +822,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             reason: conductForReply?.reason,
           },
           responseStyle: styleProfile.trace,
+          humanizer: getHumanizerTrace(),
           fastLane: {
             used: true,
             kind: 'deterministic_pilates_info',
@@ -842,7 +882,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
         res.json({
           status: 'success',
-          response: earlyDeterministicPilates,
+          response: earlyPilatesResponse,
           senderId,
           sexualIntent: sexualIntentResult,
           analysis: {
@@ -865,12 +905,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       }
 
       if (earlyDeterministicAppointment) {
+        const earlyAppointmentResponse = finalizeResponseText(earlyDeterministicAppointment);
         const safetyTokens = sexualIntentResult.totalTokens || 0;
         const contextTokens = (analysis.usageTrace || []).reduce(
           (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
           0,
         );
-        const appointmentTokens = estimateTokens(earlyDeterministicAppointment);
+        const appointmentTokens = estimateTokens(earlyAppointmentResponse);
         const responseTime = Date.now() - startTime;
         const uncategorizedMs = Math.max(
           0,
@@ -929,6 +970,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             reason: conductForReply?.reason,
           },
           responseStyle: styleProfile.trace,
+          humanizer: getHumanizerTrace(),
           fastLane: {
             used: true,
             kind: 'deterministic_appointment',
@@ -988,7 +1030,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
         res.json({
           status: 'success',
-          response: earlyDeterministicAppointment,
+          response: earlyAppointmentResponse,
           senderId,
           sexualIntent: sexualIntentResult,
           analysis: {
@@ -1161,12 +1203,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       }
 
       if (earlyDeterministicContactFallback) {
+        const earlyContactFallbackResponse = finalizeResponseText(earlyDeterministicContactFallback.response);
         const safetyTokens = sexualIntentResult.totalTokens || 0;
         const contextTokens = (analysis.usageTrace || []).reduce(
           (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
           0,
         );
-        const responseTokens = estimateTokens(earlyDeterministicContactFallback.response);
+        const responseTokens = estimateTokens(earlyContactFallbackResponse);
         const responseTime = Date.now() - startTime;
         const uncategorizedMs = Math.max(
           0,
@@ -1225,6 +1268,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             reason: conductForReply?.reason,
           },
           responseStyle: styleProfile.trace,
+          humanizer: getHumanizerTrace(),
           fastLane: {
             used: true,
             kind: 'deterministic_contact_fallback',
@@ -1284,7 +1328,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
         res.json({
           status: 'success',
-          response: earlyDeterministicContactFallback.response,
+          response: earlyContactFallbackResponse,
           senderId,
           sexualIntent: sexualIntentResult,
           analysis: {
@@ -1689,7 +1733,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         return;
       }
 
-      let finalResponse = sanitizeConductResponse(directResult.response, conductStateForReply);
+      let finalResponse = finalizeResponseText(directResult.response);
       let policyResult = null;
 
       // ═══ STAGE 4: Policy Validation + Faithfulness Check (same as webhook) ═══
@@ -1722,7 +1766,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             },
           );
           if (correction.response) {
-            finalResponse = sanitizeConductResponse(correction.response, conductStateForReply);
+            finalResponse = finalizeResponseText(correction.response);
             // Re-validate corrected response
             const revalidation = await policyService.validate({
               customerMessage: text,
@@ -1740,11 +1784,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               correctionApplied: true,
             };
             if (!revalidation.valid) {
-              finalResponse = pipelineConfig.fallbackMessage;
+              finalResponse = finalizeResponseText(pipelineConfig.fallbackMessage);
               policyResult = { ...revalidation, fallback: true };
             }
           } else {
-            finalResponse = pipelineConfig.fallbackMessage;
+            finalResponse = finalizeResponseText(pipelineConfig.fallbackMessage);
             policyResult = { ...validation, fallback: true };
           }
         }
@@ -1761,9 +1805,6 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         0,
         responseTime - safetyFilterMs - contextAnalysisMs - knowledgeAssemblyMs - directGenerationMs - policyLatencyMs,
       );
-
-      // Build pipeline trace (same structure as real webhook)
-      finalResponse = sanitizeConductResponse(finalResponse, conductStateForReply);
 
       const pipelineTrace = {
         sexualIntent: sexualIntentResult,
@@ -1800,6 +1841,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           reason: conductForReply?.reason,
         },
         responseStyle: styleProfile.trace,
+        humanizer: getHumanizerTrace(),
         fastLane: deterministicResponse ? {
           used: true,
           kind: deterministicSessionKey === 'response-cache'

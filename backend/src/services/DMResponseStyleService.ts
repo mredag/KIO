@@ -209,6 +209,7 @@ export function buildDMStyleProfile(params: {
   isNewCustomer: boolean;
   followUpHint?: FollowUpContextHint | null;
   conductState?: ConductState;
+  humanizerEnabled?: boolean;
 }): DMStyleProfile {
   const normalizedMessage = normalizeText(params.customerMessage);
   const recentAssistantMessages = params.conversationHistory
@@ -325,6 +326,11 @@ export function buildDMStyleProfile(params: {
     lines.push('- Bu mesajda emoji kullanma.');
   } else {
     lines.push('- Emoji zorunlu degil; dogal gorunuyorsa en fazla 1 emoji kullan.');
+  }
+
+  if (params.humanizerEnabled) {
+    lines.push('- "Elbette", "Tabii ki" veya "Memnuniyetle" gibi otomatik acilislarla baslama; gerekiyorsa dogrudan bilgiyle basla.');
+    lines.push('- Bilgi netse cevabi once ver; aliskanliktan "Baska sorunuz olursa..." gibi genel bir kapanis ekleme.');
   }
 
   return {

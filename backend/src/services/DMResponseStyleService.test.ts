@@ -39,6 +39,26 @@ describe('DMResponseStyleService', () => {
     expect(profile.instructions).toContain('mesru soruyu normal bicimde cevaplamaya devam et');
   });
 
+  it('adds anti-robotic prompt steering only when the humanizer is enabled', () => {
+    const withHumanizer = buildDMStyleProfile({
+      customerMessage: 'masaj fiyatlari',
+      conversationHistory: [],
+      isNewCustomer: true,
+      conductState: 'normal',
+      humanizerEnabled: true,
+    });
+    const withoutHumanizer = buildDMStyleProfile({
+      customerMessage: 'masaj fiyatlari',
+      conversationHistory: [],
+      isNewCustomer: true,
+      conductState: 'normal',
+    });
+
+    expect(withHumanizer.instructions).toContain('"Elbette", "Tabii ki" veya "Memnuniyetle"');
+    expect(withHumanizer.instructions).toContain('"Baska sorunuz olursa..."');
+    expect(withoutHumanizer.instructions).not.toContain('"Elbette", "Tabii ki" veya "Memnuniyetle"');
+  });
+
   it('returns final warning style when conduct requires it', () => {
     const profile = buildDMStyleProfile({
       customerMessage: 'tamam',

@@ -35,6 +35,7 @@ import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
+import { TurkishDMHumanizerService, type TurkishDMHumanizerTrace } from '../services/TurkishDMHumanizerService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import {
   aggregateUsageByModel,
@@ -187,6 +188,7 @@ export interface PipelineTrace {
     ctaPolicy: 'only_when_needed' | 'minimal';
     antiRepeatSignals: string[];
   };
+  humanizer?: TurkishDMHumanizerTrace;
   fastLane?: {
     used: boolean;
     kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
@@ -273,6 +275,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const semanticReranker = new DMKnowledgeRerankerService();
   const knowledgeContextService = new DMKnowledgeContextService(db);
   const responseCacheService = new DMResponseCacheService(db);
+  const humanizerService = new TurkishDMHumanizerService();
   const userBlockService = new UserBlockService(db);
   
   const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'kio-instagram-verify';
@@ -1416,17 +1419,49 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               ? `Geri gelen musteri (toplam ${analysis.totalInteractions} mesaj, son 24 saatte mesaj yok)`
               : `Etkilesim: ${analysis.totalInteractions}`;
           const conductStateForReply = trace.conductControl?.state || 'normal';
+          const pipelineConfigService = new PipelineConfigService(db);
+          const pipelineConfig = pipelineConfigService.getConfig();
+          let humanizerFirstInputLength: number | null = null;
+          let humanizerLastOutputLength = 0;
+          let humanizerApplied = false;
+          const humanizerRuleIds = new Set<string>();
+          const updateHumanizerTrace = (humanizerTrace: TurkishDMHumanizerTrace): void => {
+            if (humanizerFirstInputLength === null) {
+              humanizerFirstInputLength = humanizerTrace.inputLength;
+            }
+            humanizerLastOutputLength = humanizerTrace.outputLength;
+            humanizerApplied = humanizerApplied || humanizerTrace.applied;
+            humanizerTrace.ruleIds.forEach(ruleId => humanizerRuleIds.add(ruleId));
+
+            if ((pipelineConfig.humanizer.enabled && pipelineConfig.humanizer.traceEnabled) || humanizerApplied) {
+              trace.humanizer = {
+                enabled: pipelineConfig.humanizer.enabled,
+                mode: pipelineConfig.humanizer.mode,
+                applied: humanizerApplied,
+                ruleIds: Array.from(humanizerRuleIds),
+                inputLength: humanizerFirstInputLength ?? humanizerTrace.inputLength,
+                outputLength: humanizerLastOutputLength,
+              };
+            }
+          };
+          const finalizeResponseText = (responseText: string): string => {
+            const result = humanizerService.humanize({
+              text: sanitizeConductResponse(responseText, conductStateForReply),
+              config: pipelineConfig.humanizer,
+              conductState: conductStateForReply,
+            });
+            updateHumanizerTrace(result.trace);
+            return result.text;
+          };
           const styleProfile = buildDMStyleProfile({
             customerMessage: messageText,
             conversationHistory: analysis.conversationHistory,
             isNewCustomer: analysis.isNewCustomer,
             followUpHint: analysis.followUpHint,
             conductState: conductStateForReply,
+            humanizerEnabled: pipelineConfig.humanizer.enabled,
           });
           trace.responseStyle = styleProfile.trace;
-
-          const pipelineConfigService = new PipelineConfigService(db);
-          const pipelineConfig = pipelineConfigService.getConfig();
           const configSignature = pipelineConfigService.getConfigSignature(pipelineConfig);
           const useDirectResponse = pipelineConfigService.shouldUseDirectResponseForConfig(pipelineConfig, analysis.modelTier);
           let precomputedSkipPolicy = !pipelineConfig.policy.enabled;
@@ -2176,7 +2211,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // ═══════════════════════════════════════════════════════════════
             const policyService = new ResponsePolicyService();
             const MAX_POLICY_RETRIES = pipelineConfig.policy.maxRetries;
-            let finalResponse = sanitizeConductResponse(agentResponse, conductStateForReply);
+            let finalResponse = finalizeResponseText(agentResponse);
             let policyTotalLatencyMs = 0;
             let policyTotalTokens = 0;
             let policyAttempts = 0;
@@ -2255,7 +2290,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   );
 
                   if (correction.response) {
-                    finalResponse = sanitizeConductResponse(correction.response, conductStateForReply);
+                    finalResponse = finalizeResponseText(correction.response);
                     console.log('[PolicyAgent] Direct correction ready (attempt %d, %dms), re-validating...', attempt + 1, correction.latencyMs);
                     continue;
                   }
@@ -2266,12 +2301,10 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
                 // All retries exhausted — use safe fallback
                 policyStatus = 'fallback';
-                finalResponse = pipelineConfig.fallbackMessage;
+                finalResponse = finalizeResponseText(pipelineConfig.fallbackMessage);
                 console.warn('[PolicyAgent] All retries exhausted, using safe fallback response');
               }
             }
-
-            finalResponse = sanitizeConductResponse(finalResponse, conductStateForReply);
 
             // Record policy validation in trace
             trace.policyValidation = {

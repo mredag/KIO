@@ -753,6 +753,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             conversationHistory: analysis.conversationHistory,
             responseMode: analysis.responseDirective.mode,
             fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+            semanticSignals: analysis.matchedKeywords,
           })
         : null;
 
@@ -1553,6 +1554,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             conversationHistory: analysis.conversationHistory,
             responseMode: analysis.responseDirective.mode,
             fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+            semanticSignals: analysis.matchedKeywords,
           });
       const deterministicClarifier = deterministicConductResponse
         || deterministicInfoResponse

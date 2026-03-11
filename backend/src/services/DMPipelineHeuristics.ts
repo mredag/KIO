@@ -23,6 +23,11 @@ export interface ClarifyExhaustedContactDecision {
   clarificationCount: number;
 }
 
+const CONTACT_FALLBACK_ESCAPE_SIGNALS = new Set([
+  'campaign_inquiry',
+  'group_discount_inquiry',
+]);
+
 const PRICING_SIGNAL_PATTERNS = [
   'fiyat',
   'ucret',
@@ -43,6 +48,7 @@ const CLARIFICATION_REPLY_PATTERNS = [
   /\bhangi konuda bilgi almak istediginizi belirtirseniz\b/,
   /\bhangi alt bilgiyi ogrenmek istersiniz\b/,
 ];
+const CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN = /\b(?:kampanya|indirim|promosyon|firsat|grup|toplu|ucretsiz|bedava|hediye)\b/;
 
 function stripPoliteLeadIn(normalized: string): string {
   let stripped = normalized.trim();
@@ -308,6 +314,7 @@ export function buildClarifyExhaustedContactResponse(params: {
   conversationHistory: ConversationEntry[];
   responseMode?: ResponseMode | null;
   fallbackMessage?: string | null;
+  semanticSignals?: string[];
 }): ClarifyExhaustedContactDecision | null {
   if (!params.responseMode || !['clarify_only', 'answer_then_clarify'].includes(params.responseMode)) {
     return null;
@@ -324,6 +331,13 @@ export function buildClarifyExhaustedContactResponse(params: {
   }
 
   const normalizedMessage = normalizeTemplateText(params.messageText || '');
+  const semanticSignals = new Set((params.semanticSignals || []).map(signal => signal.toLowerCase()));
+  const shouldBypassContactFallback = CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN.test(normalizedMessage)
+    || Array.from(CONTACT_FALLBACK_ESCAPE_SIGNALS).some(signal => semanticSignals.has(signal));
+  if (shouldBypassContactFallback) {
+    return null;
+  }
+
   if (params.responseMode === 'answer_then_clarify') {
     const hasPricingSignal = PRICING_SIGNAL_PATTERNS.some(pattern => normalizedMessage.includes(pattern));
     const hasVagueFollowUp = VAGUE_CLARIFICATION_FOLLOW_UP_PATTERN.test(normalizedMessage);

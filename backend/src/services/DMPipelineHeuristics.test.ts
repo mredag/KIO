@@ -190,4 +190,29 @@ describe('DMPipelineHeuristics', () => {
 
     expect(result).toBeNull();
   });
+
+  it('does not fallback to contact for campaign or group-discount follow-ups', () => {
+    const result = buildClarifyExhaustedContactResponse({
+      messageText: 'Su anda kampanya ne var peki',
+      conversationHistory: [
+        {
+          direction: 'outbound',
+          messageText: 'Merhaba! Hangi hizmetimizin fiyatini ogrenmek istersiniz? Masaj, uyelik, PT dersleri ve kurslar gibi seceneklerimiz var.',
+          createdAt: new Date().toISOString(),
+          relativeTime: '1dk once',
+        },
+        {
+          direction: 'outbound',
+          messageText: 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.',
+          createdAt: new Date().toISOString(),
+          relativeTime: 'az once',
+        },
+      ],
+      responseMode: 'clarify_only',
+      fallbackMessage: 'Detayli bilgi icin lutfen iletisime geciniz: 0326 502 58 58.',
+      semanticSignals: ['campaign_inquiry', 'group_discount_inquiry'],
+    });
+
+    expect(result).toBeNull();
+  });
 });

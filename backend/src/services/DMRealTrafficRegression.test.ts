@@ -226,6 +226,29 @@ describe('DM real traffic regressions', () => {
     expect(result?.clarificationCount).toBe(2);
   });
 
+  it('does not stop live campaign follow-ups with the contact fallback', () => {
+    const result = buildClarifyExhaustedContactResponse({
+      messageText: 'suanda kampanya ne var peki',
+      conversationHistory: createHistory([
+        {
+          direction: 'outbound',
+          text: 'Merhaba! Hangi hizmetimizin fiyatini ogrenmek istersiniz? Masaj, uyelik, PT dersleri ve kurslar gibi seceneklerimiz var.',
+          minutesAgo: 3,
+        },
+        {
+          direction: 'outbound',
+          text: 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.',
+          minutesAgo: 1,
+        },
+      ]),
+      responseMode: 'clarify_only',
+      fallbackMessage: 'Detayli bilgi icin lutfen bizi arayin: 0326 502 58 58.',
+      semanticSignals: ['campaign_inquiry', 'group_discount_inquiry'],
+    });
+
+    expect(result).toBeNull();
+  });
+
   describe('real traffic sexual-safety probes', () => {
     let originalApiKey: string | undefined;
 

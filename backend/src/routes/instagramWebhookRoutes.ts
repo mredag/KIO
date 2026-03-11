@@ -1748,6 +1748,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               conversationHistory: analysis.conversationHistory,
               responseMode: analysis.responseDirective.mode,
               fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+              semanticSignals: analysis.matchedKeywords,
             });
 
             if (clarifyExhaustedContact) {

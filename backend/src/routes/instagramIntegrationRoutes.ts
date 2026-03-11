@@ -21,6 +21,226 @@ interface InstagramCustomer {
   isNewCustomer: boolean;
 }
 
+interface MetaGraphApiErrorPayload {
+  message?: string;
+  type?: string;
+  is_transient?: boolean;
+  code?: number;
+  error_subcode?: number;
+  fbtrace_id?: string;
+}
+
+interface MetaGraphApiResponsePayload {
+  message_id?: string;
+  error?: MetaGraphApiErrorPayload;
+  [key: string]: unknown;
+}
+
+interface InstagramSendAttemptFailure {
+  status: number;
+  body: MetaGraphApiResponsePayload | string | null;
+  errorMessage?: string;
+}
+
+export interface InstagramGraphSendResult {
+  ok: boolean;
+  attempts: number;
+  status: number;
+  messageId?: string;
+  body: MetaGraphApiResponsePayload | string | null;
+}
+
+export const DEFAULT_META_SEND_RETRY_DELAYS_MS = [900, 2200];
+
+function getInstagramGraphDomain(token: string): string {
+  return token.startsWith('IGAA') ? 'graph.instagram.com' : 'graph.facebook.com';
+}
+
+function parseMetaGraphResponse(rawBody: string): MetaGraphApiResponsePayload | string | null {
+  const trimmed = rawBody.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as MetaGraphApiResponsePayload;
+  } catch {
+    return trimmed;
+  }
+}
+
+function getMetaErrorPayload(body: MetaGraphApiResponsePayload | string | null): MetaGraphApiErrorPayload | null {
+  if (!body || typeof body === 'string') {
+    return null;
+  }
+
+  const error = body.error;
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  return error;
+}
+
+export function isTransientMetaSendFailure(
+  status: number,
+  body: MetaGraphApiResponsePayload | string | null,
+): boolean {
+  if (status >= 500 || status === 429) {
+    return true;
+  }
+
+  const error = getMetaErrorPayload(body);
+  if (!error) {
+    return false;
+  }
+
+  return error.is_transient === true || error.code === 2;
+}
+
+function isTransientMetaNetworkFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const errorWithName = error as { name?: string; message?: string; cause?: { code?: string } };
+  const message = String(errorWithName.message || '').toLowerCase();
+  const causeCode = String(errorWithName.cause?.code || '').toLowerCase();
+
+  return errorWithName.name === 'AbortError'
+    || causeCode === 'etimedout'
+    || causeCode === 'und_err_connect_timeout'
+    || causeCode === 'und_err_headers_timeout'
+    || causeCode === 'und_err_socket'
+    || message.includes('timeout')
+    || message.includes('socket')
+    || message.includes('econnreset')
+    || message.includes('fetch failed');
+}
+
+function delayMs(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function sendInstagramGraphMessage(params: {
+  token: string;
+  accountId: string;
+  recipientId: string;
+  message: string;
+  retryDelaysMs?: number[];
+  fetchImpl?: typeof fetch;
+}): Promise<InstagramGraphSendResult> {
+  const {
+    token,
+    accountId,
+    recipientId,
+    message,
+    retryDelaysMs = DEFAULT_META_SEND_RETRY_DELAYS_MS,
+    fetchImpl = fetch,
+  } = params;
+
+  const graphDomain = getInstagramGraphDomain(token);
+  const apiVersion = 'v25.0';
+  const url = `https://${graphDomain}/${apiVersion}/${accountId}/messages`;
+  let lastFailure: InstagramSendAttemptFailure = {
+    status: 500,
+    body: null,
+  };
+
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    const attemptNumber = attempt + 1;
+
+    try {
+      const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(12_000)
+        : undefined;
+      const metaRes = await fetchImpl(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipient: { id: recipientId },
+          message: { text: message },
+        }),
+        signal: timeoutSignal,
+      });
+
+      const rawBody = await metaRes.text();
+      const body = parseMetaGraphResponse(rawBody);
+
+      if (metaRes.ok) {
+        return {
+          ok: true,
+          attempts: attemptNumber,
+          status: metaRes.status,
+          messageId: typeof body === 'string' ? undefined : body?.message_id,
+          body,
+        };
+      }
+
+      lastFailure = {
+        status: metaRes.status,
+        body,
+      };
+
+      const shouldRetry = attempt < retryDelaysMs.length && isTransientMetaSendFailure(metaRes.status, body);
+      console.error('[IG Send] Meta API error:', {
+        attempt: attemptNumber,
+        status: metaRes.status,
+        body,
+        willRetry: shouldRetry,
+      });
+
+      if (shouldRetry) {
+        await delayMs(retryDelaysMs[attempt]);
+        continue;
+      }
+
+      return {
+        ok: false,
+        attempts: attemptNumber,
+        status: metaRes.status,
+        body,
+      };
+    } catch (error) {
+      const shouldRetry = attempt < retryDelaysMs.length && isTransientMetaNetworkFailure(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      lastFailure = {
+        status: 500,
+        body: null,
+        errorMessage,
+      };
+
+      console.error('[IG Send] Network error:', {
+        attempt: attemptNumber,
+        error: errorMessage,
+        willRetry: shouldRetry,
+      });
+
+      if (shouldRetry) {
+        await delayMs(retryDelaysMs[attempt]);
+        continue;
+      }
+
+      return {
+        ok: false,
+        attempts: attemptNumber,
+        status: 500,
+        body: errorMessage,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    attempts: retryDelaysMs.length + 1,
+    status: lastFailure.status,
+    body: lastFailure.errorMessage || lastFailure.body,
+  };
+}
+
 export function createInstagramIntegrationRoutes(db: Database.Database): Router {
   const router = Router();
 
@@ -49,53 +269,28 @@ export function createInstagramIntegrationRoutes(db: Database.Database): Router 
         return;
       }
 
-      // Use graph.instagram.com for Instagram User Tokens (IGAA* tokens)
-      // graph.facebook.com only works with Facebook Page Tokens
-      const graphDomain = IG_TOKEN.startsWith('IGAA') ? 'graph.instagram.com' : 'graph.facebook.com';
-      const apiVersion = 'v25.0';
-
-      const metaRes = await fetch(`https://${graphDomain}/${apiVersion}/${IG_ACCOUNT_ID}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${IG_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recipient: { id: recipientId },
-          message: { text: message },
-        }),
+      const sendResult = await sendInstagramGraphMessage({
+        token: IG_TOKEN,
+        accountId: IG_ACCOUNT_ID,
+        recipientId,
+        message,
       });
 
-      const data = await metaRes.json() as Record<string, unknown>;
-
-      if (!metaRes.ok) {
-        console.error('[IG Send] Meta API error:', data);
-        // Retry once on 5xx
-        if (metaRes.status >= 500) {
-          console.log('[IG Send] Retrying...');
-          const retryRes = await fetch(`https://${graphDomain}/${apiVersion}/${IG_ACCOUNT_ID}/messages`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${IG_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              recipient: { id: recipientId },
-              message: { text: message },
-            }),
-          });
-          const retryData = await retryRes.json() as Record<string, unknown>;
-          if (retryRes.ok) {
-            res.json({ success: true, messageId: retryData.message_id });
-            return;
-          }
-        }
-        res.status(metaRes.status).json({ error: 'Meta API error', details: data });
+      if (!sendResult.ok) {
+        res.status(sendResult.status || 500).json({
+          error: 'Meta API error',
+          details: sendResult.body,
+          attempts: sendResult.attempts,
+        });
         return;
       }
 
-      console.log('[IG Send] Message sent to', recipientId);
-      res.json({ success: true, messageId: data.message_id });
+      console.log('[IG Send] Message sent to %s (attempt %d)', recipientId, sendResult.attempts);
+      res.json({
+        success: true,
+        messageId: sendResult.messageId,
+        attempts: sendResult.attempts,
+      });
     } catch (error) {
       console.error('[IG Send] Error:', error);
       res.status(500).json({ error: 'Failed to send message' });

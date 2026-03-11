@@ -19,8 +19,10 @@ import { evaluatePermanentBanCandidate } from '../services/PermanentBanHeuristic
 import {
   APPOINTMENT_MODEL_ID,
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicClarifierResponse,
   buildDeterministicCloseoutResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
   HOURS_APPOINTMENT_MODEL_ID,
   isDirectLocationQuestion,
@@ -191,7 +193,7 @@ export interface PipelineTrace {
   humanizer?: TurkishDMHumanizerTrace;
   fastLane?: {
     used: boolean;
-    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
+    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_campaign' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
     skippedStages: string[];
   };
   cache?: {
@@ -1552,6 +1554,33 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             trace.modelId = PILATES_INFO_MODEL_ID;
             precomputedSkipPolicy = true;
             markFastLane(trace, 'deterministic_pilates_info', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal') {
+            const deterministicCampaignResponse = buildDeterministicCampaignResponse({
+              messageText,
+              semanticSignals: analysis.matchedKeywords,
+              campaignTemplate: deterministicTemplates.campaignInfo,
+            });
+
+            if (deterministicCampaignResponse) {
+              console.log('[Instagram Webhook] Using deterministic campaign response');
+              precomputedAgentResponse = deterministicCampaignResponse.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: CAMPAIGN_INFO_MODEL_ID,
+                tokensEstimated: estimateTokens(precomputedAgentResponse),
+                inputTokens: 0,
+                outputTokens: estimateTokens(precomputedAgentResponse),
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-campaign-info';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = CAMPAIGN_INFO_MODEL_ID;
+              precomputedSkipPolicy = true;
+              markFastLane(trace, 'deterministic_campaign', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+            }
           }
 
           if (!precomputedAgentResponse && conductStateForReply === 'normal' && isDirectLocationQuestion(messageText) && deterministicTemplates.contactLocation) {

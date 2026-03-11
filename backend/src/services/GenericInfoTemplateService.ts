@@ -20,6 +20,10 @@ export interface DeterministicAppointmentTemplateInput {
   whatsappInfo?: string | null;
 }
 
+export interface DeterministicCampaignTemplateInput {
+  campaignInfo?: string | null;
+}
+
 export interface DeterministicHoursAppointmentTemplateInput {
   hoursInfo?: string | null;
   appointmentInfo?: string | null;
@@ -205,6 +209,14 @@ export function buildDeterministicAppointmentTemplate(input: DeterministicAppoin
   }
 
   return lines.join('\n');
+}
+
+export function buildDeterministicCampaignTemplate(input: DeterministicCampaignTemplateInput): string | null {
+  if (!input.campaignInfo?.trim()) {
+    return null;
+  }
+
+  return clipTemplateBlock(input.campaignInfo, 4, 320);
 }
 
 export function buildDeterministicHoursAppointmentTemplate(input: DeterministicHoursAppointmentTemplateInput): string | null {

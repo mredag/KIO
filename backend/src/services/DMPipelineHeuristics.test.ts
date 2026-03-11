@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicCloseoutResponse,
   buildDeterministicClarifierResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
   countRecentClarificationReplies,
   hasAppointmentIntentSignal,
@@ -214,5 +216,31 @@ describe('DMPipelineHeuristics', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it('builds a deterministic campaign response for campaign asks', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Su anda kampanya ne var peki',
+      semanticSignals: ['campaign_inquiry'],
+      campaignTemplate: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    });
+
+    expect(result).toEqual({
+      response: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
+  });
+
+  it('uses a grounded safe fallback when campaign info is unavailable', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Grup indirimi var mi',
+      semanticSignals: ['group_discount_inquiry'],
+      campaignTemplate: null,
+    });
+
+    expect(result).toEqual({
+      response: 'Su anda paylasabilecegim net bir kampanya bilgisi goremiyorum.',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
   });
 });

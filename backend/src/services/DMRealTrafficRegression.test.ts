@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstagramContextService } from './InstagramContextService.js';
 import {
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicClarifierResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   isDirectLocationQuestion,
 } from './DMPipelineHeuristics.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -247,6 +249,17 @@ describe('DM real traffic regressions', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it('grounds live campaign follow-ups to the deterministic KB template', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'suanda kampanya ne var peki',
+      semanticSignals: ['campaign_inquiry', 'group_discount_inquiry'],
+      campaignTemplate: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    });
+
+    expect(result?.modelId).toBe(CAMPAIGN_INFO_MODEL_ID);
+    expect(result?.response).toContain('5. kisiye ayni masaj HEDIYE');
   });
 
   describe('real traffic sexual-safety probes', () => {

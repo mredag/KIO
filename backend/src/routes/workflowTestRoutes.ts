@@ -18,8 +18,10 @@ import { EscalationService } from '../services/EscalationService.js';
 import {
   APPOINTMENT_MODEL_ID,
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicClarifierResponse,
   buildDeterministicCloseoutResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
   HOURS_APPOINTMENT_MODEL_ID,
   isDirectLocationQuestion,
@@ -741,6 +743,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const earlyDeterministicPilates = conductStateForReply === 'normal' && isPilatesInfoRequest(text)
         ? deterministicTemplates.pilatesInfo
         : null;
+      const earlyDeterministicCampaign = conductStateForReply === 'normal'
+        ? buildDeterministicCampaignResponse({
+            messageText: text,
+            semanticSignals: analysis.matchedKeywords,
+            campaignTemplate: deterministicTemplates.campaignInfo,
+          })
+        : null;
       const earlyDeterministicAppointment = conductStateForReply === 'normal' && isStandaloneAppointmentRequest(text)
         ? deterministicTemplates.appointmentBooking
         : null;
@@ -891,6 +900,154 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             matchedKeywords: analysis.matchedKeywords,
             modelTier: analysis.modelTier,
             modelId: PILATES_INFO_MODEL_ID,
+            tierReason: analysis.tierReason,
+            isNewCustomer: analysis.isNewCustomer,
+            conversationLength: analysis.conversationHistory.length,
+            knowledgeCategories: analysis.intentCategories,
+            knowledgeEntriesCount: 0,
+          },
+          conductControl: pipelineTrace.conductControl,
+          responseStyle: pipelineTrace.responseStyle,
+          responseTime,
+          pipelineTrace,
+        });
+        return;
+      }
+
+      if (earlyDeterministicCampaign) {
+        const earlyCampaignResponse = finalizeResponseText(earlyDeterministicCampaign.response);
+        const safetyTokens = sexualIntentResult.totalTokens || 0;
+        const contextTokens = (analysis.usageTrace || []).reduce(
+          (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+          0,
+        );
+        const campaignTokens = estimateTokens(earlyCampaignResponse);
+        const responseTime = Date.now() - startTime;
+        const uncategorizedMs = Math.max(
+          0,
+          responseTime - (sexualIntentResult.latencyMs || 0) - contextAnalysisMs,
+        );
+        const pipelineTrace = {
+          sexualIntent: sexualIntentResult,
+          intentCategories: analysis.intentCategories,
+          matchedKeywords: analysis.matchedKeywords,
+          modelTier: analysis.modelTier,
+          modelId: CAMPAIGN_INFO_MODEL_ID,
+          tierReason: analysis.tierReason,
+          isNewCustomer: analysis.isNewCustomer,
+          conversationHistory: {
+            messageCount: analysis.conversationHistory.length,
+            messages: analysis.conversationHistory.map(entry => ({
+              direction: entry.direction,
+              text: entry.messageText.substring(0, 100),
+              timestamp: entry.createdAt,
+              relativeTime: entry.relativeTime,
+            })),
+            formattedForAI: analysis.formattedHistory.substring(0, 500),
+            followUpHint: analysis.followUpHint,
+            activeState: analysis.conversationState,
+            responseDirective: analysis.responseDirective,
+          },
+          knowledgeCategoriesFetched: [],
+          knowledgeFetchStatus: 'skipped',
+          knowledgeEntriesCount: 0,
+          semanticRetrieval: {
+            enabled: true,
+            strategy: 'sparse_tfidf_chargram',
+            queryText: '',
+            candidateCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            refreshedIndex: false,
+            skippedReason: 'fast_lane_skip',
+          },
+          semanticRerank: {
+            enabled: true,
+            modelId: 'disabled',
+            candidateCount: 0,
+            selectedCount: 0,
+            selectedEntries: [],
+            latencyMs: 0,
+            skippedReason: 'fast_lane_skip',
+            rationale: null,
+          },
+          conductControl: {
+            state: conductStateForReply,
+            shouldReply: conductForReply?.shouldReply !== false,
+            offenseCount: conductForReply?.offenseCount || 0,
+            manualMode: conductForReply?.manualMode || 'auto',
+            silentUntil: conductForReply?.silentUntil || null,
+            reason: conductForReply?.reason,
+          },
+          responseStyle: styleProfile.trace,
+          humanizer: getHumanizerTrace(),
+          fastLane: {
+            used: true,
+            kind: 'deterministic_campaign',
+            skippedStages: ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation'],
+          },
+          cache: {
+            eligible: false,
+            hit: false,
+            cacheClass: null,
+            lookupKey: null,
+            sourceExecutionId: null,
+            status: 'ineligible',
+            observationCount: null,
+          },
+          openclawDispatchStatus: 'skipped',
+          openclawSessionKey: 'deterministic-campaign-info',
+          agentPollDurationMs: 0,
+          directResponse: {
+            used: true,
+            latencyMs: 0,
+            modelId: CAMPAIGN_INFO_MODEL_ID,
+            tokensEstimated: campaignTokens,
+            inputTokens: 0,
+            outputTokens: campaignTokens,
+          },
+          policyValidation: { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
+          metaSendStatus: 'skipped',
+          totalResponseTimeMs: responseTime,
+          tokensEstimated: safetyTokens + contextTokens + campaignTokens,
+          timingBreakdown: {
+            ingestDelayMs: null,
+            customerPerceivedTotalMs: null,
+            safetyFilterMs: sexualIntentResult.latencyMs || 0,
+            contextAnalysisMs,
+            knowledgeAssemblyMs: 0,
+            openclawDispatchMs: 0,
+            metaSendMs: 0,
+            uncategorizedMs,
+          },
+          tokenBreakdown: {
+            safetyTokens,
+            contextTokens,
+            rerankTokens: 0,
+            directTokens: campaignTokens,
+            directInputTokens: 0,
+            directOutputTokens: campaignTokens,
+            policyTokens: 0,
+            totalTokens: safetyTokens + contextTokens + campaignTokens,
+          },
+        };
+
+        rawDb.prepare(`
+          UPDATE instagram_interactions
+          SET pipeline_trace = ?, model_tier = ?, model_used = ?
+          WHERE id = ?
+        `).run(JSON.stringify(pipelineTrace), analysis.modelTier, CAMPAIGN_INFO_MODEL_ID, inboundId);
+
+        res.json({
+          status: 'success',
+          response: earlyCampaignResponse,
+          senderId,
+          sexualIntent: sexualIntentResult,
+          analysis: {
+            intentCategories: analysis.intentCategories,
+            matchedKeywords: analysis.matchedKeywords,
+            modelTier: analysis.modelTier,
+            modelId: CAMPAIGN_INFO_MODEL_ID,
             tierReason: analysis.tierReason,
             isNewCustomer: analysis.isNewCustomer,
             conversationLength: analysis.conversationHistory.length,
@@ -1518,6 +1675,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const deterministicPilatesResponse = conductStateForReply === 'normal' && isPilatesInfoRequest(text)
         ? deterministicTemplates.pilatesInfo
         : null;
+      const deterministicCampaignResponse = conductStateForReply === 'normal'
+        ? buildDeterministicCampaignResponse({
+            messageText: text,
+            semanticSignals: analysis.matchedKeywords,
+            campaignTemplate: deterministicTemplates.campaignInfo,
+          })
+        : null;
       const deterministicLocationResponse = conductStateForReply === 'normal' && isDirectLocationQuestion(text)
         ? deterministicTemplates.contactLocation
         : null;
@@ -1541,6 +1705,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const deterministicContactFallback = deterministicConductResponse
         || deterministicInfoResponse
         || deterministicPilatesResponse
+        || deterministicCampaignResponse
         || deterministicLocationResponse
         || deterministicPhoneResponse
         || deterministicHoursAppointmentResponse
@@ -1559,6 +1724,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       const deterministicClarifier = deterministicConductResponse
         || deterministicInfoResponse
         || deterministicPilatesResponse
+        || deterministicCampaignResponse
         || deterministicLocationResponse
         || deterministicPhoneResponse
         || deterministicHoursAppointmentResponse
@@ -1577,6 +1743,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       let deterministicResponse = deterministicConductResponse?.response
         || deterministicInfoResponse
         || deterministicPilatesResponse
+        || deterministicCampaignResponse?.response
         || deterministicLocationResponse
         || deterministicPhoneResponse
         || deterministicHoursAppointmentResponse
@@ -1592,6 +1759,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           ? 'deterministic/contact-location-v1'
             : deterministicPilatesResponse
               ? PILATES_INFO_MODEL_ID
+            : deterministicCampaignResponse
+              ? CAMPAIGN_INFO_MODEL_ID
             : deterministicPhoneResponse
               ? 'deterministic/contact-phone-v1'
             : deterministicHoursAppointmentResponse
@@ -1611,6 +1780,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         ? 'deterministic-info-template'
         : deterministicPilatesResponse
         ? 'deterministic-pilates-info'
+        : deterministicCampaignResponse
+        ? 'deterministic-campaign-info'
         : deterministicLocationResponse
           ? 'deterministic-contact-location'
           : deterministicPhoneResponse
@@ -1854,6 +2025,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
                 ? 'deterministic_info_template'
                 : deterministicSessionKey === 'deterministic-pilates-info'
                   ? 'deterministic_pilates_info'
+                : deterministicSessionKey === 'deterministic-campaign-info'
+                  ? 'deterministic_campaign'
                 : deterministicSessionKey === 'deterministic-contact-location'
                     ? 'deterministic_contact_location'
                   : deterministicSessionKey === 'deterministic-contact-phone'

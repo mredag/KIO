@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDeterministicAppointmentTemplate,
+  buildDeterministicCampaignTemplate,
   buildDeterministicCloseoutTemplate,
   buildDeterministicHoursAppointmentTemplate,
   buildDeterministicHoursTemplate,
@@ -97,6 +98,12 @@ describe('GenericInfoTemplateService', () => {
 
   it('builds the deterministic closeout reply', () => {
     expect(buildDeterministicCloseoutTemplate()).toBe('Rica ederiz.');
+  });
+
+  it('builds a deterministic campaign snippet from KB campaign info', () => {
+    expect(buildDeterministicCampaignTemplate({
+      campaignInfo: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    })).toBe('🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!');
   });
 
   it('builds deterministic combined hours and appointment snippets', () => {

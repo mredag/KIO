@@ -25,6 +25,7 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - 2026-03-12: The `codex/turkish-dm-humanizer` branch was re-validated with targeted backend tests and a master PR note was prepared so the tested DM humanizer tranche can be merged without the newer OpenClaw ops/docs work.
 - 2026-03-12: PR `#3` merged `codex/turkish-dm-humanizer` into `master` as commit `08c0f55`, and the merged tree was re-verified locally with the same targeted DM/backend tests plus a frontend production build.
 - 2026-03-12: Pi production backend was reconciled to merged `master` by staging a clean `08c0f55` checkout, rebuilding it with the repo production build path, preserving `backend/.env` and `data/`, and restarting PM2 from `~/kio-new/backend` with `humanizer.enabled=true` still verified.
+- 2026-03-12: Repo hygiene cleanup removed committed root-level scratch artifacts, old DM review mock screenshots, and stale temp query files; `backend/scripts/simulateRealDmTraffic.ts` now defaults to the real repo `data/kiosk.db` path instead of a tracked Pi snapshot file.
 
 ## Open Work
 - Keep `README.md` aligned enough for human onboarding while treating it as an overview, not the live runtime contract.
@@ -38,7 +39,6 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 ## Known Drift
 - `README.md` still contains older architecture/runtime wording and should not be treated as the source of truth for what is live today.
 - Historical workspace memory files grew into alternate status documents; they now need to remain thin mirrors instead of parallel canon.
-- Root-level scratch and investigation artifacts still exist in this repo and should be cleaned when the related work is closed out.
 - The repo-stored OpenClaw example now targets `2026.3.8` semantics, but Pi runtime parity and the live machine-local secret migration still need explicit verification.
 
 ## Last Verified

@@ -12,6 +12,9 @@ import {
 } from '../src/services/DMPipelineHeuristics.js';
 import { evaluateSexualIntent } from '../src/middleware/sexualIntentFilter.js';
 
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const defaultReplayDbPath = path.resolve(scriptDir, '..', '..', 'data', 'kiosk.db');
+
 type ReplayRow = {
   instagram_id: string;
   message_text: string;
@@ -58,7 +61,7 @@ function parseArgs(argv: string[]) {
   }
 
   return {
-    dbPath: args.get('--db') || path.resolve(process.cwd(), '..', 'kiosk_pi_20260305.db'),
+    dbPath: args.get('--db') || defaultReplayDbPath,
     limit: Number(args.get('--limit') || 20),
     senderId: args.get('--sender') || null,
     sinceDays: Number(args.get('--days') || 30),

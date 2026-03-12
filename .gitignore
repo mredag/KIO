@@ -68,6 +68,22 @@ backups/
 /verify-*.js
 /check-*.js
 /list-*.js
+/check_*.sql
+/temp_*
+/test_*.sh
+/test_*.json
+/verify_*.sql
+/trace*.json
+/get_logs.sh
+/get_trace*.js
+/get_trace*.sh
+/enable_test_mode.sh
+/add_sexual_intent_trace.patch
+/dm-review-deploy.tar
+/_wa_section.md
+/update_sexual_intent_trace.sh
+/kiosk_pi_*.db
+/tmp/
 
 # Progress/status docs (temporary)
 WHATSAPP_SETUP_PROGRESS.md

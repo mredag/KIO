@@ -279,7 +279,8 @@ router.get('/dashboard', (_req: Request, res: Response) => {
       `).all();
       const igCost = db.prepare(`
         SELECT COALESCE(SUM(cost), 0) as cost FROM mc_cost_ledger
-        WHERE job_source = 'instagram' AND date(created_at) = date('now')
+        WHERE (job_source = 'instagram' OR job_source LIKE 'instagram-%')
+          AND date(created_at) = date('now')
       `).get() as any;
       instagram_dm_stats = {
         total_today: igStats?.total_today || 0,

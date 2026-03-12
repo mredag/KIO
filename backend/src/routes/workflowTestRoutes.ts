@@ -10,7 +10,11 @@ import { DMKnowledgeContextService } from '../services/DMKnowledgeContextService
 import { DMResponseCacheService } from '../services/DMResponseCacheService.js';
 import { KnowledgeSelectionService } from '../services/KnowledgeSelectionService.js';
 import { DMKnowledgeRetrievalService } from '../services/DMKnowledgeRetrievalService.js';
-import { DMKnowledgeRerankerService, formatSelectedEvidenceBlock } from '../services/DMKnowledgeRerankerService.js';
+import {
+  DMKnowledgeRerankerService,
+  formatSelectedEvidenceBlock,
+  type SemanticRerankTrace,
+} from '../services/DMKnowledgeRerankerService.js';
 import { UserBlockService } from '../services/UserBlockService.js';
 import { evaluatePermanentBanCandidate } from '../services/PermanentBanHeuristics.js';
 import { DmSSEManager } from '../services/DmSSEManager.js';
@@ -36,6 +40,11 @@ import {
 } from '../services/DMPipelineHeuristics.js';
 import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
+import {
+  aggregateUsageByModel,
+  splitEstimatedTokens,
+  type ModelUsageEntry,
+} from '../services/CostEstimationService.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
 import { TurkishDMHumanizerService, type TurkishDMHumanizerTrace } from '../services/TurkishDMHumanizerService.js';
@@ -62,6 +71,54 @@ export function setSimulatorDMSafety(svc: DMSafetyPhraseService | null): void {
 let _dmConductService: SuspiciousUserService | null = null;
 export function setSimulatorConductService(svc: SuspiciousUserService | null): void {
   _dmConductService = svc;
+}
+
+function addModelUsageEntry(
+  entries: ModelUsageEntry[],
+  modelId: string | null | undefined,
+  inputTokens: number | null | undefined,
+  outputTokens: number | null | undefined,
+): void {
+  const normalizedModelId = String(modelId || '').trim();
+  const safeInputTokens = Math.max(0, Math.round(inputTokens || 0));
+  const safeOutputTokens = Math.max(0, Math.round(outputTokens || 0));
+
+  if (!normalizedModelId || (safeInputTokens === 0 && safeOutputTokens === 0)) {
+    return;
+  }
+
+  entries.push({
+    modelId: normalizedModelId,
+    inputTokens: safeInputTokens,
+    outputTokens: safeOutputTokens,
+  });
+}
+
+function addAIUsageTraceEntries(entries: ModelUsageEntry[], usageTrace: AIUsageTrace[] | undefined): void {
+  for (const traceEntry of usageTrace || []) {
+    addModelUsageEntry(entries, traceEntry.modelId, traceEntry.inputTokens, traceEntry.outputTokens);
+  }
+}
+
+function insertSimulatorCostLedgerRows(rawDb: ReturnType<DatabaseService['getDb']>, entries: ModelUsageEntry[]): void {
+  const costEntries = aggregateUsageByModel(entries);
+  if (costEntries.length === 0) {
+    return;
+  }
+
+  const insertCostLedger = rawDb.prepare(`
+    INSERT INTO mc_cost_ledger (agent_id, model, provider, input_tokens, output_tokens, cost, job_source, created_at)
+    VALUES ('instagram-dm', ?, 'openrouter', ?, ?, ?, 'simulator', datetime('now'))
+  `);
+
+  for (const costEntry of costEntries) {
+    insertCostLedger.run(
+      costEntry.modelId,
+      costEntry.inputTokens,
+      costEntry.outputTokens,
+      costEntry.estimatedCostUsd,
+    );
+  }
 }
 
 /**
@@ -568,6 +625,9 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               reason: sexualIntentResult.reason,
               modelUsed: sexualIntentResult.modelUsed,
               latencyMs: sexualIntentLatency,
+              inputTokens: sexualIntentResult.usage?.inputTokens,
+              outputTokens: sexualIntentResult.usage?.outputTokens,
+              totalTokens: sexualIntentResult.usage?.totalTokens,
             },
             conductControl: {
               state: effectiveState,
@@ -593,6 +653,12 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
             new Date().toISOString(),
             JSON.stringify(trace),
           );
+
+          insertSimulatorCostLedgerRows(rawDb, [{
+            modelId: sexualIntentResult.modelUsed,
+            inputTokens: sexualIntentResult.usage?.inputTokens || 0,
+            outputTokens: sexualIntentResult.usage?.outputTokens || 0,
+          }]);
 
           try {
             DmSSEManager.getInstance().pushEvent({
@@ -1508,7 +1574,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         refreshedIndex: false,
         skippedReason: 'not_run' as string | null,
       };
-      let semanticRerankTrace = {
+      let semanticRerankTrace: SemanticRerankTrace = {
         enabled: true,
         modelId: 'disabled',
         candidateCount: 0,
@@ -1907,6 +1973,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
 
       let finalResponse = finalizeResponseText(directResult.response);
       let policyResult = null;
+      const policyUsageEntries: ModelUsageEntry[] = [];
+      const validationModelId = pipelineConfig.policy.validationModel;
 
       // ═══ STAGE 4: Policy Validation + Faithfulness Check (same as webhook) ═══
       if (!skipPolicy) {
@@ -1918,8 +1986,14 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           followUpHint: analysis.followUpHint,
           activeTopic: analysis.activeTopicLabel,
           responseDirective: analysis.responseDirective,
-        });
+        }, validationModelId);
         policyResult = validation;
+        addModelUsageEntry(
+          policyUsageEntries,
+          validation.usageModelUsed || validation.modelUsed,
+          validation.usage?.inputTokens,
+          validation.usage?.outputTokens,
+        );
 
         if (!validation.valid) {
           // Try correction
@@ -1937,6 +2011,12 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               responseDirective: analysis.responseDirective,
             },
           );
+          addModelUsageEntry(
+            policyUsageEntries,
+            correction.modelUsed,
+            correction.usage?.inputTokens,
+            correction.usage?.outputTokens,
+          );
           if (correction.response) {
             finalResponse = finalizeResponseText(correction.response);
             // Re-validate corrected response
@@ -1948,7 +2028,13 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               followUpHint: analysis.followUpHint,
               activeTopic: analysis.activeTopicLabel,
               responseDirective: analysis.responseDirective,
-            });
+            }, validationModelId, 2);
+            addModelUsageEntry(
+              policyUsageEntries,
+              revalidation.usageModelUsed || revalidation.modelUsed,
+              revalidation.usage?.inputTokens,
+              revalidation.usage?.outputTokens,
+            );
             policyResult = {
               ...revalidation,
               originalViolations: validation.violations,
@@ -1967,6 +2053,12 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
       }
 
       const responseTime = Date.now() - startTime;
+      const safetyTokens = sexualIntentResult.usage?.totalTokens || 0;
+      const contextTokens = (analysis.usageTrace || []).reduce(
+        (sum: number, entry: AIUsageTrace) => sum + (entry.totalTokens || 0),
+        0,
+      );
+      const rerankTokens = semanticRerankTrace.totalTokens || 0;
       const directInputTokens = directResult.usage?.inputTokens || 0;
       const directOutputTokens = directResult.usage?.outputTokens || 0;
       const policyTokens = policyResult?.tokensEstimated || 0;
@@ -2074,11 +2166,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           totalTokens: policyResult.tokensEstimated || 0,
           violations: policyResult.violations,
           reason: policyResult.reason,
-          modelUsed: policyResult.modelUsed,
+          modelUsed: policyResult.usageModelUsed || policyResult.modelUsed,
         } : { status: 'skipped', attempts: 0, totalLatencyMs: 0, totalTokens: 0 },
         metaSendStatus: 'skipped',
         totalResponseTimeMs: responseTime,
-        tokensEstimated: directResult.tokensEstimated + policyTokens,
+        tokensEstimated: safetyTokens + contextTokens + rerankTokens + directResult.tokensEstimated + policyTokens,
         timingBreakdown: {
           ingestDelayMs: null,
           customerPerceivedTotalMs: null,
@@ -2090,11 +2182,14 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           uncategorizedMs,
         },
         tokenBreakdown: {
+          safetyTokens,
+          contextTokens,
+          rerankTokens,
           directTokens: directResult.tokensEstimated,
           directInputTokens,
           directOutputTokens,
           policyTokens,
-          totalTokens: directResult.tokensEstimated + policyTokens,
+          totalTokens: safetyTokens + contextTokens + rerankTokens + directResult.tokensEstimated + policyTokens,
         },
       };
 
@@ -2105,6 +2200,40 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         INSERT INTO instagram_interactions (id, instagram_id, direction, message_text, intent, ai_response, response_time_ms, model_used, tokens_estimated, pipeline_trace, model_tier, execution_id, created_at)
         VALUES (?, ?, 'outbound', ?, 'ai_response', ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(outboundId, senderId, finalResponse, finalResponse, responseTime, directResult.modelId, pipelineTrace.tokensEstimated, JSON.stringify(pipelineTrace), analysis.modelTier, executionId, outboundNow);
+
+      const simulatorCostEntries: ModelUsageEntry[] = [];
+      addAIUsageTraceEntries(simulatorCostEntries, analysis.usageTrace);
+      addModelUsageEntry(
+        simulatorCostEntries,
+        sexualIntentResult.modelUsed,
+        sexualIntentResult.usage?.inputTokens,
+        sexualIntentResult.usage?.outputTokens,
+      );
+      addModelUsageEntry(
+        simulatorCostEntries,
+        semanticRerankTrace.modelId,
+        semanticRerankTrace.inputTokens,
+        semanticRerankTrace.outputTokens,
+      );
+      addModelUsageEntry(
+        simulatorCostEntries,
+        directResult.modelId,
+        directInputTokens,
+        directOutputTokens,
+      );
+      for (const usageEntry of policyUsageEntries) {
+        simulatorCostEntries.push(usageEntry);
+      }
+      if (simulatorCostEntries.length === 0 && pipelineTrace.tokensEstimated > 0) {
+        const fallbackSplit = splitEstimatedTokens(pipelineTrace.tokensEstimated);
+        addModelUsageEntry(
+          simulatorCostEntries,
+          directResult.modelId,
+          fallbackSplit.inputTokens,
+          fallbackSplit.outputTokens,
+        );
+      }
+      insertSimulatorCostLedgerRows(rawDb, simulatorCostEntries);
 
       try {
         contextService.saveConversationState(senderId, text, finalResponse, analysis);

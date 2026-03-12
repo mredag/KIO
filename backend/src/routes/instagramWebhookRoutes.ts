@@ -1286,6 +1286,28 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 JSON.stringify(trace),
               );
 
+              const safetyCostEntries = aggregateUsageByModel([
+                {
+                  modelId: sexualDecision.modelUsed,
+                  inputTokens: sexualDecision.usage?.inputTokens || 0,
+                  outputTokens: sexualDecision.usage?.outputTokens || 0,
+                },
+              ]);
+              if (safetyCostEntries.length > 0) {
+                const insertSafetyCost = db.prepare(`
+                  INSERT INTO mc_cost_ledger (agent_id, model, provider, input_tokens, output_tokens, cost, job_source, created_at)
+                  VALUES ('instagram-dm', ?, 'openrouter', ?, ?, ?, 'instagram', datetime('now'))
+                `);
+                for (const costEntry of safetyCostEntries) {
+                  insertSafetyCost.run(
+                    costEntry.modelId,
+                    costEntry.inputTokens,
+                    costEntry.outputTokens,
+                    costEntry.estimatedCostUsd,
+                  );
+                }
+              }
+
               console.log('[Instagram Webhook] Safety/conduct triggered:', {
                 senderId,
                 action: sexualDecision.action,

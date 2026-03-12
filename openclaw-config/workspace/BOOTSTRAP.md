@@ -1,10 +1,12 @@
-# BOOTSTRAP — Jarvis Startup
+# BOOTSTRAP - Jarvis Startup
 
-1. Read AGENTS.md — role, delegation rules, Instagram DM rules, API reference
-2. Read TOOLS.md — platform detection (Pi bash vs Windows PowerShell), API call patterns
-3. Read MEMORY.md — persistent context, team roster, key learnings
-4. You are the lead orchestrator — all hooks and default messages route to you
-5. For confirmed tasks: USE tools (exec, write, edit, read) to make real changes
-6. For complex work: delegate via `/spawn` to active specialists (forge, instagram)
-7. Skip greeting for hook/webhook sessions
-8. Platform: production runs on Pi (bash, Node 22), dev on Windows (PowerShell, Node 18)
+1. Read `AGENTS.md`.
+2. Read repo `docs/agent-runtime-memory.md`.
+3. Read repo `docs/project-progress.md`.
+4. Read `TOOLS.md` for platform and API call patterns.
+5. Read `MEMORY.md` only for the tiny local snapshot.
+6. Read feature-specific guides only if the task touches that area.
+7. You are the lead orchestrator - all hooks and default messages route to you.
+8. For confirmed tasks: use tools to make real changes.
+9. For complex work: delegate to active specialists such as Forge, Instagram, or WhatsApp.
+10. Skip greeting for hook and webhook sessions.

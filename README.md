@@ -100,10 +100,17 @@ npm run format                        # Format all
 
 ## Documentation
 
+- `AGENTS.md` - stable repo rules and agent read order
+- `docs/agent-runtime-memory.md` - canonical current-state doc for live behavior, deployment state, and critical runbooks
+- `docs/project-progress.md` - recent milestones, open work, drift, and last verification snapshots
+- `docs/agent-docs-contract.md` - source-of-truth hierarchy and mandatory doc update rules
+- `docs/OPENCLAW_OPS_UPGRADE_PLAN.md` - OpenClaw feature review, KIO adoption ideas, and Pi upgrade checklist
 - [ULTIMATE_GUIDE.md](.kiro/steering/ULTIMATE_GUIDE.md) — Start here (architecture, bug patterns, API reference)
 - [openclaw-development.md](.kiro/steering/openclaw-development.md) — OpenClaw/Instagram AI pipeline
 - [deployment-raspberry-pi.md](.kiro/steering/deployment-raspberry-pi.md) — Pi deployment
 - [ui-ux-testing.md](.kiro/steering/ui-ux-testing.md) — Puppeteer UI testing
+
+README is an overview only. For live operational truth, agent behavior, and recent project state, use the repo-native docs above first.
 
 ## Default Credentials
 

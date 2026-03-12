@@ -70,6 +70,7 @@ export default function Header({ onSearchClick, onMobileMenuToggle }: HeaderProp
       '/admin/mc/autopilot': 'AutoPilot',
       '/admin/mc/activity': 'Canli Akis',
       '/admin/mc/cron': 'Zamanlayici',
+      '/admin/mc/gateways': 'OpenClaw Ops',
     };
 
     if (pathMap[path]) {

@@ -21,7 +21,7 @@ Machine-readable project intelligence for AI agents.
 | `/admin/ai-prompts` | `frontend/src/pages/admin/AIPromptsPage.tsx` | AI prompts (removed from sidebar) |
 | `/admin/interactions` | `frontend/src/pages/admin/InteractionsPage.tsx` | DM interactions |
 | `/admin/workflow-test` | `frontend/src/pages/admin/WorkflowTestPage.tsx` | DM Simulator |
-| `/admin/mc` | REDIRECT → `/admin` | Redirects to DashboardPage |
+| `/admin/mc` | `frontend/src/pages/admin/mc/MCDashboardPage.tsx` | Mission Control dashboard |
 | `/admin/mc/workshop` | `frontend/src/pages/admin/mc/MCWorkshopPage.tsx` | Job kanban |
 | `/admin/mc/agents` | `frontend/src/pages/admin/mc/MCAgentsPage.tsx` | Agent management |
 | `/admin/mc/jarvis` | `frontend/src/pages/admin/mc/MCJarvisPage.tsx` | Jarvis chat UI |
@@ -34,11 +34,11 @@ Machine-readable project intelligence for AI agents.
 | `/admin/mc/documents` | `frontend/src/pages/admin/mc/MCDocumentsPage.tsx` | Vector docs (removed from sidebar) |
 | `/admin/mc/approvals` | `frontend/src/pages/admin/mc/MCApprovalsPage.tsx` | Approval quality gates (removed from sidebar) |
 | `/admin/mc/comms` | `frontend/src/pages/admin/mc/MCCommsPage.tsx` | Agent comms & boards (removed from sidebar) |
-| `/admin/mc/gateways` | `frontend/src/pages/admin/mc/MCGatewaysPage.tsx` | Gateway management (removed from sidebar) |
+| `/admin/mc/gateways` | `frontend/src/pages/admin/mc/MCGatewaysPage.tsx` | OpenClaw ops dashboard + gateway registry |
 | `/admin/mc/skills` | `frontend/src/pages/admin/mc/MCSkillsPage.tsx` | Skills marketplace (removed from sidebar) |
 | `/admin/mc/tags` | `frontend/src/pages/admin/mc/MCTagsPage.tsx` | Tags + custom fields (removed from sidebar) |
 
-CRITICAL: `/admin/mc` redirects to `/admin`. The main dashboard is `DashboardPage.tsx`, NOT `MCDashboardPage.tsx`.
+CRITICAL: `/admin` is the main business dashboard (`DashboardPage.tsx`), while `/admin/mc` is the Mission Control dashboard (`MCDashboardPage.tsx`).
 
 ## API Route → File Mapping (Backend)
 
@@ -104,7 +104,7 @@ CRITICAL: `/admin/mc` redirects to `/admin`. The main dashboard is `DashboardPag
 | useAutoPilotSSE | `frontend/src/hooks/useAutoPilotSSE.ts` | Real-time AutoPilot updates |
 | useActivityApi | `frontend/src/hooks/useActivityApi.ts` | Activity feed API calls |
 | useActivitySSE | `frontend/src/hooks/useActivitySSE.ts` | Real-time activity updates |
-| useGatewayApi | `frontend/src/hooks/useGatewayApi.ts` | Gateway CRUD + health check |
+| useGatewayApi | `frontend/src/hooks/useGatewayApi.ts` | Gateway CRUD + OpenClaw ops summary |
 | useTagsApi | `frontend/src/hooks/useTagsApi.ts` | Tags + custom fields CRUD |
 | useDmKontrolApi | `frontend/src/hooks/useDmKontrolApi.ts` | DM Kontrol feed, health, errors, model-stats, test-mode, wa-pipeline-config |
 | useDmKontrolSSE | `frontend/src/hooks/useDmKontrolSSE.ts` | Real-time DM pipeline updates |

@@ -1,13 +1,27 @@
 # Agent Runtime Memory
 
-Use this as the short, current-state reference before changing code, debugging DM behavior, or editing OpenClaw integration.
+This is the canonical current-state document for KIO. Use it before changing code, debugging DM behavior, editing OpenClaw integration, or reasoning about what is live right now.
+
+## Document Role
+- Canonical owner for live behavior, deployment state, architecture split, and critical operating runbooks.
+- Recent shipped work and active drift belong in `docs/project-progress.md`.
+- Stable repo rules and guardrails belong in `AGENTS.md`.
+- Document ownership and duplication rules live in `docs/agent-docs-contract.md`.
 
 ## Read Order
-1. Read this file first for the current operating state.
-2. Read `openclaw-config/workspace/PROJECT_MAP.md` for codebase navigation before multi-file work.
-3. Read `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` before live KB edits.
-4. On Pi, treat `~/.openclaw/workspace/*.md` and `~/.openclaw/workspaces/forge/*.md` as the live agent instruction source.
-5. Compare the docs with the real code/config before editing.
+1. Read repo `AGENTS.md` first for stable repo rules and guardrails.
+2. Read this file for the current operating state.
+3. Read `docs/project-progress.md` for the recent-change ledger and known drift.
+4. Read the relevant feature guide only if the task touches that area.
+5. Read `openclaw-config/workspace/PROJECT_MAP.md` for codebase navigation before multi-file work.
+6. On Pi, treat `~/.openclaw/workspace/*.md` and `~/.openclaw/workspaces/forge/*.md` as the live agent instruction source.
+7. Compare the docs with the real code/config before editing.
+
+## Use This vs Other Docs
+- Update this file for behavior/runtime/deployment changes.
+- Update `docs/project-progress.md` for milestones, recent changes, open work, and drift notes.
+- Update `AGENTS.md` only for stable instructions, not routine status churn.
+- Keep workspace `MEMORY.md` and `DEVELOPER_MEMORY.md` files as short mirrors that point back here.
 
 ## Current Live Agent Set
 - `main` = Jarvis commander (`openrouter/openai/gpt-4.1` on Pi)
@@ -137,7 +151,17 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Pi path: `/home/eform-kio/kio-new/`
 - Agent workspace docs should resolve at `~/.openclaw/workspace/docs/` (recommended symlink target: `/home/eform-kio/kio-new/docs/` on Pi).
 - Pi backend process: `pm2 restart kio-backend`
+- On March 12, 2026, Pi backend cutover completed: PM2 `kio-backend` now runs from `/home/eform-kio/kio-new/backend` on `master` commit `08c0f55`.
+- The Pi `~/kio-new` checkout was reconciled from a clean staged `master` clone, and `git status --short` is now clean there.
+- The previous live repo trees were archived instead of deleted:
+  - `/home/eform-kio/kio-archives/kio-new-pre-master-cutover-20260312-092212`
+  - `/home/eform-kio/kio-archives/kio-humanizer-test-merged-c31eb64-20260312-092247`
+- Fresh Pi safety bundle for the cutover lives at `/home/eform-kio/kio-backups/pi-master-reconcile-20260312-090916` and includes repo tarballs, diffs, `.env` backups, `~/.openclaw/openclaw.json`, PM2 state, and a consistent SQLite backup.
+- Post-cutover verification on March 12, 2026: `/api/kiosk/health` returned `status=ok`, and `/api/mc/dm-kontrol/pipeline-config` still reported `humanizer.enabled=true`.
 - Pi OpenClaw process: `pm2 restart kio-openclaw`
+- On March 12, 2026, the Pi repo-side OpenClaw docs/workspaces were synced from `openclaw-config/` into `~/.openclaw/` with `deployment/raspberry-pi/sync-openclaw-runtime.sh --restart`; machine-local `~/.openclaw/openclaw.json` was intentionally not overwritten.
+- The Pi is still running OpenClaw `2026.3.2` after that sync. The repo example and local Windows CLI review already target `2026.3.8`, so version parity is still pending.
+- On the current Pi OpenClaw `2026.3.2`, `openclaw gateway health` can take about 15 seconds even when RPC is healthy after restart. For quick post-restart checks, prefer `pm2 status` plus `openclaw gateway status --json`.
 - Production backend builds must use `npx tsc -p tsconfig.build.json`, then copy `src/database/*.sql` to `dist/database/`
 
 ## Workspace Hygiene

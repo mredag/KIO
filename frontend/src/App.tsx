@@ -271,6 +271,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/mc/gateways"
+              element={
+                <ProtectedRoute>
+                  <LazyRoutes.MCGatewaysPage />
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="/admin/settings"

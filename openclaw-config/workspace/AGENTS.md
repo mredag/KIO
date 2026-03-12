@@ -83,60 +83,28 @@ When a user sends `/durum` or `durum` Ã¢â‚¬â€ fetch and report system
 5. **Codebase changes** Ã¢â‚¬â€ On Pi: delegate to Forge agent. On Windows: use Codex CLI
 6. **Instagram DM generation** Ã¢â‚¬â€ ONLY when session key starts with `hook:instagram:`
 
-## OpenClaw Change Rule
-When the task touches OpenClaw behavior or live KB behavior, read:
-- `DEVELOPER_MEMORY.md`
-- `PROJECT_MAP.md`
-- `KNOWLEDGE_BASE.md` for live KB changes
-- `docs/agent-runtime-memory.md`
-- `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md`
-- `docs/DM_CONDUCT_AGENT_GUIDE.md` before DM conduct resets or overrides
+## Repo Documentation Read Order
+Before system debugging, code changes, OpenClaw tasks, or pipeline tuning:
+1. Read repo `AGENTS.md`.
+2. Read repo `docs/agent-runtime-memory.md`.
+3. Read repo `docs/project-progress.md`.
+4. Read `PROJECT_MAP.md` before multi-file code work.
+5. Read the relevant feature guide only if the task touches that area:
+   - `KNOWLEDGE_BASE.md` and `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` for live KB changes
+   - `docs/DM_CONDUCT_AGENT_GUIDE.md` before conduct resets or overrides
+   - `docs/DM_RESPONSE_CACHE_AGENT_GUIDE.md` before cache behavior changes
 
-If `docs/` is not mounted in this workspace, read the same files from:
+If `docs/` is not mounted in this workspace, use:
 - Pi: `/home/eform-kio/kio-new/docs/`
 - Windows: `D:\PERSONEL\Eform-Resepsion-Kiosk-ClawBot\docs\`
+
+This workspace's `DEVELOPER_MEMORY.md` and `MEMORY.md` files are mirrors only. They should stay short and point back to the repo docs.
 
 Keep this split intact:
 - OpenClaw = transport, sessions, hooks, workspace bootstrap
 - KIO = data, policies, business logic, logging, admin workflows
 
 For OpenClaw changes, prefer the smallest safe change that preserves this split.
-
-## Codebase Memory (Read First for System and Code Tasks)
-Before system debugging, code changes, or pipeline tuning:
-- Read `DEVELOPER_MEMORY.md` in this workspace first.
-- Then read `PROJECT_MAP.md` for codebase navigation.
-- Use `docs/agent-runtime-memory.md` as the fuller repo reference.
-- If `docs/` is missing in workspace, use:
-  - Pi: `/home/eform-kio/kio-new/docs/agent-runtime-memory.md`
-  - Windows: `D:\PERSONEL\Eform-Resepsion-Kiosk-ClawBot\docs\agent-runtime-memory.md`
-
-Current live defaults you should keep in mind:
-- OpenClaw agent IDs are `main`, `forge`, `instagram`, and `whatsapp`.
-- Mission Control mirrors the channel agents as `instagram-dm` and `whatsapp-dm`.
-- On Pi, `main` runs `openrouter/openai/gpt-4.1`, `forge` runs `openai-codex/gpt-5.3-codex`, and `instagram` / `whatsapp` use `openrouter/openai/gpt-4o-mini`.
-- Jarvis keeps `openrouter/openai/gpt-4.1` as its primary commander model.
-- OpenClaw handles image inputs through the global `agents.defaults.imageModel`, which is set to `openrouter/openai/gpt-4o-mini` on the Pi.
-- Instagram DM routing order is: pre-check exits -> deterministic handlers -> direct response -> OpenClaw fallback only if no response exists yet or direct call fails.
-- OpenClaw fallback dispatch uses `analysis.modelId` and Instagram hook mapping targets `agentId: "instagram"` (not Jarvis `main`).
-- Cost tracking is provider-aware: `openai-codex/*` becomes `openai-oauth` with zero cost when `OPENAI_API_KEY` is not set; unprefixed `openai/*` tier models remain OpenRouter-routed unless changed.
-- Verify inbound timing behavior in the tracked Instagram webhook route before changing it. Do not assume local-only fragment buffering exists on every machine.
-- Do not assume Instagram buttons or quick replies are reliable. Use compact text menus for customer choices.
-- Keep generic pricing and topic-selection clarifiers lightweight when possible.
-- DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent` (operator label: `Bad customer`).
-- Use `Bad customer` in operator-facing language; keep `silent` for DB/API/internal references only.
-- The live webhook and simulator now share the same conduct ladder before normal DM generation.
-- `DMResponseStyleService` now shapes tone to reduce repetition. Emoji should be optional, not habitual.
-- `retry_question` from the safety layer is not a conduct strike by itself. Do not escalate users into `guarded`, `final_warning`, or `Bad customer` from an ambiguous-but-unconfirmed phrase alone.
-- For obvious euphemisms like `mutlu son`, keep the visible legacy rejection wording; the conduct ladder escalates silently in the background.
-- Price/package difference questions like `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions and must stay on the allow path.
-- Legitimate couple / same-room massage requests (`esimle gelecegim`, `beraber ayni odada`, `iki kisilik oda`, `cift odaniz var mi`) are normal business questions. They must stay `allow` and route to room-availability grounding.
-- `silent` is not a friendly state and no longer means no-reply for Instagram DM. It means the shortest possible factual business answer, with no warmth, CTA, or follow-up.
-- The generic `bilgi almak istiyorum` info template is still allowed for users who are not in internal `silent` / operator-facing `Bad customer` mode. Deterministic clarifier templates stay normal-only.
-- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must answer directly from contact KB. Do not ask which area the customer is near unless they explicitly ask for transport detail.
-- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` must break stale service-topic carryover. Pure `tesekkurler` / closure turns should not revive the previous service topic.
-- Service-specific pricing must stay grounded to the service + duration + price tuple in KB. Do not invent or validate a missing combo just because the raw price number exists elsewhere.
-- Shared Telegram operator actions are command/API based. Do not trust callback buttons or plain button-label text as proof that an action succeeded.
 
 ## Sub-Agent Delegation (MANDATORY for complex tasks)
 You are an ORCHESTRATOR. DELEGATE using `/spawn` or `sessions_spawn` tool.

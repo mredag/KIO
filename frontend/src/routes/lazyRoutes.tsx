@@ -53,6 +53,7 @@ export const MCDMReviewPage = lazy(() => import('../pages/admin/mc/MCDMReviewPag
 export const MCAutoPilotPage = lazy(() => import('../pages/admin/mc/MCAutoPilotPage'));
 export const MCActivityPage = lazy(() => import('../pages/admin/mc/MCActivityPage'));
 export const MCCronPage = lazy(() => import('../pages/admin/mc/MCCronPage'));
+export const MCGatewaysPage = lazy(() => import('../pages/admin/mc/MCGatewaysPage'));
 
 // Admin - System
 export const SettingsPage = lazy(() => import('../pages/admin/SettingsPage'));

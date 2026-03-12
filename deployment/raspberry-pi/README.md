@@ -63,6 +63,36 @@ Rules:
 - `openclaw-config/openclaw.json` stays ignored and machine-local.
 - Do not overwrite `~/.openclaw/openclaw.json` from git.
 - Workspace markdown files (`AGENTS.md`, `DEVELOPER_MEMORY.md`, `KNOWLEDGE_BASE.md`, and similar `*.md` runtime docs) are refreshed when the repo copy is newer, so live agent instructions do not stay stale after docs-only updates.
+- If you rebuild or refresh the machine-local OpenClaw config from the repo example, make sure the OpenClaw process environment provides:
+  - `OPENROUTER_API_KEY`
+  - `OPENCLAW_HOOKS_TOKEN`
+  - `OPENCLAW_GATEWAY_TOKEN`
+  - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_ADMIN_CHAT_ID`
+
+## OpenClaw Runtime Upgrade
+
+Use the dedicated helper for OpenClaw version upgrades on the Pi:
+
+```bash
+cd ~/kio-new/deployment/raspberry-pi
+bash ./upgrade-openclaw.sh --dry-run
+bash ./upgrade-openclaw.sh
+```
+
+What it does:
+- creates a pre-feature snapshot unless skipped
+- creates an OpenClaw runtime backup when the installed CLI supports it
+- runs preflight `doctor`, `security audit`, and `gateway status`
+- upgrades OpenClaw through `npm i -g openclaw@latest`
+- optionally syncs tracked OpenClaw runtime files
+- restarts PM2 `kio-openclaw`
+- runs post-upgrade checks including `gateway health`
+
+Notes:
+- This keeps the existing PM2 + `~/start-openclaw.sh` production pattern.
+- It does not overwrite `~/.openclaw/openclaw.json` from git.
+- Use `--sync-runtime` only when you intentionally want the tracked workspace/transform files refreshed as part of the same maintenance window.
 
 ## Backups and Restore
 
@@ -111,6 +141,7 @@ curl http://localhost:3001/api/kiosk/health
 - `setup-raspberry-pi.sh`: fresh install bootstrap
 - `update-pi.sh`: standard live update
 - `sync-openclaw-runtime.sh`: sync tracked OpenClaw files to runtime
+- `upgrade-openclaw.sh`: snapshot, back up, upgrade, restart, and verify OpenClaw on Pi
 - `backup-database.sh`: manual DB backup
 - `pre-feature-snapshot.sh`: full rollback snapshot before risky feature work
 - `restore-backup.sh`: interactive DB restore

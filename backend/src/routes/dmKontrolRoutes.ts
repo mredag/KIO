@@ -632,7 +632,28 @@ router.get('/response-cache/stats', (_req: Request, res: Response) => {
   }
 });
 
-// 16. POST /response-cache/clear — Clear exact-match DM response cache
+// 16. GET /response-cache/entries — List current exact-match DM response cache rows
+router.get('/response-cache/entries', (req: Request, res: Response) => {
+  try {
+    if (!_responseCache) {
+      return res.status(500).json({ error: 'Response cache not initialized' });
+    }
+
+    const status = req.query.status === 'active' || req.query.status === 'candidate'
+      ? req.query.status
+      : 'all';
+    const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : undefined;
+
+    res.json({
+      status,
+      items: _responseCache.listEntries({ status, limit }),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 17. POST /response-cache/clear — Clear exact-match DM response cache
 router.post('/response-cache/clear', (_req: Request, res: Response) => {
   try {
     if (!_responseCache) {
@@ -644,7 +665,7 @@ router.post('/response-cache/clear', (_req: Request, res: Response) => {
   }
 });
 
-// 17. POST /response-cache/seed — Seed exact-match DM response cache from recent safe Instagram history
+// 18. POST /response-cache/seed — Seed exact-match DM response cache from recent safe Instagram history
 router.post('/response-cache/seed', (req: Request, res: Response) => {
   try {
     if (!_responseCache || !_pipelineConfig) {

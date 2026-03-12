@@ -160,6 +160,7 @@ export function initializeDatabase(dbPath: string): Database.Database {
 
   const kbSafetyTables = [
     'dm_response_cache',
+    'dm_inbound_buffer',
     'knowledge_base_change_sets',
     'knowledge_base_history',
   ];
@@ -171,6 +172,8 @@ export function initializeDatabase(dbPath: string): Database.Database {
     for (const statement of statements) {
       if (statement.includes('dm_response_cache') ||
           statement.includes('idx_dm_response_cache_') ||
+          statement.includes('dm_inbound_buffer') ||
+          statement.includes('idx_dm_inbound_buffer_') ||
           statement.includes('knowledge_base_change_sets') ||
           statement.includes('knowledge_base_history')) {
         db.exec(statement);

@@ -45,6 +45,19 @@ export interface DMResponseCacheHit {
   status: 'candidate' | 'active';
 }
 
+export interface DMResponseCacheEntry {
+  id: string;
+  cacheClass: DMResponseCacheClass;
+  normalizedMessage: string;
+  responseText: string;
+  sourceExecutionId: string | null;
+  observationCount: number;
+  status: 'candidate' | 'active';
+  firstSeenAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+}
+
 export interface DMResponseCacheRecordParams extends DMResponseCacheLookupParams {
   responseText: string;
   sourceExecutionId: string | null;
@@ -433,6 +446,63 @@ export class DMResponseCacheService {
       candidate: totals.candidate || 0,
       classes,
     };
+  }
+
+  listEntries(params?: {
+    status?: 'all' | 'candidate' | 'active';
+    limit?: number;
+  }): DMResponseCacheEntry[] {
+    const status = params?.status === 'candidate' || params?.status === 'active'
+      ? params.status
+      : 'all';
+    const limit = Math.max(1, Math.min(params?.limit || 50, 200));
+    const now = new Date().toISOString();
+
+    const rows = (status === 'all'
+      ? this.db.prepare(`
+        SELECT
+          id,
+          cache_class as cacheClass,
+          normalized_message as normalizedMessage,
+          response_text as responseText,
+          source_execution_id as sourceExecutionId,
+          observation_count as observationCount,
+          status,
+          first_seen_at as firstSeenAt,
+          last_seen_at as lastSeenAt,
+          expires_at as expiresAt
+        FROM dm_response_cache
+        WHERE expires_at >= ?
+        ORDER BY
+          CASE status WHEN 'active' THEN 0 ELSE 1 END,
+          observation_count DESC,
+          last_seen_at DESC,
+          id ASC
+        LIMIT ?
+      `).all(now, limit)
+      : this.db.prepare(`
+        SELECT
+          id,
+          cache_class as cacheClass,
+          normalized_message as normalizedMessage,
+          response_text as responseText,
+          source_execution_id as sourceExecutionId,
+          observation_count as observationCount,
+          status,
+          first_seen_at as firstSeenAt,
+          last_seen_at as lastSeenAt,
+          expires_at as expiresAt
+        FROM dm_response_cache
+        WHERE expires_at >= ?
+          AND status = ?
+        ORDER BY
+          observation_count DESC,
+          last_seen_at DESC,
+          id ASC
+        LIMIT ?
+      `).all(now, status, limit)) as DMResponseCacheEntry[];
+
+    return rows;
   }
 
   clear(): { deleted: number } {

@@ -19,8 +19,10 @@ import { evaluatePermanentBanCandidate } from '../services/PermanentBanHeuristic
 import {
   APPOINTMENT_MODEL_ID,
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicClarifierResponse,
   buildDeterministicCloseoutResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
   HOURS_APPOINTMENT_MODEL_ID,
   isDirectLocationQuestion,
@@ -35,6 +37,8 @@ import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
 import type { PolicyValidationResult } from '../services/ResponsePolicyService.js';
+import { DMInboundAggregationService, type DMInboundAggregationTrace } from '../services/DMInboundAggregationService.js';
+import { TurkishDMHumanizerService, type TurkishDMHumanizerTrace } from '../services/TurkishDMHumanizerService.js';
 import { EscalationService } from '../services/EscalationService.js';
 import {
   aggregateUsageByModel,
@@ -187,9 +191,11 @@ export interface PipelineTrace {
     ctaPolicy: 'only_when_needed' | 'minimal';
     antiRepeatSignals: string[];
   };
+  inboundAggregation?: DMInboundAggregationTrace;
+  humanizer?: TurkishDMHumanizerTrace;
   fastLane?: {
     used: boolean;
-    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
+    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_campaign' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
     skippedStages: string[];
   };
   cache?: {
@@ -273,6 +279,8 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
   const semanticReranker = new DMKnowledgeRerankerService();
   const knowledgeContextService = new DMKnowledgeContextService(db);
   const responseCacheService = new DMResponseCacheService(db);
+  const inboundAggregationService = new DMInboundAggregationService(db);
+  const humanizerService = new TurkishDMHumanizerService();
   const userBlockService = new UserBlockService(db);
   
   const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || 'kio-instagram-verify';
@@ -831,6 +839,27 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     }
   }
 
+  inboundAggregationService.setDispatchHandler(async ({ customerId, messageText, trace: aggregationTrace }) => {
+    const selfPort = process.env.PORT || '3001';
+    const response = await fetch(`http://127.0.0.1:${selfPort}/webhook/instagram`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        __bufferedDispatch: true,
+        senderId: customerId,
+        messageText,
+        metaTimestampMs: Date.parse(aggregationTrace.lastReceivedAt),
+        aggregationTrace,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Buffered self-dispatch failed with status ${response.status}`);
+    }
+  });
+
   /**
    * GET /webhook/instagram - Webhook verification
    * Meta sends a GET request to verify the webhook URL
@@ -868,56 +897,91 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
     // Log the message for debugging
     try {
-      const entry = body?.entry?.[0];
-      const messaging = entry?.messaging?.[0];
-      
-      if (messaging?.message?.text) {
+      const isBufferedDispatch = body?.__bufferedDispatch === true;
+      const entry = isBufferedDispatch ? null : body?.entry?.[0];
+      const messaging = isBufferedDispatch ? null : entry?.messaging?.[0];
+      const senderId = isBufferedDispatch
+        ? String(body?.senderId || 'unknown')
+        : (messaging?.sender?.id || 'unknown');
+      let messageText = isBufferedDispatch
+        ? String(body?.messageText || '')
+        : String(messaging?.message?.text || '');
+      const incomingMetaTimestampMs = isBufferedDispatch
+        ? normalizeMetaTimestampMs(body?.metaTimestampMs)
+        : normalizeMetaTimestampMs(messaging?.timestamp);
+      let aggregationTrace: DMInboundAggregationTrace | null = isBufferedDispatch
+        ? (body?.aggregationTrace || null)
+        : null;
+
+      if (messageText) {
         console.log('[Instagram Webhook] DM received:', {
-          from: messaging.sender?.id,
-          text: messaging.message.text.substring(0, 50) + '...',
-          timestamp: messaging.timestamp
+          from: senderId,
+          text: messageText.substring(0, 50) + '...',
+          timestamp: incomingMetaTimestampMs ?? messaging?.timestamp,
+          bufferedDispatch: isBufferedDispatch,
         });
         
         // Forward to OpenClaw /hooks/agent endpoint, then poll for response and handle send+log
         if (OPENCLAW_WEBHOOK_URL && OPENCLAW_HOOKS_TOKEN) {
-          const senderId = messaging.sender?.id || 'unknown';
-          const messageText = messaging.message.text;
+          if (!isBufferedDispatch) {
+            fetchAndStoreInstagramProfile(senderId).catch(() => {});
 
-          // Fetch Instagram profile (name) — fire-and-forget, non-blocking
-          fetchAndStoreInstagramProfile(senderId).catch(() => {});
-
-          // Echo-back filter — ignore messages sent BY the page itself
-          // Meta sends echo webhooks for outbound messages (is_echo=true or sender=pageId)
-          const pageId = entry?.id;
-          if (messaging.message?.is_echo === true || (pageId && senderId === pageId)) {
-            console.log('[Instagram Webhook] Ignoring echo-back (sender=%s, pageId=%s, is_echo=%s)', senderId, pageId, messaging.message?.is_echo);
-            return;
-          }
-
-          // Test mode gate — skip non-whitelisted senders
-          if (isTestModeBlocked(senderId)) {
-            console.log('[Instagram Webhook] Test mode: ignoring sender %s (not in whitelist)', senderId);
-            return;
-          }
-
-          // Dedup guard — Meta retries webhooks, causing duplicate AI responses
-          const mid = messaging.message?.mid;
-          if (mid) {
-            // Clean old entries
-            const now = Date.now();
-            for (const [key, ts] of recentMessageIds) {
-              if (now - ts > DEDUP_WINDOW_MS) recentMessageIds.delete(key);
-            }
-            if (recentMessageIds.has(mid)) {
-              console.log('[Instagram Webhook] Duplicate message ignored (mid: %s)', mid);
+            // Echo-back filter — ignore messages sent BY the page itself
+            // Meta sends echo webhooks for outbound messages (is_echo=true or sender=pageId)
+            const pageId = entry?.id;
+            if (messaging?.message?.is_echo === true || (pageId && senderId === pageId)) {
+              console.log('[Instagram Webhook] Ignoring echo-back (sender=%s, pageId=%s, is_echo=%s)', senderId, pageId, messaging?.message?.is_echo);
               return;
             }
-            recentMessageIds.set(mid, now);
+
+            // Test mode gate — skip non-whitelisted senders
+            if (isTestModeBlocked(senderId)) {
+              console.log('[Instagram Webhook] Test mode: ignoring sender %s (not in whitelist)', senderId);
+              return;
+            }
+
+            // Dedup guard — Meta retries webhooks, causing duplicate AI responses
+            const mid = messaging?.message?.mid;
+            if (mid) {
+              // Clean old entries
+              const now = Date.now();
+              for (const [key, ts] of recentMessageIds) {
+                if (now - ts > DEDUP_WINDOW_MS) recentMessageIds.delete(key);
+              }
+              if (recentMessageIds.has(mid)) {
+                console.log('[Instagram Webhook] Duplicate message ignored (mid: %s)', mid);
+                return;
+              }
+              recentMessageIds.set(mid, now);
+            }
+
+            const aggregationResult = inboundAggregationService.ingest({
+              channel: 'instagram',
+              customerId: senderId,
+              messageText,
+              receivedAt: incomingMetaTimestampMs != null
+                ? new Date(incomingMetaTimestampMs).toISOString()
+                : new Date().toISOString(),
+            });
+
+            if (aggregationResult.action === 'buffered') {
+              console.log('[Instagram Webhook] Buffered short DM fragment:', {
+                senderId,
+                fragmentCount: aggregationResult.trace?.fragmentCount || 1,
+                fragments: aggregationResult.trace?.fragments || [messageText],
+              });
+              return;
+            }
+
+            if (aggregationResult.messageText) {
+              messageText = aggregationResult.messageText;
+            }
+            aggregationTrace = aggregationResult.trace;
           }
 
           const API_KEY = process.env.KIO_API_KEY || '';
           const startTime = Date.now();
-          const metaTimestampMs = normalizeMetaTimestampMs(messaging.timestamp);
+          const metaTimestampMs = incomingMetaTimestampMs;
           const ingestDelayMs = metaTimestampMs ? Math.max(0, startTime - metaTimestampMs) : null;
           let contextAnalysisMs = 0;
           let knowledgeAssemblyMs = 0;
@@ -934,6 +998,9 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
           let pipelineError: PipelineError | null = null;
           markFastLane(trace, 'none', []);
           setCacheTrace(trace, {});
+          if (aggregationTrace) {
+            trace.inboundAggregation = aggregationTrace;
+          }
 
           const activeBlock = userBlockService.checkBlock('instagram', senderId);
           if (activeBlock.isBlocked) {
@@ -1416,17 +1483,49 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               ? `Geri gelen musteri (toplam ${analysis.totalInteractions} mesaj, son 24 saatte mesaj yok)`
               : `Etkilesim: ${analysis.totalInteractions}`;
           const conductStateForReply = trace.conductControl?.state || 'normal';
+          const pipelineConfigService = new PipelineConfigService(db);
+          const pipelineConfig = pipelineConfigService.getConfig();
+          let humanizerFirstInputLength: number | null = null;
+          let humanizerLastOutputLength = 0;
+          let humanizerApplied = false;
+          const humanizerRuleIds = new Set<string>();
+          const updateHumanizerTrace = (humanizerTrace: TurkishDMHumanizerTrace): void => {
+            if (humanizerFirstInputLength === null) {
+              humanizerFirstInputLength = humanizerTrace.inputLength;
+            }
+            humanizerLastOutputLength = humanizerTrace.outputLength;
+            humanizerApplied = humanizerApplied || humanizerTrace.applied;
+            humanizerTrace.ruleIds.forEach(ruleId => humanizerRuleIds.add(ruleId));
+
+            if ((pipelineConfig.humanizer.enabled && pipelineConfig.humanizer.traceEnabled) || humanizerApplied) {
+              trace.humanizer = {
+                enabled: pipelineConfig.humanizer.enabled,
+                mode: pipelineConfig.humanizer.mode,
+                applied: humanizerApplied,
+                ruleIds: Array.from(humanizerRuleIds),
+                inputLength: humanizerFirstInputLength ?? humanizerTrace.inputLength,
+                outputLength: humanizerLastOutputLength,
+              };
+            }
+          };
+          const finalizeResponseText = (responseText: string): string => {
+            const result = humanizerService.humanize({
+              text: sanitizeConductResponse(responseText, conductStateForReply),
+              config: pipelineConfig.humanizer,
+              conductState: conductStateForReply,
+            });
+            updateHumanizerTrace(result.trace);
+            return result.text;
+          };
           const styleProfile = buildDMStyleProfile({
             customerMessage: messageText,
             conversationHistory: analysis.conversationHistory,
             isNewCustomer: analysis.isNewCustomer,
             followUpHint: analysis.followUpHint,
             conductState: conductStateForReply,
+            humanizerEnabled: pipelineConfig.humanizer.enabled,
           });
           trace.responseStyle = styleProfile.trace;
-
-          const pipelineConfigService = new PipelineConfigService(db);
-          const pipelineConfig = pipelineConfigService.getConfig();
           const configSignature = pipelineConfigService.getConfigSignature(pipelineConfig);
           const useDirectResponse = pipelineConfigService.shouldUseDirectResponseForConfig(pipelineConfig, analysis.modelTier);
           let precomputedSkipPolicy = !pipelineConfig.policy.enabled;
@@ -1517,6 +1616,33 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             trace.modelId = PILATES_INFO_MODEL_ID;
             precomputedSkipPolicy = true;
             markFastLane(trace, 'deterministic_pilates_info', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse && conductStateForReply === 'normal') {
+            const deterministicCampaignResponse = buildDeterministicCampaignResponse({
+              messageText,
+              semanticSignals: analysis.matchedKeywords,
+              campaignTemplate: deterministicTemplates.campaignInfo,
+            });
+
+            if (deterministicCampaignResponse) {
+              console.log('[Instagram Webhook] Using deterministic campaign response');
+              precomputedAgentResponse = deterministicCampaignResponse.response;
+              trace.directResponse = {
+                used: true,
+                latencyMs: 0,
+                modelId: CAMPAIGN_INFO_MODEL_ID,
+                tokensEstimated: estimateTokens(precomputedAgentResponse),
+                inputTokens: 0,
+                outputTokens: estimateTokens(precomputedAgentResponse),
+              };
+              trace.openclawDispatchStatus = 'skipped' as any;
+              trace.openclawSessionKey = 'deterministic-campaign-info';
+              trace.agentPollDurationMs = 0;
+              trace.modelId = CAMPAIGN_INFO_MODEL_ID;
+              precomputedSkipPolicy = true;
+              markFastLane(trace, 'deterministic_campaign', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+            }
           }
 
           if (!precomputedAgentResponse && conductStateForReply === 'normal' && isDirectLocationQuestion(messageText) && deterministicTemplates.contactLocation) {
@@ -1713,6 +1839,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
               conversationHistory: analysis.conversationHistory,
               responseMode: analysis.responseDirective.mode,
               fallbackMessage: pipelineConfig.fallbackMessage || deterministicTemplates.contactPhone,
+              semanticSignals: analysis.matchedKeywords,
             });
 
             if (clarifyExhaustedContact) {
@@ -2176,7 +2303,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             // ═══════════════════════════════════════════════════════════════
             const policyService = new ResponsePolicyService();
             const MAX_POLICY_RETRIES = pipelineConfig.policy.maxRetries;
-            let finalResponse = sanitizeConductResponse(agentResponse, conductStateForReply);
+            let finalResponse = finalizeResponseText(agentResponse);
             let policyTotalLatencyMs = 0;
             let policyTotalTokens = 0;
             let policyAttempts = 0;
@@ -2255,7 +2382,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   );
 
                   if (correction.response) {
-                    finalResponse = sanitizeConductResponse(correction.response, conductStateForReply);
+                    finalResponse = finalizeResponseText(correction.response);
                     console.log('[PolicyAgent] Direct correction ready (attempt %d, %dms), re-validating...', attempt + 1, correction.latencyMs);
                     continue;
                   }
@@ -2266,12 +2393,10 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
 
                 // All retries exhausted — use safe fallback
                 policyStatus = 'fallback';
-                finalResponse = pipelineConfig.fallbackMessage;
+                finalResponse = finalizeResponseText(pipelineConfig.fallbackMessage);
                 console.warn('[PolicyAgent] All retries exhausted, using safe fallback response');
               }
             }
-
-            finalResponse = sanitizeConductResponse(finalResponse, conductStateForReply);
 
             // Record policy validation in trace
             trace.policyValidation = {

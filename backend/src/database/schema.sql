@@ -279,6 +279,23 @@ CREATE INDEX IF NOT EXISTS idx_dm_response_cache_lookup ON dm_response_cache(loo
 CREATE INDEX IF NOT EXISTS idx_dm_response_cache_expires ON dm_response_cache(expires_at);
 CREATE INDEX IF NOT EXISTS idx_dm_response_cache_class ON dm_response_cache(cache_class, status);
 
+CREATE TABLE IF NOT EXISTS dm_inbound_buffer (
+  channel TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
+  merged_text TEXT NOT NULL,
+  fragments_json TEXT NOT NULL,
+  fragment_count INTEGER NOT NULL DEFAULT 1,
+  first_received_at TEXT NOT NULL,
+  last_received_at TEXT NOT NULL,
+  flush_after TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('buffering', 'processing')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (channel, customer_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dm_inbound_buffer_flush ON dm_inbound_buffer(flush_after, status);
+
 CREATE TABLE IF NOT EXISTS dm_review_runs (
   id TEXT PRIMARY KEY,
   status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'completed', 'failed')),

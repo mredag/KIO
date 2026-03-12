@@ -44,14 +44,21 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `openai-codex/*` is treated as `openai-oauth` with `cost=0` when `OPENAI_API_KEY` is not set; if API key billing is enabled, provider becomes `openai-api`.
 - In current DM runtime, unprefixed `openai/*` tier models are still treated as OpenRouter-routed unless explicitly changed.
 - Optional OpenAI API pricing envs for better estimates: `OPENAI_API_DEFAULT_INPUT_PER_MILLION_USD`, `OPENAI_API_DEFAULT_OUTPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_INPUT_PER_MILLION_USD`, `OPENAI_API_CODEX53_OUTPUT_PER_MILLION_USD`.
-- Do not assume a local-only DM fragment buffer exists on every machine. Verify the tracked `instagramWebhookRoutes.ts` implementation before changing inbound timing behavior.
-- Do not assume any old "3 merged words" or fixed 5 second buffering rule exists unless it is present in the deployed tracked code.
+- DM response cache is `DMResponseCacheService.ts`: exact-match only, Instagram-side, and used only for safe simple turns.
+- Cache activation is evidence-based, not immediate: a response stays `candidate` until repeated observations promote it to `active`.
+- DM Kontrol backend exposes cache ops at `GET /api/mc/dm-kontrol/response-cache/stats`, `GET /api/mc/dm-kontrol/response-cache/entries`, `POST /api/mc/dm-kontrol/response-cache/seed`, and `POST /api/mc/dm-kontrol/response-cache/clear`.
+- Full operational guide for agents lives in `docs/DM_RESPONSE_CACHE_AGENT_GUIDE.md`.
+- A real cache hit appears in pipeline trace as `fastLane.kind = "response_cache"` plus a populated `trace.cache` block.
+- Instagram inbound fragment buffering is tracked in `DMInboundAggregationService.ts` and wired only in the live Instagram webhook path.
+- The current buffer rule is limited to short fragments only: no punctuation, max 24 chars, max 3 tokens, with a 5 second rolling window before flush.
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.
 - Generic pricing clarifiers and topic-selection clarifiers should stay lightweight and deterministic when possible.
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).
 - Operator-facing UI, reports, and agent messages should say `Bad customer`; keep `silent` only for DB/API/internal references.
+- Permanent blocks are a separate `UserBlockService` layer, not the same thing as `silent` / `Bad customer`.
+- Active blocked users are checked before normal DM generation and can skip replies entirely with `blocked/temporary` or `blocked/permanent`.
 - `DMResponseStyleService` now injects anti-repetition style guidance into direct-response prompts and OpenClaw fallback prompts. Emoji should be optional, not habitual.
 - Deterministic clarifier templates stay normal-only, but the generic `bilgi almak istiyorum` info template is still allowed for any user who is not in internal `silent` / operator-facing `Bad customer` mode.
 - For obvious sexual/euphemistic asks such as `mutlu son`, the visible customer-facing reply should stay the legacy rejection copy; the conduct ladder should escalate in the background.
@@ -88,7 +95,9 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - If policy flags a correct price, the real issue is usually missing or wrong KB context, not a stale hardcoded whitelist.
 - Human overrides for conduct state live in `/admin/mc/dm-conduct`.
 - `force_normal` is the correct way to lift a test account before or during DM testing; `reset` clears offense history; `force_silent` now means force bad-customer mode.
+- Admin permanent block lives under `/api/admin/blocked-users/:platform/:platformUserId/permanent`.
 - Do not try to clear conduct state with KB edits, direct SQL, or prompt hacks.
+- Full operational guide for agents lives in `docs/DM_CONDUCT_AGENT_GUIDE.md`.
 - The DM conduct page supports search by Instagram username/ID/phone, explicit success-error feedback after actions, visible explanations of all conduct states, and a dedicated detail panel for the selected user.
 - The DM conduct page is not an all-users inbox; it lists only conduct-managed users, marks test/simulator-like rows, and keeps list search/pagination server-side so large tables do not load in one shot.
 - DM Kontrol now surfaces `Davranis / Ton`, conduct state, customer-perceived wait vs processing time, and token breakdown from `pipelineTrace`. Keep `conductControl`, `responseStyle`, `timingBreakdown`, and `tokenBreakdown` populated when changing the pipeline.

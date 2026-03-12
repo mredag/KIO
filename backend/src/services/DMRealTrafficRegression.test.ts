@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InstagramContextService } from './InstagramContextService.js';
 import {
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicClarifierResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   isDirectLocationQuestion,
 } from './DMPipelineHeuristics.js';
 import { evaluateSexualIntent } from '../middleware/sexualIntentFilter.js';
@@ -224,6 +226,40 @@ describe('DM real traffic regressions', () => {
 
     expect(result?.response).toBe('Detayli bilgi icin lutfen bizi arayin: 0326 502 58 58.');
     expect(result?.clarificationCount).toBe(2);
+  });
+
+  it('does not stop live campaign follow-ups with the contact fallback', () => {
+    const result = buildClarifyExhaustedContactResponse({
+      messageText: 'suanda kampanya ne var peki',
+      conversationHistory: createHistory([
+        {
+          direction: 'outbound',
+          text: 'Merhaba! Hangi hizmetimizin fiyatini ogrenmek istersiniz? Masaj, uyelik, PT dersleri ve kurslar gibi seceneklerimiz var.',
+          minutesAgo: 3,
+        },
+        {
+          direction: 'outbound',
+          text: 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.',
+          minutesAgo: 1,
+        },
+      ]),
+      responseMode: 'clarify_only',
+      fallbackMessage: 'Detayli bilgi icin lutfen bizi arayin: 0326 502 58 58.',
+      semanticSignals: ['campaign_inquiry', 'group_discount_inquiry'],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('grounds live campaign follow-ups to the deterministic KB template', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'suanda kampanya ne var peki',
+      semanticSignals: ['campaign_inquiry', 'group_discount_inquiry'],
+      campaignTemplate: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    });
+
+    expect(result?.modelId).toBe(CAMPAIGN_INFO_MODEL_ID);
+    expect(result?.response).toContain('5. kisiye ayni masaj HEDIYE');
   });
 
   describe('real traffic sexual-safety probes', () => {

@@ -11,6 +11,7 @@
 
 import Database from 'better-sqlite3';
 import { createHash } from 'crypto';
+import type { TurkishDMHumanizerConfig } from './TurkishDMHumanizerService.js';
 
 export interface DirectResponseTierConfig {
   enabled: boolean;
@@ -49,6 +50,8 @@ export interface PipelineConfig {
     systemTemplate: string;
     maxResponseLength: number; // chars, for the instruction
   };
+  // Deterministic Turkish cleanup layer before policy/send
+  humanizer: TurkishDMHumanizerConfig;
   // Fallback message when everything fails
   fallbackMessage: string;
 }
@@ -136,6 +139,11 @@ GÜVENLİK FİLTRESİ (ön kontrolden geçmeyen mesajlarda bu prompt çalışmaz
 VERİLEN BİLGİLER:
 {{knowledge}}`,
     maxResponseLength: 500,
+  },
+  humanizer: {
+    enabled: false,
+    mode: 'light',
+    traceEnabled: true,
   },
   fallbackMessage: 'Detayli bilgi icin lutfen bizi arayin: 0326 502 58 58. Size yardimci olmaya haziriz.',
 };

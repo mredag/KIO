@@ -10,6 +10,7 @@ export const PILATES_INFO_MODEL_ID = 'deterministic/pilates-info-v1';
 export const CLOSEOUT_MODEL_ID = 'deterministic/closeout-v1';
 export const NO_REPLY_MODEL_ID = 'deterministic/no-reply-v1';
 export const CLARIFY_EXHAUSTED_CONTACT_MODEL_ID = 'deterministic/clarify-exhausted-contact-v1';
+export const CAMPAIGN_INFO_MODEL_ID = 'deterministic/campaign-info-v1';
 
 export interface DeterministicCloseoutDecision {
   action: 'reply' | 'skip_send';
@@ -22,6 +23,11 @@ export interface ClarifyExhaustedContactDecision {
   modelId: string;
   clarificationCount: number;
 }
+
+const CONTACT_FALLBACK_ESCAPE_SIGNALS = new Set([
+  'campaign_inquiry',
+  'group_discount_inquiry',
+]);
 
 const PRICING_SIGNAL_PATTERNS = [
   'fiyat',
@@ -43,6 +49,8 @@ const CLARIFICATION_REPLY_PATTERNS = [
   /\bhangi konuda bilgi almak istediginizi belirtirseniz\b/,
   /\bhangi alt bilgiyi ogrenmek istersiniz\b/,
 ];
+const CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN = /\b(?:kampanya|indirim|promosyon|firsat|grup|toplu|ucretsiz|bedava|hediye)\b/;
+const CAMPAIGN_INFO_UNAVAILABLE_MESSAGE = 'Su anda paylasabilecegim net bir kampanya bilgisi goremiyorum.';
 
 function stripPoliteLeadIn(normalized: string): string {
   let stripped = normalized.trim();
@@ -241,6 +249,36 @@ export function hasAppointmentIntentSignal(messageText: string): boolean {
   return /\b(randevu|rezervasyon|rezerv)\b/.test(normalized);
 }
 
+export function isCampaignInfoRequest(params: {
+  messageText: string;
+  semanticSignals?: string[];
+}): boolean {
+  const normalizedMessage = normalizeTemplateText(params.messageText || '');
+  const semanticSignals = new Set((params.semanticSignals || []).map(signal => signal.toLowerCase()));
+
+  return CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN.test(normalizedMessage)
+    || semanticSignals.has('campaign_inquiry')
+    || semanticSignals.has('group_discount_inquiry');
+}
+
+export function buildDeterministicCampaignResponse(params: {
+  messageText: string;
+  semanticSignals?: string[];
+  campaignTemplate?: string | null;
+}): { response: string; modelId: string } | null {
+  if (!isCampaignInfoRequest({
+    messageText: params.messageText,
+    semanticSignals: params.semanticSignals,
+  })) {
+    return null;
+  }
+
+  return {
+    response: String(params.campaignTemplate || '').trim() || CAMPAIGN_INFO_UNAVAILABLE_MESSAGE,
+    modelId: CAMPAIGN_INFO_MODEL_ID,
+  };
+}
+
 export function isStandaloneAppointmentRequest(messageText: string): boolean {
   const normalized = normalizeTemplateText(messageText);
   if (!normalized) {
@@ -308,6 +346,7 @@ export function buildClarifyExhaustedContactResponse(params: {
   conversationHistory: ConversationEntry[];
   responseMode?: ResponseMode | null;
   fallbackMessage?: string | null;
+  semanticSignals?: string[];
 }): ClarifyExhaustedContactDecision | null {
   if (!params.responseMode || !['clarify_only', 'answer_then_clarify'].includes(params.responseMode)) {
     return null;
@@ -324,6 +363,15 @@ export function buildClarifyExhaustedContactResponse(params: {
   }
 
   const normalizedMessage = normalizeTemplateText(params.messageText || '');
+  const semanticSignals = new Set((params.semanticSignals || []).map(signal => signal.toLowerCase()));
+  const shouldBypassContactFallback = isCampaignInfoRequest({
+    messageText: normalizedMessage,
+    semanticSignals: params.semanticSignals,
+  }) || Array.from(CONTACT_FALLBACK_ESCAPE_SIGNALS).some(signal => semanticSignals.has(signal));
+  if (shouldBypassContactFallback) {
+    return null;
+  }
+
   if (params.responseMode === 'answer_then_clarify') {
     const hasPricingSignal = PRICING_SIGNAL_PATTERNS.some(pattern => normalizedMessage.includes(pattern));
     const hasVagueFollowUp = VAGUE_CLARIFICATION_FOLLOW_UP_PATTERN.test(normalizedMessage);

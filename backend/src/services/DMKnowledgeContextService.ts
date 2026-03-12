@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import type { KnowledgeSelectionEntry } from './KnowledgeSelectionService.js';
 import {
   buildDeterministicAppointmentTemplate,
+  buildDeterministicCampaignTemplate,
   buildDeterministicHoursAppointmentTemplate,
   buildDeterministicHoursTemplate,
   buildDeterministicLocationTemplate,
@@ -39,6 +40,7 @@ export interface FilteredKnowledgeContext {
 export interface DeterministicKnowledgeTemplates {
   signature: string;
   genericInfo: string | null;
+  campaignInfo: string | null;
   pilatesInfo: string | null;
   contactLocation: string | null;
   contactPhone: string | null;
@@ -142,6 +144,9 @@ export class DMKnowledgeContextService {
         phoneInfo: contact.phone || null,
         locationInfo: contact.address || null,
       }),
+      campaignInfo: buildDeterministicCampaignTemplate({
+        campaignInfo: pricing.current_campaign || this.pickCampaignValue(pricing),
+      }),
       pilatesInfo: buildDeterministicPilatesTemplate({
         pilatesDetails: services.reformer_pilates_details || null,
         pilatesPricing: pricing.reformer_pilates || null,
@@ -225,5 +230,12 @@ export class DMKnowledgeContextService {
   private pickFirstValue(entries: Record<string, string>): string | null {
     const [firstValue] = Object.values(entries);
     return firstValue || null;
+  }
+
+  private pickCampaignValue(entries: Record<string, string>): string | null {
+    const match = Object.entries(entries).find(([key, value]) => (
+      !!value?.trim() && /(campaign|kampanya|indirim|promo|promotion)/i.test(key)
+    ));
+    return match?.[1] || null;
   }
 }

@@ -8,9 +8,14 @@ import {
   useDmHealth,
   useDmErrors,
   useDmModelStats,
+  useDmResponseCacheStats,
+  useDmResponseCacheEntries,
+  useSeedDmResponseCache,
+  useClearDmResponseCache,
   useDmTestMode,
   useToggleDmTestMode,
   type DmChannel,
+  type DmResponseCacheEntry,
 } from '../../../hooks/useDmKontrolApi';
 import { useDmKontrolSSE, type DmSSEEvent } from '../../../hooks/useDmKontrolSSE';
 import {
@@ -87,6 +92,80 @@ const ANTI_REPEAT_LABELS: Record<string, string> = {
   repeat_emoji: 'emoji tekrari yok',
   simple_fact_request: 'kisa bilgi modu',
 };
+
+const CACHE_CLASS_LABELS: Record<string, string> = {
+  direct_location: 'konum',
+  direct_phone: 'telefon',
+  direct_hours: 'saat',
+  general_info: 'genel bilgi',
+  gratitude_closeout: 'kapanis',
+  service_list: 'hizmet listesi',
+  service_definition: 'hizmet tanimi',
+  topic_price_list: 'konu fiyat listesi',
+  exact_price_answer: 'net fiyat',
+};
+
+const CACHE_STATUS_FILTERS: Array<{ key: 'all' | 'active' | 'candidate'; label: string }> = [
+  { key: 'all', label: 'Tumu' },
+  { key: 'active', label: 'Active' },
+  { key: 'candidate', label: 'Candidate' },
+];
+
+function formatCacheClassLabel(cacheClass: string | null | undefined): string {
+  if (!cacheClass) return '-';
+  return CACHE_CLASS_LABELS[cacheClass] || cacheClass.replace(/_/g, ' ');
+}
+
+function getCacheStatusMeta(trace: any): { label: string; className: string } | null {
+  const cache = trace?.cache;
+  if (!cache) return null;
+
+  if (cache.hit === true || trace?.fastLane?.kind === 'response_cache') {
+    return {
+      label: 'Cache hit',
+      className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+    };
+  }
+
+  if (cache.status === 'candidate') {
+    return {
+      label: 'Cache adayi',
+      className: 'bg-sky-500/15 text-sky-300 border-sky-500/20',
+    };
+  }
+
+  if (cache.status === 'miss') {
+    return {
+      label: 'Cache miss',
+      className: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+    };
+  }
+
+  if (cache.status === 'ineligible') {
+    return {
+      label: 'Cache disi',
+      className: 'bg-gray-500/15 text-gray-400 border-gray-500/20',
+    };
+  }
+
+  return null;
+}
+
+function getBufferStatusMeta(trace: any): { label: string; className: string } | null {
+  const aggregation = trace?.inboundAggregation;
+  if (!aggregation) return null;
+
+  return {
+    label: aggregation.aggregated ? `Buffer x${aggregation.fragmentCount}` : 'Buffer',
+    className: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/20',
+  };
+}
+
+function getCacheEntryStatusBadge(status: 'candidate' | 'active'): string {
+  return status === 'active'
+    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
+    : 'bg-sky-500/15 text-sky-300 border-sky-500/20';
+}
 
 function getConductState(trace: any): string | null {
   return trace?.conductControl?.state || trace?.responseStyle?.mode || null;
@@ -601,6 +680,59 @@ function PipelineTraceExpanded({ trace }: { trace: any }) {
         </div>
       </div>
 
+      {(trace.cache || trace.inboundAggregation) && (
+        <div className="mt-3 pt-2 border-t border-white/[0.04] space-y-2">
+          {trace.cache && (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-gray-500">Yanit Cache</span>
+                {getCacheStatusMeta(trace) && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded border ${getCacheStatusMeta(trace)?.className}`}>
+                    {getCacheStatusMeta(trace)?.label}
+                  </span>
+                )}
+                {trace.fastLane?.kind === 'response_cache' && (
+                  <span className="text-[9px] text-emerald-300 ml-auto">AI atlandi</span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-400">
+                <span>Sinif: <span className="text-gray-200">{formatCacheClassLabel(trace.cache.cacheClass)}</span></span>
+                <span>Durum: <span className="text-gray-200">{trace.cache.status || '-'}</span></span>
+                <span>Hit: <span className="text-gray-200">{trace.cache.hit ? 'evet' : 'hayir'}</span></span>
+                {trace.cache.observationCount != null && (
+                  <span>Gozlem: <span className="text-gray-200">{trace.cache.observationCount}</span></span>
+                )}
+                {trace.cache.sourceExecutionId && (
+                  <span>Kaynak: <span className="font-mono text-gray-200">{trace.cache.sourceExecutionId}</span></span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {trace.inboundAggregation && (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-gray-500">Mesaj Buffer</span>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded border ${getBufferStatusMeta(trace)?.className || 'bg-indigo-500/15 text-indigo-300 border-indigo-500/20'}`}>
+                  {getBufferStatusMeta(trace)?.label || 'Buffer'}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-400">
+                <span>Tetik: <span className="text-gray-200">{trace.inboundAggregation.trigger}</span></span>
+                <span>Pencere: <span className="text-gray-200">{trace.inboundAggregation.windowMs}ms</span></span>
+                <span>Parca: <span className="text-gray-200">{trace.inboundAggregation.fragmentCount}</span></span>
+              </div>
+              {Array.isArray(trace.inboundAggregation.fragments) && trace.inboundAggregation.fragments.length > 0 && (
+                <div className="mt-1 text-[10px] text-gray-400">
+                  <span className="text-gray-500">Birlesen mesajlar:</span>{' '}
+                  <span className="text-gray-200">{trace.inboundAggregation.fragments.join(' + ')}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Timing breakdown bar */}
       {totalMs > 0 && (
         <div className="mt-3 pt-2 border-t border-white/[0.04]">
@@ -828,6 +960,8 @@ function LiveFeedTab() {
           const trace = dm.pipelineTrace;
           const senderId = dm.channel === 'whatsapp' ? dm.phone : dm.instagramId;
           const displayedResponseTimeMs = getDisplayedResponseTimeMs(trace, dm.responseTimeMs);
+          const cacheMeta = getCacheStatusMeta(trace);
+          const bufferMeta = getBufferStatusMeta(trace);
           return (
             <div key={dm.id} className="mc-card">
               <div
@@ -870,6 +1004,16 @@ function LiveFeedTab() {
                     )}
                     <QualityDot responseTimeMs={displayedResponseTimeMs} />
                     <TierBadge tier={dm.modelTier} modelUsed={dm.modelUsed} />
+                    {cacheMeta && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${cacheMeta.className}`}>
+                        {cacheMeta.label}
+                      </span>
+                    )}
+                    {bufferMeta && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${bufferMeta.className}`}>
+                        {bufferMeta.label}
+                      </span>
+                    )}
                     {trace?.policyValidation && trace.policyValidation.status !== 'pass' && trace.policyValidation.status !== 'skipped' && (
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
                         trace.policyValidation.status === 'corrected'
@@ -925,6 +1069,8 @@ function LiveFeedTab() {
                 const pv = trace?.policyValidation;
                 const displayedResponseTimeMs = getDisplayedResponseTimeMs(trace, msg.responseTimeMs);
                 const qualityColor = getResponseQualityColor(displayedResponseTimeMs);
+                const cacheMeta = getCacheStatusMeta(trace);
+                const bufferMeta = getBufferStatusMeta(trace);
                 const isTraceExpanded = expandedId === `conv-${msg.id}`;
 
                 return (
@@ -963,6 +1109,16 @@ function LiveFeedTab() {
                                 </span>
                               )}
                               {msg.modelUsed && <span className="font-mono">{msg.modelUsed.split('/').pop()}</span>}
+                              {cacheMeta && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[9px] border ${cacheMeta.className}`}>
+                                  {cacheMeta.label}
+                                </span>
+                              )}
+                              {bufferMeta && (
+                                <span className={`px-1.5 py-0.5 rounded-full text-[9px] border ${bufferMeta.className}`}>
+                                  {bufferMeta.label}
+                                </span>
+                              )}
                               {msg.modelTier && (
                                 <span className={`px-1.5 py-0.5 rounded-full text-[9px] border ${TIER_COLORS[msg.modelTier] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
                                   {formatTierLabel(msg.modelTier)}
@@ -1068,13 +1224,76 @@ function LiveFeedTab() {
 // ============================================================
 function HealthTab() {
   const [period, setPeriod] = useState('today');
+  const [cacheStatusFilter, setCacheStatusFilter] = useState<'all' | 'active' | 'candidate'>('all');
   const { data, isLoading } = useDmHealth(period);
+  const { data: cacheStats, isLoading: cacheStatsLoading } = useDmResponseCacheStats();
+  const { data: cacheEntriesData, isLoading: cacheEntriesLoading } = useDmResponseCacheEntries(cacheStatusFilter, 50);
+  const seedCache = useSeedDmResponseCache();
+  const clearCache = useClearDmResponseCache();
+  const [cacheNotice, setCacheNotice] = useState<{ tone: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const periods = [
     { key: 'today', label: 'Bugün' },
     { key: '7d', label: '7 Gün' },
     { key: '30d', label: '30 Gün' },
   ];
+
+  const runCachePreview = async () => {
+    try {
+      const result = await seedCache.mutateAsync({
+        days: 30,
+        dryRun: true,
+        directOnly: true,
+      });
+      setCacheNotice({
+        tone: 'info',
+        text: `On izleme tamamlandi: taranan ${result.scanned}, uygun ${result.eligible}, kaydedilecek ${result.recorded}`,
+      });
+    } catch (error: any) {
+      setCacheNotice({
+        tone: 'error',
+        text: error?.response?.data?.error || error?.message || 'Cache on izleme basarisiz oldu',
+      });
+    }
+  };
+
+  const runCacheSeed = async () => {
+    try {
+      const result = await seedCache.mutateAsync({
+        days: 30,
+        dryRun: false,
+        directOnly: true,
+      });
+      setCacheNotice({
+        tone: 'success',
+        text: `Cache tohumlandi: taranan ${result.scanned}, kaydedilen ${result.recorded}`,
+      });
+    } catch (error: any) {
+      setCacheNotice({
+        tone: 'error',
+        text: error?.response?.data?.error || error?.message || 'Cache tohumlama basarisiz oldu',
+      });
+    }
+  };
+
+  const runCacheClear = async () => {
+    if (!window.confirm('DM response cache temizlensin mi?')) {
+      return;
+    }
+
+    try {
+      const result = await clearCache.mutateAsync();
+      setCacheNotice({
+        tone: 'success',
+        text: `Cache temizlendi: ${result.deleted} kayit silindi`,
+      });
+    } catch (error: any) {
+      setCacheNotice({
+        tone: 'error',
+        text: error?.response?.data?.error || error?.message || 'Cache temizleme basarisiz oldu',
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -1092,6 +1311,7 @@ function HealthTab() {
   const totalCost = data?.totalEstimatedCost ?? 0;
   const modelDist = data?.modelDistribution || [];
   const rtDist = data?.responseTimeDistribution || { green: 0, yellow: 0, red: 0 };
+  const cacheEntries: DmResponseCacheEntry[] = cacheEntriesData?.items || [];
 
   return (
     <div className="space-y-6">
@@ -1137,6 +1357,181 @@ function HealthTab() {
           </p>
         </GlassCard>
       </div>
+
+      <GlassCard hover={false}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3 flex-1">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-200">Yanit Cache</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Exact-match yanit cache durumu, sinif dagilimi ve seed islemleri.
+              </p>
+            </div>
+
+            {cacheNotice && (
+              <div className={`rounded-lg border px-3 py-2 text-xs ${
+                cacheNotice.tone === 'success'
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                  : cacheNotice.tone === 'error'
+                    ? 'border-red-500/20 bg-red-500/10 text-red-300'
+                    : 'border-sky-500/20 bg-sky-500/10 text-sky-300'
+              }`}>
+                {cacheNotice.text}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500">Toplam</p>
+                <p className="text-xl font-semibold text-gray-100 mt-1">
+                  {cacheStatsLoading ? '...' : (cacheStats?.total ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/10 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-emerald-300/70">Active</p>
+                <p className="text-xl font-semibold text-emerald-200 mt-1">
+                  {cacheStatsLoading ? '...' : (cacheStats?.active ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-sky-500/15 bg-sky-500/10 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-sky-300/70">Candidate</p>
+                <p className="text-xl font-semibold text-sky-200 mt-1">
+                  {cacheStatsLoading ? '...' : (cacheStats?.candidate ?? 0)}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-gray-500">Sinif dagilimi</div>
+              {cacheStats?.classes?.length ? (
+                <div className="space-y-1.5">
+                  {cacheStats.classes.map((entry) => (
+                    <div key={entry.cacheClass} className="flex items-center gap-3 text-xs">
+                      <span className="w-32 text-gray-300">{formatCacheClassLabel(entry.cacheClass)}</span>
+                      <div className="flex-1 h-2 rounded-full bg-gray-700/40 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-sky-500/60"
+                          style={{
+                            width: `${Math.max(
+                              ((entry.count || 0) / Math.max(cacheStats.total || 1, 1)) * 100,
+                              entry.count > 0 ? 4 : 0,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="w-10 text-right text-gray-400">{entry.count}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">Cache istatistigi henuz yok.</p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-gray-500">Cache kayitlari</div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Su anda hafizada tutulan mesaj ve yanit eslesmelerini gosterir.
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  {CACHE_STATUS_FILTERS.map((filter) => (
+                    <button
+                      key={filter.key}
+                      onClick={() => setCacheStatusFilter(filter.key)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        cacheStatusFilter === filter.key
+                          ? 'bg-sky-500/15 text-sky-400 border border-sky-500/20'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {cacheEntriesLoading ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-3 animate-pulse">
+                      <div className="h-3 w-48 rounded bg-gray-700/50" />
+                    </div>
+                  ))}
+                </div>
+              ) : cacheEntries.length === 0 ? (
+                <p className="text-xs text-gray-500">Bu filtrede cache kaydi yok.</p>
+              ) : (
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                  {cacheEntries.map((entry) => (
+                    <div key={entry.id} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${getCacheEntryStatusBadge(entry.status)}`}>
+                              {entry.status === 'active' ? 'Active' : 'Candidate'}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-slate-500/10 text-slate-300 border-slate-500/20">
+                              {formatCacheClassLabel(entry.cacheClass)}
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              obs {entry.observationCount}
+                            </span>
+                            {entry.sourceExecutionId && (
+                              <span className="text-[10px] text-sky-400 font-mono">
+                                {entry.sourceExecutionId}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-gray-500">Mesaj</div>
+                            <div className="text-xs text-gray-200 break-words">{entry.normalizedMessage}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-gray-500">Yanit</div>
+                            <div className="text-xs text-gray-300 break-words">{entry.responseText}</div>
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-gray-500 sm:text-right sm:min-w-[120px]">
+                          <div>Son: {timeAgo(entry.lastSeenAt)}</div>
+                          <div>Ilk: {timeAgo(entry.firstSeenAt)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 lg:w-[260px] lg:justify-end">
+            <button
+              onClick={() => void runCachePreview()}
+              disabled={seedCache.isPending || clearCache.isPending}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-sky-500/20 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 disabled:opacity-50"
+            >
+              On izleme
+            </button>
+            <button
+              onClick={() => void runCacheSeed()}
+              disabled={seedCache.isPending || clearCache.isPending}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+            >
+              Tohumla
+            </button>
+            <button
+              onClick={() => void runCacheClear()}
+              disabled={seedCache.isPending || clearCache.isPending}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-500/20 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+            >
+              Temizle
+            </button>
+          </div>
+        </div>
+      </GlassCard>
 
       {/* Model Distribution */}
       {modelDist.length > 0 && (

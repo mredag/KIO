@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDeterministicAppointmentTemplate,
+  buildDeterministicCampaignTemplate,
   buildDeterministicCloseoutTemplate,
   buildDeterministicHoursAppointmentTemplate,
   buildDeterministicHoursTemplate,
@@ -58,7 +59,7 @@ describe('GenericInfoTemplateService', () => {
       locationInfo: 'Steel Towers A Blok 4. Kat, Iskenderun / Hatay',
     });
 
-    expect(result).toContain('Elbette, size hizlica temel bilgileri paylasayim:');
+    expect(result).toContain('Kisaca temel bilgileri paylasayim:');
     expect(result).toContain('Masaj fiyatlarimiz:');
     expect(result).toContain('Terapist bilgisi:');
     expect(result).toContain('Konum: Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
@@ -81,6 +82,22 @@ describe('GenericInfoTemplateService', () => {
     expect(result!.length).toBeLessThanOrEqual(900);
   });
 
+  it('keeps the generic info opener focused and strips raw prep guide noise', () => {
+    const result = buildGenericInfoTemplate({
+      massagePricing: 'KLASIK MASAJ:\n\u2022 30dk \u2192 800\u20ba\n\u2022 40dk \u2192 1000\u20ba\n\u2022 60dk \u2192 1300\u20ba\n\u2022 90dk \u2192 2400\u20ba',
+      therapistInfo: '👩 Tum masaj terapistlerimiz profesyonel kadin terapistlerdir. Sertifikali ve deneyimli ekibimiz vardir.',
+      bringInfo: '🧳 YANIMDA NE GETIREYIM?\nTEMIN EDILENLER:\n• Havlu\n• Terlik\n• Sort',
+      phoneInfo: 'Sabit: 0326 502 58 58\nCep/WhatsApp: 0530 250 05 58',
+      locationInfo: 'Eform Spor Merkezi\nAdres: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay\nKonum (Google Maps): https://maps.app.goo.gl/qC4jh7fquXYX3vPA6',
+    });
+
+    expect(result).toContain('Konum: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
+    expect(result).not.toContain('YANIMDA NE GETIREYIM');
+    expect(result).not.toContain('Google Maps');
+    expect(result).not.toContain('maps.app.goo.gl');
+    expect(result).not.toContain('Hazirlik:');
+  });
+
   it('builds deterministic contact and hours snippets', () => {
     expect(buildDeterministicLocationTemplate('Iskenderun merkez, Pac Meydani yani')).toBe('Konumumuz: Iskenderun merkez, Pac Meydani yani');
     expect(buildDeterministicPhoneTemplate('0532 000 00 00')).toBe('Bize su numaralardan ulasabilirsiniz: 0532 000 00 00');
@@ -97,6 +114,12 @@ describe('GenericInfoTemplateService', () => {
 
   it('builds the deterministic closeout reply', () => {
     expect(buildDeterministicCloseoutTemplate()).toBe('Rica ederiz.');
+  });
+
+  it('builds a deterministic campaign snippet from KB campaign info', () => {
+    expect(buildDeterministicCampaignTemplate({
+      campaignInfo: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    })).toBe('🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!');
   });
 
   it('builds deterministic combined hours and appointment snippets', () => {

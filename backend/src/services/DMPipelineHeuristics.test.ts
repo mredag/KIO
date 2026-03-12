@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildClarifyExhaustedContactResponse,
+  buildDeterministicCampaignResponse,
   buildDeterministicCloseoutResponse,
   buildDeterministicClarifierResponse,
+  CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
   countRecentClarificationReplies,
   hasAppointmentIntentSignal,
@@ -189,5 +191,56 @@ describe('DMPipelineHeuristics', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it('does not fallback to contact for campaign or group-discount follow-ups', () => {
+    const result = buildClarifyExhaustedContactResponse({
+      messageText: 'Su anda kampanya ne var peki',
+      conversationHistory: [
+        {
+          direction: 'outbound',
+          messageText: 'Merhaba! Hangi hizmetimizin fiyatini ogrenmek istersiniz? Masaj, uyelik, PT dersleri ve kurslar gibi seceneklerimiz var.',
+          createdAt: new Date().toISOString(),
+          relativeTime: '1dk once',
+        },
+        {
+          direction: 'outbound',
+          messageText: 'Mesajinizi daha acik yazar misiniz? Yalnizca profesyonel spa ve spor hizmetleri konusunda yardimci olabiliyoruz.',
+          createdAt: new Date().toISOString(),
+          relativeTime: 'az once',
+        },
+      ],
+      responseMode: 'clarify_only',
+      fallbackMessage: 'Detayli bilgi icin lutfen iletisime geciniz: 0326 502 58 58.',
+      semanticSignals: ['campaign_inquiry', 'group_discount_inquiry'],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('builds a deterministic campaign response for campaign asks', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Su anda kampanya ne var peki',
+      semanticSignals: ['campaign_inquiry'],
+      campaignTemplate: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    });
+
+    expect(result).toEqual({
+      response: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
+  });
+
+  it('uses a grounded safe fallback when campaign info is unavailable', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Grup indirimi var mi',
+      semanticSignals: ['group_discount_inquiry'],
+      campaignTemplate: null,
+    });
+
+    expect(result).toEqual({
+      response: 'Su anda paylasabilecegim net bir kampanya bilgisi goremiyorum.',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
   });
 });

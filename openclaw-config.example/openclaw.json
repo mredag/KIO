@@ -1,9 +1,9 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.2.13"
+    "lastTouchedVersion": "2026.3.8"
   },
   "env": {
-    "OPENROUTER_API_KEY": "<YOUR_OPENROUTER_API_KEY>"
+    "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}"
   },
   "agents": {
     "defaults": {
@@ -45,6 +45,9 @@
         "model": "openrouter/google/gemini-2.5-flash-lite",
         "target": "none"
       },
+      "memorySearch": {
+        "enabled": false
+      },
       "subagents": {
         "maxConcurrent": 3,
         "archiveAfterMinutes": 45,
@@ -61,12 +64,16 @@
       {
         "id": "forge",
         "name": "forge",
+        "workspace": "~/.openclaw/workspaces/forge",
+        "agentDir": "~/.openclaw/agents/forge/agent",
         "model": "openai-codex/gpt-5.3-codex",
         "identity": { "name": "Forge" }
       },
       {
         "id": "instagram",
         "name": "instagram",
+        "workspace": "~/.openclaw/workspaces/instagram",
+        "agentDir": "~/.openclaw/agents/instagram/agent",
         "model": "openrouter/openai/gpt-4o-mini",
         "identity": { "name": "Eform Instagram Asistani" }
       },
@@ -84,8 +91,10 @@
   "hooks": {
     "enabled": true,
     "path": "/hooks",
-    "token": "<YOUR_HOOKS_TOKEN>",
+    "token": "${OPENCLAW_HOOKS_TOKEN}",
+    "defaultSessionKey": "hook:ingress",
     "allowRequestSessionKey": true,
+    "allowedSessionKeyPrefixes": ["hook:"],
     "transformsDir": "~/.openclaw/hooks/transforms",
     "mappings": [
       {
@@ -110,14 +119,17 @@
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "auth": { "token": "<YOUR_GATEWAY_AUTH_TOKEN>" }
+    "auth": {
+      "mode": "token",
+      "token": { "provider": "env", "key": "OPENCLAW_GATEWAY_TOKEN" }
+    }
   },
   "channels": {
     "telegram": {
       "enabled": true,
-      "botToken": "<YOUR_TELEGRAM_BOT_TOKEN>",
+      "botToken": { "provider": "env", "key": "TELEGRAM_BOT_TOKEN" },
       "dmPolicy": "allowlist",
-      "allowFrom": ["<YOUR_TELEGRAM_CHAT_ID>"],
+      "allowFrom": ["${TELEGRAM_ADMIN_CHAT_ID}"],
       "streaming": "off"
     },
     "whatsapp": {

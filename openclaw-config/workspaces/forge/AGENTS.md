@@ -49,10 +49,14 @@ You run on **Raspberry Pi 5** (production) or **Windows 11** (dev). Detect with 
 5. After each change, verify the affected path with build, test, or endpoint checks.
 
 ## OpenClaw Reference Docs (Use Before Editing OpenClaw Code)
-When the task touches OpenClaw, read the matching local docs first:
-- DEVELOPER_MEMORY.md - current live runtime notes for this workspace
-- docs/agent-runtime-memory.md - fuller repo-side operating memory
-- docs/KNOWLEDGE_BASE_AGENT_GUIDE.md - preview-first protocol for live KB changes
+When the task touches OpenClaw, DM behavior, KB workflow, or deployment-sensitive code, use this read order:
+1. Repo `AGENTS.md`
+2. Repo `docs/agent-runtime-memory.md`
+3. Repo `docs/project-progress.md`
+4. `PROJECT_MAP.md` before multi-file code work
+5. Relevant feature guide only if the task touches that area
+
+This workspace's `MEMORY.md` is a short mirror only. Do not treat it as the canonical current-state source.
 
 If docs/ is not mounted in this workspace, use:
 - Pi: `/home/eform-kio/kio-new/docs/`
@@ -63,26 +67,6 @@ For OpenClaw-related changes, compare the docs with the real implementation befo
 - `backend/src/routes/jarvisRoutes.ts`
 - `openclaw-config/openclaw.json`
 - `openclaw-config/workspace/` and `openclaw-config/workspaces/`
-
-## Current Runtime Notes (2026-03-03)
-- OpenClaw agent IDs are `main`, `forge`, `instagram`, and `whatsapp`.
-- Mission Control mirrors the channel agents as `instagram-dm` and `whatsapp-dm`.
-- On Pi, `main` runs `openrouter/openai/gpt-4.1`, `forge` runs `openai-codex/gpt-5.3-codex`, and `instagram` / `whatsapp` use `openrouter/openai/gpt-4o-mini`.
-- Verify inbound timing behavior in the tracked Instagram webhook route before changing it.
-- Do not assume local-only fragment buffering exists on every machine.
-- Do not invent speculative early-dispatch heuristics without confirming the deployed code path first.
-- Use compact text menus instead of relying on Instagram buttons or quick replies.
-- Keep generic pricing and topic-selection clarifiers on deterministic lightweight paths when possible.
-- DM conduct state now lives in `SuspiciousUserService` with `normal -> guarded -> final_warning -> silent` (operator label: `Bad customer`).
-- Human operators manage test-account lifts and manual conduct overrides from `/admin/mc/dm-conduct`.
-- `DMResponseStyleService` now handles anti-repetition tone shaping; do not reintroduce hardcoded `1-2 emoji` behavior when editing prompts.
-- `retry_question` from the safety layer is not a conduct strike by itself. Do not escalate users from ambiguous-but-unconfirmed phrases alone.
-- Keep the old visible rejection copy for obvious euphemisms like `mutlu son`; conduct escalation should remain a background control, and the highest state should answer with the shortest possible factual business reply.
-- Price/package difference questions like `aradaki fark nedir`, `1300 ile 1800 farki`, or `hangi paket neyi kapsiyor` are normal business questions and must stay on the allow path.
-- The generic `bilgi almak istiyorum` info template is still allowed for users who are not in internal `silent` / operator-facing `Bad customer` mode. Deterministic clarifier templates stay normal-only.
-- Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must answer directly from contact KB.
-- Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` must break stale service-topic carryover. Pure `tesekkurler` / closure turns should not revive the previous service topic.
-- Service-specific pricing must stay grounded to the service + duration + price tuple in KB. Do not accept or invent a missing combo just because the raw price number exists elsewhere.
 
 ## Live KB Price Update Rules
 - Read `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` and workspace `KNOWLEDGE_BASE.md` before changing live KB data.
@@ -130,21 +114,6 @@ npx tsc src/routes/<file>.ts --outDir dist --rootDir src --esModuleInterop --mod
 # After build on Pi
 pm2 restart kio-backend
 ```
-
-## Recent Feature Updates (2026-03-02)
-
-**Instagram DM Pipeline Improvements:**
-1. **GPT-4o-mini Upgrade:** Standard tier uses GPT-4o-mini for better Turkish quality and hallucination prevention
-2. **Execution ID Tracking:** Every DM execution gets unique `EXE-xxxxxxxx` ID stored in `instagram_interactions` and `whatsapp_interactions` tables. Use `GET /api/mc/dm-kontrol/execution/:executionId` for full pipeline trace debugging
-3. **System Term Prevention:** Policy Rule 11 blocks responses containing "bilgi bankası", "veri tabanı", "sistem", "prompt". System prompts changed from "BILGI_BANKASI" to "verilen bilgiler"
-4. **PriceFormatterService:** Mobile-optimized price formatting from KB data with category-specific templates (spa_massage, membership, courses, etc.)
-
-**Key Files:**
-- `backend/src/services/InstagramContextService.ts` — Intent detection, model routing (standard tier now uses gpt-4o-mini)
-- `backend/src/services/ResponsePolicyService.ts` — 11 rules including system term prevention
-- `backend/src/services/PriceFormatterService.ts` — Mobile-optimized price formatting
-- `backend/src/routes/dmKontrolRoutes.ts` — Execution detail endpoint
-- `backend/src/database/init.ts` — execution_id column + indexes
 
 ## KIO API Reference
 Base: `http://localhost:3001`

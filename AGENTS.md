@@ -1,97 +1,93 @@
 # Repository Guidelines
 
+## Agent Doc System
+- Read order for Codex and repo-aware agents:
+  1. `AGENTS.md`
+  2. `docs/agent-runtime-memory.md`
+  3. `docs/project-progress.md`
+  4. Relevant feature guide only if the task touches that area
+  5. `openclaw-config/workspace/PROJECT_MAP.md` before multi-file code work
+- `AGENTS.md` is for stable repo rules, structure, guardrails, and read order.
+- `docs/agent-runtime-memory.md` is the canonical current-state document for live behavior, deployment state, and critical runbooks.
+- `docs/project-progress.md` is the canonical recent-change ledger.
+- `docs/agent-docs-contract.md` defines document ownership, duplication limits, and update rules.
+- Workspace `MEMORY.md` and `DEVELOPER_MEMORY.md` files are mirrors only. They must stay short and point back to the canonical repo docs.
+
 ## Project Structure & Module Organization
 - Root uses npm workspaces: `frontend` (Vite + React + TS) and `backend` (Express + TS + SQLite).
-- Backend: `backend/src/{routes,services,middleware,database,i18n}` with unit tests beside code (e.g., `*.test.ts`) and E2E under `backend/src/e2e`.
+- Backend: `backend/src/{routes,services,middleware,database,i18n}` with unit tests beside code (for example `*.test.ts`) and E2E under `backend/src/e2e`.
 - Frontend: `frontend/src/{components,pages,layouts,stores,lib,i18n,locales,styles}` with small unit tests in `lib/*/.test.ts`.
-- Mission Control: Backend routes at `backend/src/routes/missionControlRoutes.ts` (factory pattern), frontend pages at `frontend/src/pages/admin/mc/MC*.tsx`, API hooks at `frontend/src/hooks/useMissionControlApi.ts`, vector store at `backend/src/services/VectorStoreService.ts`. Shared UI components at `frontend/src/components/mc/` (GlassCard, TabNav, MomentumGauge, HeartbeatTimer). Utility functions at `frontend/src/lib/mc/` (momentumUtils, workshopUtils, eventUtils).
-- Deployment: `deployment/windows/*.bat`, `deployment/raspberry-pi/*` (PM2 + scripts).
-- OpenClaw config: `openclaw-config/` (copied to `~/.openclaw/` at setup). Key paths:
-  - `openclaw-config/openclaw.json` → `~/.openclaw/openclaw.json` (gateway + hooks)
-  - `openclaw-config/workspace/` → `~/.openclaw/workspace/` (AGENTS.md + skills)
-  - `openclaw-config/transforms/` → `~/.openclaw/transforms/` (message transforms)
-  - Sessions: `~/.openclaw/agents/main/sessions/` (sessions.json + JSONL files)
+- Mission Control backend routes live under `backend/src/routes/missionControlRoutes.ts` and related `backend/src/routes/*.ts` factory routes. Mission Control frontend pages live under `frontend/src/pages/admin/mc/MC*.tsx`.
+- Deployment assets live in `deployment/windows/` and `deployment/raspberry-pi/`.
+- OpenClaw runtime config lives under `openclaw-config/` and is synced into `~/.openclaw/` on the target machine.
 
 ## Build, Test, and Development Commands
-- Install: `npm install` (installs all workspaces).
-- Dev (both): `npm run dev` (backend + frontend concurrently).
-- Dev (per app): `npm run dev --workspace=backend` or `npm run dev --workspace=frontend`.
-- Build: `npm run build` (then start API with `npm run start:prod`).
-- Frontend preview: `npm run preview --workspace=frontend` (or `preview:prod`).
-- Backend tests: `npm run test --workspace=backend` (watch: `test:watch`, E2E: `test:e2e`).
-- Lint all: `npm run lint`. Format: `npm run format`.
+- Install: `npm install`
+- Dev (all): `npm run dev`
+- Dev (backend): `npm run dev --workspace=backend`
+- Dev (frontend): `npm run dev --workspace=frontend`
+- Build: `npm run build`
+- Backend tests: `npm run test --workspace=backend`
+- Backend E2E: `npm run test:e2e --workspace=backend`
+- Lint: `npm run lint`
+- Format: `npm run format`
 
 ## Coding Style & Naming Conventions
-- Language: TypeScript, 2‑space indentation, semicolons on, prefer named exports.
-- React components/files: PascalCase (e.g., `MassageList.tsx`). Hooks: `useXxx`.
-- Services/middleware: PascalCase class names (e.g., `LoggerService.ts`). Variables/functions: camelCase.
-- Run ESLint before push; use Prettier via `npm run format` for `.ts/.tsx/.js/.json/.md`.
+- Language: TypeScript, 2-space indentation, semicolons on, prefer named exports.
+- React components/files: PascalCase. Hooks: `useXxx`.
+- Services and middleware: PascalCase class names. Variables and functions: camelCase.
+- Run ESLint before push; use Prettier via `npm run format` for `.ts`, `.tsx`, `.js`, `.json`, and `.md`.
 
 ## Testing Guidelines
-- Framework: Vitest. Co-locate unit tests as `*.test.ts`/`*.test.tsx`.
-- E2E live under `backend/src/e2e`; run with `npm -w backend run test:e2e`.
-- Add tests for new routes/services and update affected snapshots. Keep tests deterministic; avoid network.
+- Framework: Vitest.
+- Co-locate unit tests as `*.test.ts` or `*.test.tsx`.
+- Keep tests deterministic and avoid network dependence.
+- Add or update tests when changing backend services, routes, or other behavior-sensitive code.
 
 ## Commit & Pull Request Guidelines
-- Follow Conventional Commits (e.g., `feat: ...`, `fix: ...`).
-- PRs include: clear summary, scope of changes, test plan, screenshots for UI, and linked issue/refs.
-- CI expectation: lint and backend tests pass locally before requesting review.
+- Follow Conventional Commits such as `feat: ...` and `fix: ...`.
+- PRs should include a clear summary, scope, test plan, screenshots for UI changes, and linked issues or references.
+- Expect lint and backend tests to pass locally before asking for review.
 
 ## Security & Configuration Tips
 - Backend loads env via `dotenv`. Never commit secrets or `.env` files.
-- SQLite files and backups are managed by scripts in `deployment/`; verify paths before running.
+- SQLite files and backups are managed by deployment scripts; verify paths before running them.
+- Treat live `~/.openclaw/openclaw.json` as machine-local and secret-bearing. Keep repo-stored OpenClaw config examples sanitized, and do not overwrite live copies blindly.
 
-## Agent-Specific Notes
-- Keep changes minimal and scoped; do not refactor unrelated modules.
-- Respect existing structure and naming; update or add tests when touching backend services/routes.
-- ESM Import Extensions: ALL relative imports in backend source files MUST use `.js` extension (e.g., `from '../services/Foo.js'`). Node ESM requires this. `tsx watch` (dev mode) handles it transparently, but `tsc` output will crash without them.
-- Full backend build: `npx tsc -p tsconfig.build.json` from `backend/`. This relaxed config excludes test files and VectorStoreService. Then copy ALL `*.sql` files to `dist/database/` (schema.sql + agent-comms-schema.sql + mission-control-schema.sql).
-- DO NOT modify `backend/tsconfig.json`. Use `tsconfig.build.json` for production builds.
-- Dev machine: Backend requires Node 18 via fnm. OpenClaw gateway runs on system Node (25.x). They coexist on different ports.
-- Pi (192.168.1.8): Node 22.22.0 (system, via NodeSource). Both backend and OpenClaw run on same Node. New system at `~/kio-new/`, old rollback at `~/spa-kiosk/`. PM2 manages `kio-backend` (port 3001) + `kio-openclaw` (port 18789, bash wrapper `~/start-openclaw.sh`). Cloudflared tunnel via systemd. OpenClaw config at `~/.openclaw/` with Linux paths (not Windows).
-- Pi OpenClaw setup: `openclaw.json` uses Linux paths for agent workspaces. PM2 must use bash wrapper script (`~/start-openclaw.sh`) because direct `pm2 start openclaw -- gateway --port 18789` doesn't spawn the gateway subprocess. After Node upgrade on Pi, run `npm rebuild bcrypt`.
-- Pi OpenClaw runtime sync: use `deployment/raspberry-pi/sync-openclaw-runtime.sh` from `~/kio-new` to sync tracked `openclaw-config/workspace*`, `workspaces/*`, and `transforms/*` into `~/.openclaw/`. Do not overwrite `~/.openclaw/openclaw.json` from git; it contains machine-local secrets and Linux path adjustments.
-- GitHub: `origin` = old public repo, `kio-openclaw` = `https://github.com/mredag/KIO-openclaw.git` (private, deploy key on Pi).
-- Instagram DM flow uses OpenClaw gateway for AI responses (pure OpenClaw, no n8n).
-- Instagram DM Intelligence: `InstagramContextService` (intent detection with `normalizeTurkish()`, model tier routing, conversation history, context-aware follow-ups via `detectIntentWithContext()`) in `backend/src/services/InstagramContextService.ts`. Webhook routes use factory pattern `createInstagramWebhookRoutes(db)` — same as MC routes.
-- Instagram DM Pipeline Config: `PipelineConfigService` stores all pipeline behavior (direct response tiers, models, prompt template, policy settings) as JSON in `mc_policies` table. Editable at runtime via GET/PATCH `/api/mc/dm-kontrol/pipeline-config`. `DirectResponseService` calls OpenRouter directly for light+standard tiers (~1-8s vs ~30-40s through OpenClaw). Standard tier upgraded to GPT-4o-mini (2026-03-02) for better Turkish quality and hallucination prevention.
-- Instagram DM Execution Tracking: Every pipeline execution generates unique `execution_id` (format: `EXE-xxxxxxxx`) stored in `instagram_interactions` and `whatsapp_interactions` tables. Use `GET /api/mc/dm-kontrol/execution/:executionId` to fetch full execution detail (inbound, outbound, pipeline trace, errors, model, tokens) for debugging bad responses. Database indexes on `execution_id` for fast lookups.
-- Instagram DM Price Formatting: `PriceFormatterService` transforms raw KB pricing data into mobile-optimized displays with emojis, grouping, and category-specific templates. No hardcoded prices — all from KB. Supports 8 categories (spa_massage, other_massage, membership_individual/family, reformer_pilates, pt_pricing, courses_kids/women).
-- Instagram DM System Term Prevention: `ResponsePolicyService` Rule 11 (SİSTEM BİLGİSİ SIZINTISI) blocks responses containing "bilgi bankası", "veri tabanı", "sistem", "prompt". System prompts changed from "BILGI_BANKASI" to "verilen bilgiler" with explicit instruction "teknik terimler KULLANMA — müşteri bunları görmemeli".
-- Instagram DM Simulator: `POST /api/workflow-test/simulate-agent` runs the exact same pipeline as the real webhook (intent detection → KB fetch → format → DirectResponseService → policy validation). No Meta webhook or OpenClaw gateway needed. Results appear in DM Kontrol Merkezi live feed with full pipeline trace. Auth: session or Bearer `KIO_API_KEY`. Use this to test any DM pipeline changes. CRITICAL: all `created_at` timestamps must use `new Date().toISOString()` (not SQLite `datetime('now')`) to sort correctly with real webhook data.
-- Turkish Character Normalization: `normalizeTurkish()` in `InstagramContextService.ts` converts ü→u, ö→o, ş→s, ç→c, ğ→g, ı→i before keyword matching. MUST be applied in both `detectIntent()` and `classifyModelTier()`. Without it, Turkish messages like "ücret" won't match ASCII keywords in `KEYWORD_CATEGORY_MAP`.
-- Telegram Session Contamination: OpenClaw `agent:main:main` session (Telegram) can accumulate Instagram hook messages in its JSONL. Fix: delete polluted JSONL + remove entry from sessions.json. Prevention: cross-channel guard in `openclaw-config/workspace/AGENTS.md`.
-- Mission Control routes use factory pattern `createMissionControlRoutes(db)` — receives raw SQLite db instance, not DatabaseService. Uses dynamic `import()` for VectorStoreService (ESM compat). Schema in `backend/src/database/mission-control-schema.sql`.
-- Jarvis Task Orchestration: Full pipeline working (planning chat → task_summary detection → confirm → agent/job creation → execution monitoring → completion). Routes at `backend/src/routes/jarvisRoutes.ts` (factory: `createJarvisRoutes(db)`). Frontend at `frontend/src/pages/admin/mc/MCJarvisPage.tsx`. Uses JSONL file polling for agent responses (NOT WebSocket events). Key services: `OpenClawClientService` (WebSocket auth + RPC), `DataBridgeService` (packages DB data for agents), `JarvisSSEManager` (real-time UI updates). API hooks at `frontend/src/hooks/useJarvisApi.ts` + `useJarvisSSE.ts`.
-- Jarvis Planning Intelligence: `PLANNING_SYSTEM_PROMPT` requires `targetFiles` and `verificationSteps` in task_summary JSON. `buildTaskInstructions()` injects PROJECT_MAP.md content for codebase awareness. `PROJECT_MAP.md` at `openclaw-config/workspace/PROJECT_MAP.md` (synced to `~/.openclaw/workspace/`).
-- JSONL polling pattern (Jarvis + Instagram): OpenClaw does NOT push chat events over WebSocket. Agent responses go into `~/.openclaw/agents/main/sessions/{uuid}.jsonl`. Use `pollJarvisResponse(sessionKey, maxWaitMs, skipLines)` — the `skipLines` param prevents reading stale responses from previous turns in multi-turn conversations.
-- Knowledge Base: 61 Turkish entries across 7 categories (services, pricing, hours, policies, contact, faq, general). Migrated via `backend/scripts/migrate-kb.mjs`. Seed file: `backend/src/database/seed-knowledge.ts`.
-- Live Knowledge Base rule: `/admin/knowledge-base` is live admin data in SQLite, not seed data. For live KB edits, follow `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md`: `scan -> preview -> approval -> apply -> verify -> final report`. Never use `seed-knowledge.ts`, `migrate-kb.mjs`, or bulk reseeds to change a live KB row.
-- MC Approval System: Backend routes exist (GET /approvals, PATCH /approvals/:id/review) but UI page removed from sidebar during cleanup. Backend still functional for API consumers.
-- Agent-to-Agent Communication: Backend routes at `backend/src/routes/agentCommsRoutes.ts` still exist but UI page removed from sidebar during cleanup. Backend still functional for API consumers.
-- Instagram Graph API: Instagram User Tokens (`IGAA*` prefix) require `graph.instagram.com` NOT `graph.facebook.com`. The `/send` endpoint in `instagramIntegrationRoutes.ts` auto-detects token type and uses the correct domain. API version: v25.0.
-- Instagram Test Mode: `INSTAGRAM_TEST_MODE=true` + `INSTAGRAM_TEST_SENDER_IDS=id1,id2` in `.env`. Gate in `instagramWebhookRoutes.ts` (`isTestModeBlocked()`). Toggleable at runtime via PATCH `/api/mc/dm-kontrol/test-mode` (updates `process.env` in-memory). UI toggle in `MCDMKontrolPage.tsx` header.
-- DM Kontrol Merkezi: Pipeline monitoring dashboard. Routes at `backend/src/routes/dmKontrolRoutes.ts` (factory: `createDmKontrolRoutes(db)`). SSE via `DmSSEManager.ts`. Frontend at `frontend/src/pages/admin/mc/MCDMKontrolPage.tsx`. Hooks: `useDmKontrolApi.ts` + `useDmKontrolSSE.ts`. Utils: `frontend/src/lib/mc/dmKontrolUtils.ts`. Migration adds `pipeline_trace`, `pipeline_error`, `model_tier` columns to `instagram_interactions`.
-- Response Policy Agent: `ResponsePolicyService` in `backend/src/services/ResponsePolicyService.ts`. Validates agent responses against 8 Turkish rules (no randevu, no hallucination, etc.) using Gemini Flash Lite via OpenRouter. On failure, generates corrected response via direct OpenRouter call (~2-3s) instead of re-dispatching to OpenClaw. Max 2 retries, then safe fallback. Violations create `mc_events` + Workshop jobs. Pipeline trace includes `policyValidation` field.
-- OpenClaw Heartbeat: Config `heartbeat.target` set to `"none"` in `openclaw.json` to prevent heartbeat from firing on Jarvis sessions. Jarvis JSONL poller has `isHeartbeatResponse()` filter as defense-in-depth.
-- AutoPilot System: Autonomous agent execution engine. Cron-based scanner (every 60s) with 4 triggers: scheduled job dispatch, DM pipeline failure detection, policy violation detection, cost spike detection. Routes at `backend/src/routes/autopilotRoutes.ts` (factory: `createAutoPilotRoutes(db)`, plus `setAutoPilotService(service)` for injecting the singleton). Services: `AutoPilotService.ts` (cron scanner, config in `mc_policies` as `autopilot_config`), `AgentDispatchService.ts` (spawns OpenClaw sessions via WebSocket RPC, polls JSONL for response, updates mc_runs/mc_jobs/mc_cost_ledger), `AutoPilotSSEManager.ts` (global SSE broadcaster). Frontend at `frontend/src/pages/admin/mc/MCAutoPilotPage.tsx`. Hooks: `useAutoPilotApi.ts` + `useAutoPilotSSE.ts`. AutoPilot starts automatically on backend boot. Config stored in `mc_policies` table (type `'guardrail'`, id `'autopilot_config'`). Jobs created by AutoPilot use `source: 'cron'` (NOT `'autopilot'` — CHECK constraint). MCSchedulerService handles queued→scheduled, AutoPilot handles scheduled→running→completed via actual OpenClaw agent execution.
-- Real-Time Activity Feed: Unified event stream across all MC subsystems. Routes at `backend/src/routes/activityRoutes.ts` (factory: `createActivityRoutes(db)`). SSE via `ActivitySSEManager.ts`. Frontend at `frontend/src/pages/admin/mc/MCActivityPage.tsx`. Hooks: `useActivityApi.ts` + `useActivitySSE.ts`. Aggregates mc_events + instagram_interactions into a single timeline with type filters (DM Yanıt, DM Gelen, DM Hata, AutoPilot, Politika, Maliyet, Onay, SLA, etc.) and stats (today count, errors, DMs, live connections).
-- Nightly DM Quality Auditor: Deep claim-level grounding analysis of ALL outbound DM responses. Service at `backend/src/services/NightlyAuditService.ts`. Routes at `backend/src/routes/auditRoutes.ts` (factory: `createAuditRoutes(db)`, plus `setAuditService(service)` for injecting singleton). Cron at `0 2 * * *` (2:00 AM Istanbul). For each outbound response, calls LLM to extract factual claims and verify against KB. Scores: grounded/partially_grounded/hallucinated. Groups issues by type (wrong_price, wrong_address, hallucinated_feature, hallucinated_campaign, wrong_hours, wrong_phone, wrong_service_detail, other) and creates mc_jobs for each group. Config stored in `mc_policies` (id: `nightly_audit_config`). Manual trigger: `POST /api/mc/audit/run`. Results stored as mc_events (entity_type=system, event_type=audit_completed) with full claim-level detail in metadata. Uses `google/gemini-2.5-flash-lite` by default (cheap, fast). Starts automatically on backend boot.
-- mc_jobs Schema Note: The `mc_jobs` table does NOT have `description` or `metadata` columns. Use `payload` (JSON) for structured data including description. The `title` column is for short labels.
-- Gateway Management: Backend routes at `backend/src/routes/gatewayRoutes.ts` still exist but UI page removed from sidebar during cleanup.
-- Agent Lifecycle Orchestrator: Agent provisioning, check-in, offline/error marking. Service at `backend/src/services/AgentLifecycleService.ts`. Routes in `missionControlRoutes.ts`: POST `/agents/:id/provision`, POST `/agents/:id/checkin`, GET `/agents/lifecycle/summary`. Frontend shows lifecycle status badges (online/provisioning/offline/error) in `MCAgentsPage.tsx`.
-- Skills Marketplace: Backend routes exist (GET `/skills/local`) but UI page removed from sidebar during cleanup.
-- Enhanced Dashboard: GET `/dashboard/comparison` endpoint returns current vs previous period metrics + daily series. `KpiCard` component enhanced with trend (↑↓ percentage) and progress bar.
-- Tags & Custom Fields: Backend routes at `backend/src/routes/tagsRoutes.ts` still exist but UI page removed from sidebar during cleanup.
-- Closed-Loop DM Quality System: `EscalationService` routes issues from policy violations, nightly audit, and AutoPilot to either analyst agent (auto-fix) or Telegram admin notification based on severity. `TelegramNotificationService` sends alerts via Telegram Bot API with inline keyboard buttons (Onayla/Reddet/Detay) + 🌐 Panel URL button (always works). `TelegramCallbackPoller` auto-reconciles with OpenClaw gateway — checks every 30s, defers `getUpdates` polling when OpenClaw is running (avoids 409 conflict), resumes when OpenClaw goes down. Start order: OpenClaw first, then backend. When OpenClaw is running, admin can use `/esc approve|reject|detail|analyst <jobId>` text commands via Telegram chat (Jarvis handles via API). Admin decisions come back via `/webhook/telegram` callback_query handler (when poller is active) or via Jarvis text commands (when OpenClaw is active). Wired into: `instagramWebhookRoutes.ts` (real-time policy violations), `AutoPilotService.ts` (DM failures + cost spikes), `NightlyAuditService.ts` (hallucination findings). Env: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ADMIN_CHAT_ID`. Key files: `EscalationService.ts`, `TelegramNotificationService.ts`, `TelegramCallbackPoller.ts`, `telegramWebhookRoutes.ts`.
-- Jarvis System Context Enrichment: `buildSystemContext()` in `jarvisRoutes.ts` pre-injects data from SQLite into the OpenClaw message based on keyword matching. For DM/status queries: last 30 days stats, model distribution, intent breakdown, last 20 messages with full detail (direction, model, tier, response time, errors), and 7-day pipeline health (success rate, response time min/avg/max, slow count, errors). This eliminates the need for subagents to query the database. The injected context includes "Bu veriler KIO veritabanından doğrudan çekildi. API çağrısı yapmanıza GEREK YOK." to prevent unnecessary API calls.
-- OpenClaw Subagent Data Access: Subagents (nexus, forge, atlas, ledger) have NO direct SQLite access. They MUST use the KIO HTTP API. For `/api/integrations/*`, use `Authorization: Bearer <KIO_API_KEY>`; for `/api/mc/*`, use the local admin/session surface documented in the workspace files. When spawning subagents, Jarvis must include API base URL + auth header in the task description.
-- WhatsApp OpenClaw Integration: WhatsApp messaging via OpenClaw's native Baileys channel (QR code login, no Meta Cloud API). Dedicated `whatsapp` agent with workspace at `openclaw-config/workspace-whatsapp/` (AGENTS.md + TOOLS.md). Backend serves as data/service layer only — the agent calls backend APIs via HTTP tools for KB, coupons, ignore list, policy validation, logging, and MC integration.
-- WhatsApp Key Files: Routes at `backend/src/routes/whatsappIntegrationRoutes.ts` (factory: `createWhatsappIntegrationRoutes(db)`, 12 endpoints). Context service at `backend/src/services/WhatsAppContextService.ts` (intent detection, model routing, coupon/appointment detection, ignore list check). Pipeline config at `backend/src/services/WhatsAppPipelineConfigService.ts` (dynamic config in `mc_policies` as `wa_pipeline_config`). Lifecycle webhook at `backend/src/routes/whatsappLifecycleRoutes.ts` mounted at `/webhook/openclaw/whatsapp`.
-- WhatsApp Schema Migrations: `whatsapp_interactions` table extended with `model_used`, `tokens_estimated`, `model_tier`, `pipeline_trace`, `pipeline_error`, `media_type` columns. New tables: `whatsapp_appointment_requests` (phone, service, date/time, status, staff_notes), `whatsapp_ignore_list` (phone UNIQUE, label, added_by). `unified_interactions` view joins both channels. All migrations in `backend/src/database/init.ts`.
-- WhatsApp OpenClaw Config: Agent `whatsapp` in `openclaw-config/openclaw.json` with binding `{ channel: "whatsapp" }`, Baileys channel (`dmPolicy: "open"`, `groupPolicy: "disabled"`), lifecycle hook `whatsapp-lifecycle` → `http://localhost:3001/webhook/openclaw/whatsapp`. MC agent seed: `whatsapp-dm` in `mc_agents`. Pipeline config seed: `wa_pipeline_config` in `mc_policies`.
-- WhatsApp DM Kontrol: Unified feed across Instagram + WhatsApp via UNION ALL query in `dmKontrolRoutes.ts`. Channel filter (All/Instagram/WhatsApp) in frontend. WhatsApp pipeline config endpoints: GET/PATCH `/api/mc/dm-kontrol/wa-pipeline-config`, POST `/api/mc/dm-kontrol/wa-pipeline-config/reset`.
-- WhatsApp Jarvis Integration: `buildSystemContext()` in `jarvisRoutes.ts` responds to `whatsapp|wa` keywords with WhatsApp stats, last 20 messages, pending appointments, ignore list summary. Phone number auto-detection via regex `(?:\+?90|0)?5\d{2}[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}` — auto-fetches full WhatsApp conversation + appointments + ignore status.
-- WhatsApp Nightly Audit: `NightlyAuditService.ts` extended with UNION ALL query across both channels. Per-channel enable/disable via `channels: { instagram: true, whatsapp: true }` in `nightly_audit_config`. Channel field in audit results and mc_events metadata. Channel-grouped issue jobs in mc_jobs.
-- Stability Baseline (2026-03-06): treat the current Pi deployment as the recovery baseline after the OpenClaw cron incident. Keep automation guards OFF by default (`autopilot_config.enabled=false`, `nightly_audit_config.enabled=false`, `morning_briefing_config.enabled=false`, `hardware_watchdog_config.enabled=false`) unless explicitly requested.
-- Change Approval Rule: do not enable cron scanners, autonomous Forge runs, scheduled prompt/template rewrites, or other background automation without explicit owner consent in the same request.
+## Stable Engineering Rules
+- Keep changes minimal and scoped. Do not refactor unrelated modules.
+- Respect the existing file structure and naming conventions.
+- All relative backend imports must use the `.js` extension. Node ESM requires this.
+- Do not modify `backend/tsconfig.json`. Use `backend/tsconfig.build.json` for production builds.
+- Full backend production build is:
+  - `npx tsc -p tsconfig.build.json`
+  - copy all `*.sql` files into `dist/database/`
+- Mission Control and other backend routes use the factory pattern `createXxxRoutes(db)` and receive the raw SQLite db instance, not `DatabaseService`.
+
+## Stable Runtime & Deployment Facts
+- Windows dev machine: backend uses Node 18 via `fnm`; OpenClaw gateway may run on system Node separately.
+- Raspberry Pi production: backend and OpenClaw both run on Node 22.22.0 via PM2.
+- Pi paths:
+  - active system: `~/kio-new/`
+  - rollback system: `~/spa-kiosk/`
+- Pi OpenClaw must use the bash wrapper script `~/start-openclaw.sh`; direct PM2 launch of `openclaw gateway` is not the supported production pattern.
+- After Node upgrades on the Pi, run `npm rebuild bcrypt`.
+- Sync tracked OpenClaw runtime docs/config with `deployment/raspberry-pi/sync-openclaw-runtime.sh`.
+
+## Stable Product & Agent Guardrails
+- OpenClaw owns transport, sessions, hooks, and workspace bootstrap. KIO owns business logic, policy, persistence, admin UI, and reporting.
+- Non-main agents do not get direct SQLite access. Use KIO HTTP APIs instead.
+- For `/api/integrations/*`, use `Authorization: Bearer <KIO_API_KEY>`.
+- Live Knowledge Base work must follow the preview-first flow in `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md`. Do not use seed files, reseeds, or direct SQL for live KB edits.
+- DM debugging should start from the execution detail endpoint and `EXE-...` ids, not ad-hoc SQL.
+- All webhook-style interaction timestamps must use `new Date().toISOString()`, not SQLite `datetime('now')`.
+- `mc_jobs` uses the `payload` column for structured data. Do not assume `description` or `metadata` columns exist.
+- Treat the current Pi deployment as the post-incident recovery baseline. Keep automation guards off by default unless the owner explicitly approves them in the same request.
+- Do not enable cron scanners, autonomous Forge runs, scheduled prompt rewrites, or background automation without explicit owner consent in the same request.
+
+## Feature-Specific Guides
+- Read `docs/KNOWLEDGE_BASE_AGENT_GUIDE.md` before live KB edits.
+- Read `docs/DM_CONDUCT_AGENT_GUIDE.md` before conduct-state work.
+- Read `docs/DM_RESPONSE_CACHE_AGENT_GUIDE.md` before cache behavior changes.
+- Read `docs/OPENCLAW_OPS_UPGRADE_PLAN.md` before OpenClaw runtime upgrades, gateway ops changes, or security hardening work.
+- Read `docs/agent-runtime-memory.md` before changing DM behavior, OpenClaw integration, deployment behavior, or current-state-sensitive flows.

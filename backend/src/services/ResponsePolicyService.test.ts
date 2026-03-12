@@ -167,6 +167,57 @@ describe('ResponsePolicyService deterministic grounding', () => {
     expect(result.violations.join(' ')).toContain('18 yas ve uzeri');
   });
 
+  it('rejects separately priced reformer pilates as a membership inclusion without explicit KB support', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: '1 aylik uyelik icerisinde tesisinizde yararlanabilecegim imkanlar nelerdir',
+      agentResponse: '1 aylik uyelik icerisinde fitness salonu, havuz, hamam, sauna, buhar odasi ve reformer pilates studyosundan yararlanabilirsiniz.',
+      knowledgeContext: [
+        'Ferdi Uyelik (Tum Tesis): 1 aylik -> 3500 TL',
+        'Tum uyelikler havuz, hamam, sauna ve buhar odasi kullanimini kapsar.',
+        'Reformer Pilates: Haftada 2 gun, aylik 3500 TL.',
+        'Telefon: 0326 502 58 58',
+      ].join('\n'),
+      selectedEvidence: '[services] membership_includes\nTum uyelikler havuz, hamam, sauna ve buhar odasi kullanimini kapsar.',
+      activeTopic: 'ferdi uyelik',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(false);
+    expect(result.modelUsed).toBe('deterministic-grounding');
+    expect(result.violations.join(' ')).toContain('UYELIK KAPSAMI TUTARSIZLIGI');
+    expect(result.violations.join(' ')).toContain('Reformer Pilates');
+  });
+
+  it('allows membership answers that mark reformer pilates as separate instead of included', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn()
+      .mockResolvedValue(createOpenRouterResult({ valid: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new ResponsePolicyService();
+    const result = await service.validate({
+      customerMessage: '1 aylik uyelik icerisinde tesisinizde yararlanabilecegim imkanlar nelerdir',
+      agentResponse: '1 aylik uyelikte havuz, hamam, sauna ve buhar odasi kullanimi dahildir. Reformer pilates ise ayri hizmettir ve ayri fiyatlanir.',
+      knowledgeContext: [
+        'Ferdi Uyelik (Tum Tesis): 1 aylik -> 3500 TL',
+        'Tum uyelikler havuz, hamam, sauna ve buhar odasi kullanimini kapsar.',
+        'Reformer Pilates: Haftada 2 gun, aylik 3500 TL.',
+        'Telefon: 0326 502 58 58',
+      ].join('\n'),
+      selectedEvidence: '[services] membership_includes\nTum uyelikler havuz, hamam, sauna ve buhar odasi kullanimini kapsar.',
+      activeTopic: 'ferdi uyelik',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.valid).toBe(true);
+  });
+
   it('runs faithfulness for non-price factual replies', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn()

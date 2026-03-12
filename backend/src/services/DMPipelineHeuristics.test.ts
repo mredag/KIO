@@ -10,6 +10,8 @@ import {
   hasAppointmentIntentSignal,
   isDirectLocationQuestion,
   isDirectPhoneQuestion,
+  isGenericInfoRequest,
+  isGenericMassagePricingRequest,
   isPilatesInfoRequest,
   isStandaloneAppointmentRequest,
   NO_REPLY_MODEL_ID,
@@ -57,6 +59,26 @@ describe('DMPipelineHeuristics', () => {
     expect(result).toBeNull();
   });
 
+  it('treats broad massage pricing asks as answerable without a clarifier', () => {
+    expect(isGenericMassagePricingRequest({
+      messageText: 'Masaj ucreti ne kadar',
+      intentCategories: ['pricing', 'services'],
+      semanticSignals: ['pricing_inquiry'],
+    })).toBe(true);
+
+    expect(isGenericMassagePricingRequest({
+      messageText: 'Klasik masaj ucreti ne kadar',
+      intentCategories: ['pricing', 'services'],
+      semanticSignals: ['pricing_inquiry'],
+    })).toBe(false);
+
+    expect(isGenericMassagePricingRequest({
+      messageText: '60 dk masaj ne kadar',
+      intentCategories: ['pricing', 'services'],
+      semanticSignals: ['pricing_inquiry'],
+    })).toBe(false);
+  });
+
   it('builds a deterministic topic-selection clarifier for service follow-ups', () => {
     const result = buildDeterministicClarifierResponse({
       messageText: 'Hamam',
@@ -74,6 +96,18 @@ describe('DMPipelineHeuristics', () => {
   it('detects direct contact questions and replies briefly to plain gratitude', () => {
     expect(isDirectLocationQuestion('Iskenderunun neresindesiniz?')).toBe(true);
     expect(isDirectPhoneQuestion('Telefon numaraniz nedir?')).toBe(true);
+    expect(isGenericInfoRequest('Bilgi alabilir miyim?')).toBe(true);
+    expect(isGenericInfoRequest({
+      messageText: 'Hizmetleriniz hakkinda bilgi verir misiniz?',
+      intentCategories: ['services'],
+      semanticSignals: ['hizmet'],
+    })).toBe(true);
+    expect(isGenericInfoRequest({
+      messageText: 'Kickboks hakkinda bilgi verirmisin',
+      intentCategories: ['services'],
+      semanticSignals: ['kickboks', 'boks'],
+    })).toBe(false);
+    expect(isGenericInfoRequest('Kickboks hakkinda bilgi verirmisin')).toBe(false);
     expect(isPilatesInfoRequest('pilates var mi')).toBe(true);
     expect(isPilatesInfoRequest('reformer pilates')).toBe(true);
     expect(isPilatesInfoRequest('pilates ne kadar')).toBe(false);

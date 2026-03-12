@@ -34,6 +34,11 @@
 
 import type { FollowUpContextHint, ResponseDirective } from './InstagramContextService.js';
 import {
+  hasExplicitMembershipInclusionEvidenceLine,
+  hasMembershipInclusionSignals,
+  normalizeMembershipInclusionSignalText,
+} from './MembershipInclusionSignalService.js';
+import {
   addUsageMetrics,
   extractUsageMetrics,
   ZERO_USAGE_METRICS,
@@ -154,6 +159,13 @@ interface ServiceDurationPriceTuple {
   durationKey: string;
   priceValue: string;
   display: string;
+}
+
+interface MembershipPricedOffering {
+  label: string;
+  normalizedLabel: string;
+  tokens: string[];
+  sourceLine: string;
 }
 
 export class ResponsePolicyService {
@@ -423,6 +435,7 @@ export class ResponsePolicyService {
     const queryTokens = this.extractEvidenceTokens(querySource);
     const pricingContext = this.hasPricingSignals(querySource);
     const agePolicyContext = hasAgePolicySignals(querySource);
+    const membershipContext = hasMembershipInclusionSignals(querySource);
 
     if (queryTokens.length === 0) {
       return [];
@@ -440,17 +453,18 @@ export class ResponsePolicyService {
         const hasDurationToken = /\b\d+\s*(?:dk|dakika|saat)\b/i.test(line);
         const pricingBoost = pricingContext && (hasPriceToken || hasDurationToken) ? 2 : 0;
         const policyBoost = agePolicyContext && hasAgeRestrictionEvidenceLine(line) ? 2 : 0;
+        const membershipBoost = membershipContext && hasExplicitMembershipInclusionEvidenceLine(line) ? 3 : 0;
 
         return {
           line,
           index,
-          score: overlap.length + hasNumericRange + pricingBoost + policyBoost,
+          score: overlap.length + hasNumericRange + pricingBoost + policyBoost + membershipBoost,
         };
       })
       .filter(item => item.score > 0)
       .sort((a, b) => (b.score - a.score) || (a.index - b.index));
 
-    const maxEvidenceLines = (pricingContext || agePolicyContext) ? 10 : 4;
+    const maxEvidenceLines = (pricingContext || agePolicyContext || membershipContext) ? 10 : 4;
     return [...new Set(scoredLines.slice(0, maxEvidenceLines).map(item => item.line))];
   }
 
@@ -950,6 +964,231 @@ export class ResponsePolicyService {
     };
   }
 
+  private isMembershipLine(text: string): boolean {
+    return /\b(?:uyelik|membership|abonelik)\b/.test(
+      normalizeMembershipInclusionSignalText(text),
+    );
+  }
+
+  private extractSelectedEvidenceDataLines(selectedEvidence?: string): string[] {
+    const trimmed = selectedEvidence?.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    return trimmed
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('[') && !line.startsWith('Aciklama:'));
+  }
+
+  private extractOfferingTokens(rawText: string): string[] {
+    const stopwords = new Set([
+      'aylik',
+      'haftalik',
+      'haftada',
+      'gun',
+      'gunde',
+      'seans',
+      'ders',
+      'dersleri',
+      'derslerimiz',
+      'fiyat',
+      'fiyatlarimiz',
+      'ucret',
+      'ucreti',
+      'paket',
+      'paketleri',
+      'program',
+      'programi',
+      'programlari',
+      'hizmet',
+      'hizmeti',
+      'hizmetleri',
+      'detay',
+      'detaylari',
+      'bilgi',
+      'bilgilerimiz',
+      'studyosu',
+      'studuosu',
+      'merkezi',
+      'salonu',
+    ]);
+
+    return normalizeMembershipInclusionSignalText(rawText)
+      .split(/\s+/)
+      .filter(token => token.length >= 3 && !stopwords.has(token));
+  }
+
+  private extractStandaloneOfferingLabel(rawLine: string, currentSectionService: string | null): string | null {
+    const line = rawLine
+      .replace(/^[^\p{L}\p{N}]+/u, '')
+      .trim();
+    if (!line) {
+      return currentSectionService;
+    }
+
+    const arrowMatch = line.match(/^(.+?)\s*(?:->|→)\s*\d/u);
+    if (arrowMatch) {
+      return arrowMatch[1].trim();
+    }
+
+    const colonPriceMatch = line.match(/^(.+?):\s*.*\d/u);
+    if (colonPriceMatch) {
+      return colonPriceMatch[1].trim();
+    }
+
+    const durationPrefixMatch = line.match(/^(.+?)\s+\d{1,3}\s*(?:dk|dakika|saat)\b/i);
+    if (durationPrefixMatch) {
+      return durationPrefixMatch[1].trim();
+    }
+
+    return currentSectionService;
+  }
+
+  private extractStandalonePricedOfferings(knowledgeContext: string): MembershipPricedOffering[] {
+    const offerings = new Map<string, MembershipPricedOffering>();
+    let currentSectionService: string | null = null;
+
+    for (const rawLine of (knowledgeContext || '').split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('[')) {
+        continue;
+      }
+
+      const headingService = this.normalizeHeadingServiceLabel(line);
+      if (headingService) {
+        currentSectionService = headingService;
+        continue;
+      }
+
+      const hasStandalonePricing = this.extractPriceValues(line).length > 0
+        || /\b\d+\s*(?:dk|dakika|saat)\b/i.test(line);
+      if (!hasStandalonePricing) {
+        continue;
+      }
+
+      const label = this.extractStandaloneOfferingLabel(line, currentSectionService);
+      if (!label || this.isMembershipLine(label)) {
+        continue;
+      }
+
+      const normalizedLabel = this.normalizeServiceKey(label);
+      if (!normalizedLabel || this.isMembershipLine(normalizedLabel)) {
+        continue;
+      }
+
+      const tokens = this.extractOfferingTokens(normalizedLabel);
+      if (tokens.length === 0) {
+        continue;
+      }
+
+      const key = tokens.join(' ');
+      if (!offerings.has(key)) {
+        offerings.set(key, {
+          label,
+          normalizedLabel,
+          tokens,
+          sourceLine: line,
+        });
+      }
+    }
+
+    return [...offerings.values()];
+  }
+
+  private responseMentionsOffering(responseText: string, offering: MembershipPricedOffering): boolean {
+    const normalizedResponse = normalizeMembershipInclusionSignalText(responseText);
+    return offering.tokens.every(token => normalizedResponse.includes(token));
+  }
+
+  private responseTreatsOfferingAsSeparate(responseText: string, offering: MembershipPricedOffering): boolean {
+    if (!this.responseMentionsOffering(responseText, offering)) {
+      return false;
+    }
+
+    const normalizedResponse = normalizeMembershipInclusionSignalText(responseText);
+    return [
+      /\bayri\b.*\b(?:hizmet\w*|ucret\w*|fiyat\w*)\b/,
+      /\bayri\s+(?:olarak|sunulur|sunuluyor|gecer|degerlendirilir)\b/,
+      /\bdahil\s+degil\w*\b/,
+      /\buyelige?\s+dahil\s+degil\w*\b/,
+      /\buyelik\s+disi\b/,
+      /\bek\s+ucret\w*\b/,
+      /\bfiyatlan\w*\b/,
+      /\bharic\b/,
+    ].some(pattern => pattern.test(normalizedResponse));
+  }
+
+  private isOfferingExplicitlyIncluded(
+    offering: MembershipPricedOffering,
+    membershipEvidenceLines: string[],
+  ): boolean {
+    return membershipEvidenceLines.some(line => {
+      const normalizedLine = normalizeMembershipInclusionSignalText(line);
+      return hasExplicitMembershipInclusionEvidenceLine(line)
+        && offering.tokens.every(token => normalizedLine.includes(token));
+    });
+  }
+
+  private validateMembershipInclusionGrounding(context: PolicyValidationContext): DeterministicGroundingResult {
+    const startTime = Date.now();
+    if (!hasMembershipInclusionSignals(
+      context.customerMessage,
+      context.followUpHint?.rewrittenQuestion,
+      context.followUpHint?.topicLabel,
+      context.activeTopic,
+      context.responseDirective?.instruction,
+    )) {
+      return {
+        valid: true,
+        violations: [],
+        reason: 'membership inclusion grounding not applicable',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    const membershipEvidenceLines = [
+      ...this.extractSelectedEvidenceDataLines(context.selectedEvidence),
+      ...context.knowledgeContext
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('[') && hasExplicitMembershipInclusionEvidenceLine(line)),
+    ];
+    const standaloneOfferings = this.extractStandalonePricedOfferings(context.knowledgeContext);
+    const unsupportedClaims = standaloneOfferings.filter(offering =>
+      this.responseMentionsOffering(context.agentResponse, offering)
+      && !this.responseTreatsOfferingAsSeparate(context.agentResponse, offering)
+      && !this.isOfferingExplicitlyIncluded(offering, membershipEvidenceLines),
+    );
+
+    if (unsupportedClaims.length === 0) {
+      return {
+        valid: true,
+        violations: [],
+        reason: 'membership inclusion grounding passed',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
+    const invalidSummary = unsupportedClaims
+      .slice(0, 3)
+      .map(offering => offering.label)
+      .join(', ');
+    const evidenceSummary = membershipEvidenceLines.length > 0
+      ? membershipEvidenceLines.slice(0, 3).join(' | ')
+      : 'Uyelikte hangi hizmetlerin dahil oldugunu acikca soyleyen kanit yok.';
+
+    return {
+      valid: false,
+      violations: [
+        `13. UYELIK KAPSAMI TUTARSIZLIGI: Yanit uyelige acikca dahil oldugu kanitlanmayan ayri fiyatli hizmet(ler)i dahil gosteriyor (${invalidSummary}). Kanit: ${evidenceSummary}`,
+      ],
+      reason: 'Yanitta uyelik kapsaminda olmayan veya kanitlanmayan hizmet dahil gosterildi',
+      latencyMs: Date.now() - startTime,
+    };
+  }
+
   private validateDeterministicGrounding(context: PolicyValidationContext): DeterministicGroundingResult {
     const startTime = Date.now();
     const allowedPrices = this.extractPriceValues(context.knowledgeContext);
@@ -996,13 +1235,18 @@ export class ResponsePolicyService {
       violations.push(...agePolicyResult.violations);
     }
 
+    const membershipInclusionResult = this.validateMembershipInclusionGrounding(context);
+    if (!membershipInclusionResult.valid) {
+      violations.push(...membershipInclusionResult.violations);
+    }
+
     return {
       valid: violations.length === 0,
       violations,
       reason: violations.length === 0
         ? 'deterministic grounding passed'
         : 'Yanitta KB ile eslesmeyen deterministik bilgi var',
-      latencyMs: Date.now() - startTime + agePolicyResult.latencyMs,
+      latencyMs: Date.now() - startTime + agePolicyResult.latencyMs + membershipInclusionResult.latencyMs,
     };
   }
 

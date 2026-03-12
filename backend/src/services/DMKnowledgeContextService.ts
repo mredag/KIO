@@ -6,6 +6,7 @@ import {
   buildDeterministicHoursAppointmentTemplate,
   buildDeterministicHoursTemplate,
   buildDeterministicLocationTemplate,
+  buildDeterministicMassagePricingTemplate,
   buildDeterministicPilatesTemplate,
   buildDeterministicPhoneTemplate,
   buildGenericInfoTemplate,
@@ -40,6 +41,7 @@ export interface FilteredKnowledgeContext {
 export interface DeterministicKnowledgeTemplates {
   signature: string;
   genericInfo: string | null;
+  massagePricingInfo: string | null;
   campaignInfo: string | null;
   pilatesInfo: string | null;
   contactLocation: string | null;
@@ -143,6 +145,10 @@ export class DMKnowledgeContextService {
         bringInfo: services.complete_customer_bring_guide || null,
         phoneInfo: contact.phone || null,
         locationInfo: contact.address || null,
+      }),
+      massagePricingInfo: buildDeterministicMassagePricingTemplate({
+        massagePricing: pricing.complete_massage_pricing || this.pickFirstValue(pricing),
+        phoneInfo: contact.phone || null,
       }),
       campaignInfo: buildDeterministicCampaignTemplate({
         campaignInfo: pricing.current_campaign || this.pickCampaignValue(pricing),

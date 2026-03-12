@@ -24,9 +24,12 @@ import {
   buildDeterministicCloseoutResponse,
   CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+  detectDeterministicPricingTopic,
   HOURS_APPOINTMENT_MODEL_ID,
   isDirectLocationQuestion,
   isDirectPhoneQuestion,
+  isGenericInfoRequest as isGenericInfoFastLaneRequest,
+  MASSAGE_PRICING_MODEL_ID,
   isPilatesInfoRequest,
   isStandaloneAppointmentRequest,
   normalizeTemplateText as normalizeFastLaneText,
@@ -195,7 +198,7 @@ export interface PipelineTrace {
   humanizer?: TurkishDMHumanizerTrace;
   fastLane?: {
     used: boolean;
-    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_campaign' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
+    kind: 'none' | 'deterministic_conduct' | 'deterministic_info_template' | 'deterministic_massage_pricing' | 'deterministic_campaign' | 'deterministic_pilates_info' | 'deterministic_clarifier' | 'deterministic_contact_location' | 'deterministic_contact_phone' | 'deterministic_contact_fallback' | 'deterministic_hours' | 'deterministic_hours_appointment' | 'deterministic_appointment' | 'deterministic_closeout' | 'response_cache' | 'simple_analysis';
     skippedStages: string[];
   };
   cache?: {
@@ -332,33 +335,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     return !allowedIds.includes(senderId);
   }
 
-  function normalizeTemplateText(text: string): string {
-    return text
-      .toLocaleLowerCase('tr-TR')
-      .replace(/ü/g, 'u')
-      .replace(/ö/g, 'o')
-      .replace(/ş/g, 's')
-      .replace(/ç/g, 'c')
-      .replace(/ğ/g, 'g')
-      .replace(/ı/g, 'i')
-      .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function isGenericInfoRequest(messageText: string): boolean {
-    const normalized = normalizeTemplateText(messageText);
-    if (!normalized) return false;
-
-    const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
-      || /\bbilgi\s+(al|ver)/.test(normalized);
-    if (!hasInfoIntent) return false;
-
-    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
-
-    return !hasSpecificAnchor;
-  }
-
   /*
 
       const sections: string[] = ['Elbette, size hızlıca temel bilgileri paylaşayım 👇'];
@@ -442,7 +418,11 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     if (analysis.matchedKeywords.includes('standalone_hours_request')) {
       return 'direct_hours';
     }
-    if (isGenericInfoRequest(messageText)) {
+    if (isGenericInfoFastLaneRequest({
+      messageText,
+      intentCategories: analysis.intentCategories,
+      semanticSignals: analysis.matchedKeywords,
+    })) {
       return 'general_info';
     }
     if (analysis.intentCategories.includes('services')
@@ -1580,7 +1560,11 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             markFastLane(trace, 'deterministic_conduct', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
           }
 
-          if (!precomputedAgentResponse && conductStateForReply === 'normal' && deterministicTemplates.genericInfo && isGenericInfoRequest(messageText)) {
+          if (!precomputedAgentResponse && conductStateForReply === 'normal' && deterministicTemplates.genericInfo && isGenericInfoFastLaneRequest({
+            messageText,
+            intentCategories: analysis.intentCategories,
+            semanticSignals: analysis.matchedKeywords,
+          })) {
             console.log('[Instagram Webhook] Using deterministic info template response');
             precomputedAgentResponse = deterministicTemplates.genericInfo;
             trace.directResponse = {
@@ -1597,6 +1581,32 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             trace.modelId = 'deterministic/info-template-v1';
             precomputedSkipPolicy = true;
             markFastLane(trace, 'deterministic_info_template', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
+          }
+
+          if (!precomputedAgentResponse
+            && conductStateForReply === 'normal'
+            && deterministicTemplates.massagePricingInfo
+            && detectDeterministicPricingTopic({
+              messageText,
+              intentCategories: analysis.intentCategories,
+              semanticSignals: analysis.matchedKeywords,
+            }) === 'massage') {
+            console.log('[Instagram Webhook] Using deterministic massage pricing response');
+            precomputedAgentResponse = deterministicTemplates.massagePricingInfo;
+            trace.directResponse = {
+              used: true,
+              latencyMs: 0,
+              modelId: MASSAGE_PRICING_MODEL_ID,
+              tokensEstimated: estimateTokens(precomputedAgentResponse),
+              inputTokens: 0,
+              outputTokens: estimateTokens(precomputedAgentResponse),
+            };
+            trace.openclawDispatchStatus = 'skipped' as any;
+            trace.openclawSessionKey = 'deterministic-massage-pricing';
+            trace.agentPollDurationMs = 0;
+            trace.modelId = MASSAGE_PRICING_MODEL_ID;
+            precomputedSkipPolicy = true;
+            markFastLane(trace, 'deterministic_massage_pricing', ['knowledge_fetch', 'semantic_retrieval', 'semantic_rerank', 'direct_response', 'policy_validation']);
           }
 
           if (!precomputedAgentResponse && conductStateForReply === 'normal' && deterministicTemplates.pilatesInfo && isPilatesInfoRequest(messageText)) {
@@ -2027,6 +2037,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   followUpHint: analysis.followUpHint,
                   activeTopic: analysis.activeTopicLabel,
                   primaryCategories: categories,
+                  allowInContextCandidates: true,
                   maxCandidates: 8,
                 });
 

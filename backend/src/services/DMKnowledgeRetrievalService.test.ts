@@ -162,4 +162,57 @@ describe('DMKnowledgeRetrievalService', () => {
     expect(result.addedEntriesCount).toBe(0);
     expect(result.trace.skippedReason).toBe('low_signal_query');
   });
+
+  it('can retrieve focused membership evidence from already loaded categories when explicitly allowed', () => {
+    const service = new DMKnowledgeRetrievalService(createDb([
+      {
+        id: '1',
+        category: 'services',
+        key_name: 'membership_includes',
+        value: 'Tum uyelikler havuz, hamam, sauna ve buhar odasi kullanimini kapsar.',
+        description: 'Uyelik kapsamindaki ortak alanlar.',
+        updated_at: '2026-03-12T00:00:00.000Z',
+      },
+      {
+        id: '2',
+        category: 'pricing',
+        key_name: 'reformer_pilates',
+        value: 'Reformer Pilates: Haftada 2 gun, aylik 3500 TL.',
+        description: 'Ayri fiyatlanan hizmet.',
+        updated_at: '2026-03-12T00:00:00.000Z',
+      },
+      {
+        id: '3',
+        category: 'faq',
+        key_name: 'parking',
+        value: 'Otopark alanimiz mevcuttur.',
+        description: null,
+        updated_at: '2026-03-12T00:00:00.000Z',
+      },
+    ]));
+
+    const baseParams = {
+      baseContextJson: JSON.stringify({
+        services: { facility_overview: 'Fitness, havuz ve grup dersleri mevcuttur.' },
+        pricing: { membership_individual: 'Ferdi Uyelik (Tum Tesis): 1 aylik 3500 TL' },
+        contact: { phone: '0326 502 58 58' },
+      }),
+      messageText: '1 aylik uyelik icerisinde hangi imkanlardan yararlanabiliyorum',
+      followUpHint: null,
+      activeTopic: 'ferdi uyelik',
+      primaryCategories: ['services', 'pricing', 'contact'],
+      maxCandidates: 8,
+    } as const;
+
+    const blockedResult = service.findCandidates(baseParams);
+    expect(blockedResult.candidates).toEqual([]);
+
+    const allowedResult = service.findCandidates({
+      ...baseParams,
+      allowInContextCandidates: true,
+    });
+
+    expect(allowedResult.candidates.some(candidate => candidate.keyName === 'membership_includes')).toBe(true);
+    expect(allowedResult.trace.selectedEntries.some(entry => entry.keyName === 'membership_includes')).toBe(true);
+  });
 });

@@ -37,6 +37,11 @@ export interface DeterministicPilatesTemplateInput {
   whatsappInfo?: string | null;
 }
 
+export interface DeterministicMassagePricingTemplateInput {
+  massagePricing?: string | null;
+  phoneInfo?: string | null;
+}
+
 const GENERIC_INFO_TEMPLATE_MAX_CHARS = 900;
 
 function shouldAppendMassageLabel(leftSide: string): boolean {
@@ -278,6 +283,21 @@ export function buildDeterministicPilatesTemplate(input: DeterministicPilatesTem
   }
 
   return sections.length > 1 ? sections.join('\n\n') : null;
+}
+
+export function buildDeterministicMassagePricingTemplate(input: DeterministicMassagePricingTemplateInput): string | null {
+  const sections: string[] = [];
+
+  if (input.massagePricing?.trim()) {
+    sections.push(buildCompactMassagePricingSummary(input.massagePricing));
+  }
+
+  if (input.phoneInfo?.trim()) {
+    sections.push(`Detayli bilgi ve randevu: ${buildCompactPhoneSummary(input.phoneInfo)}`);
+  }
+
+  const result = joinSectionsWithinLimit(sections, 420);
+  return result || null;
 }
 
 export function buildDeterministicCloseoutTemplate(): string {

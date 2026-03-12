@@ -297,6 +297,33 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('contact bilgisini dogrudan kullan');
   });
 
+  it('forces direct grounded massage pricing answers even when the planner suggests a clarifier', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['pricing', 'services'],
+      semanticSignals: ['pricing_inquiry'],
+      followUpHint: null,
+      responseDirective: {
+        mode: 'clarify_only',
+        instruction: 'Hangi masaj turunun fiyatini istedigini sor.',
+        rationale: 'Masaj turu belirtilmedi.',
+      },
+      tier: 'light',
+      tierReason: 'Kisa fiyat sorusu',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI('Masaj ucreti ne kadar', []);
+
+    expect(result.categories).toEqual(expect.arrayContaining(['pricing', 'services']));
+    expect(result.keywords).toContain('generic_massage_pricing_signal');
+    expect(result.followUpHint).toBeNull();
+    expect(result.responseDirective.mode).toBe('answer_directly');
+    expect(result.responseDirective.instruction).toContain('Verilen masaj fiyat listesini veya ozetini dogrudan ver');
+    expect(result.responseDirective.instruction).toContain('Gereksiz sekilde hangi masaj turunu');
+  });
+
   it('forces policies into age-related follow-ups even when the planner anchors to a service topic', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue(createAiResponse({

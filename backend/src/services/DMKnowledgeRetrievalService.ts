@@ -125,6 +125,7 @@ export class DMKnowledgeRetrievalService {
     followUpHint: FollowUpContextHint | null;
     activeTopic: string | null;
     primaryCategories: Iterable<string>;
+    allowInContextCandidates?: boolean;
     maxEntries?: number;
     maxCandidates?: number;
     minScore?: number;
@@ -160,6 +161,7 @@ export class DMKnowledgeRetrievalService {
     followUpHint: FollowUpContextHint | null;
     activeTopic: string | null;
     primaryCategories: Iterable<string>;
+    allowInContextCandidates?: boolean;
     maxCandidates?: number;
     minScore?: number;
   }): SemanticRetrievalCandidateResult {
@@ -205,12 +207,14 @@ export class DMKnowledgeRetrievalService {
     }
 
     const currentContext = this.parseContext(params.baseContextJson);
-    const blockedCategories = new Set(
-      [
-        ...Array.from(params.primaryCategories).map(category => category.toLowerCase()),
-        ...Object.keys(currentContext).map(category => category.toLowerCase()),
-      ],
-    );
+    const blockedCategories = params.allowInContextCandidates
+      ? new Set<string>()
+      : new Set(
+          [
+            ...Array.from(params.primaryCategories).map(category => category.toLowerCase()),
+            ...Object.keys(currentContext).map(category => category.toLowerCase()),
+          ],
+        );
 
     const candidates = index.documents
       .filter(document => !blockedCategories.has(document.category.toLowerCase()))

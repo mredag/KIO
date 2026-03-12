@@ -1,6 +1,10 @@
 import Database from 'better-sqlite3';
 import { ConversationStateService } from './ConversationStateService.js';
 import type { ConversationStateRecord } from './ConversationStateService.js';
+import {
+  detectDeterministicPricingTopic,
+  isGenericInfoRequest as isSharedGenericInfoRequest,
+} from './DMPipelineHeuristics.js';
 import { hasAgePolicySignals } from './PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from './RoomAvailabilitySignalService.js';
 import { extractUsageMetrics } from './UsageMetrics.js';
@@ -821,6 +825,32 @@ export class InstagramContextService {
       return;
     }
 
+    const deterministicPricingTopic = detectDeterministicPricingTopic({
+      messageText,
+      intentCategories: plan.categories,
+      semanticSignals: plan.keywords,
+    });
+    if (deterministicPricingTopic === 'massage') {
+      if (!plan.categories.includes('services')) {
+        plan.categories = ['services', ...plan.categories];
+      }
+      if (!plan.categories.includes('pricing')) {
+        plan.categories = ['pricing', ...plan.categories];
+      }
+      if (!plan.keywords.includes('generic_massage_pricing_signal')) {
+        plan.keywords.push('generic_massage_pricing_signal');
+      }
+      if (!plan.topicSummary) {
+        plan.topicSummary = 'masaj hizmetleri';
+      }
+      plan.responseDirective = {
+        mode: 'answer_directly',
+        instruction: 'Musteri genel masaj/spa fiyatini soruyor. Verilen masaj fiyat listesini veya ozetini dogrudan ver. Gereksiz sekilde hangi masaj turunu istedigini geri sorma. Sadece musteri belirli bir masaj turunu ayrica sorarsa o satiri detaylandir.',
+        rationale: 'Genel masaj fiyat talebi mevcut fiyat listesiyle dogrudan cevaplanabilir; netlestirme sorusu gereksiz.',
+      };
+      return;
+    }
+
     const hasDurationSignal = /\b(?:uzun|kisa)\s*sure(?:li)?\b/.test(normalizedMessage)
       || /\b(?:sure|sureli|dakika|dk|seans|saat)\b/.test(normalizedMessage)
       || /\b\d+\s*(?:dk|dakika)\b/.test(normalizedMessage)
@@ -1624,7 +1654,8 @@ export class InstagramContextService {
     return this.isDirectLocationQuestion(messageText, plan.categories)
       || this.isDirectPhoneQuestion(messageText, plan.categories)
       || this.isGreetingOrCourtesyOnly(messageText)
-      || this.isGenericInfoRequest(messageText)
+      || this.isGenericInfoRequest(messageText, plan.categories, plan.keywords)
+      || plan.keywords.includes('generic_massage_pricing_signal')
       || this.isGenericPricingClarifierQuestion(messageText, plan.categories)
       || this.hasStandaloneAppointmentRequest(messageText, plan.categories)
       || this.hasStandaloneHoursRequest(messageText, plan.categories)
@@ -1658,20 +1689,12 @@ export class InstagramContextService {
     return /^(?:merhaba|selam(?:lar)?|iyi gunler|gunaydin|iyi aksamlar|hey|slm)$/.test(normalized);
   }
 
-  private isGenericInfoRequest(messageText: string): boolean {
-    const normalized = this.normalizeMessageForHeuristics(messageText);
-    if (!normalized) {
-      return false;
-    }
-
-    const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
-      || /\bbilgi\s+(al|ver)/.test(normalized);
-    if (!hasInfoIntent) {
-      return false;
-    }
-
-    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
-    return !hasSpecificAnchor;
+  private isGenericInfoRequest(messageText: string, categories: string[], semanticSignals: string[]): boolean {
+    return isSharedGenericInfoRequest({
+      messageText,
+      intentCategories: categories,
+      semanticSignals,
+    });
   }
 
   private isGenericPricingClarifierQuestion(messageText: string, categories: string[]): boolean {

@@ -1,5 +1,10 @@
 import type { FollowUpContextHint } from './InstagramContextService.js';
 import type { SemanticRetrievalCandidate } from './DMKnowledgeRetrievalService.js';
+import {
+  hasExplicitMembershipInclusionEvidenceLine,
+  hasMembershipInclusionSignals,
+  normalizeMembershipInclusionSignalText,
+} from './MembershipInclusionSignalService.js';
 import { hasAgePolicySignals, normalizePolicySignalText } from './PolicySignalService.js';
 import { hasRoomAvailabilitySignals, normalizeRoomAvailabilitySignalText } from './RoomAvailabilitySignalService.js';
 import { extractUsageMetrics } from './UsageMetrics.js';
@@ -282,6 +287,12 @@ export class DMKnowledgeRerankerService {
       params.followUpHint?.topicLabel,
       params.activeTopic,
     );
+    const prioritizeMembershipInclusion = hasMembershipInclusionSignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
     const prioritizeRoomAvailability = hasRoomAvailabilitySignals(
       params.messageText,
       params.followUpHint?.rewrittenQuestion,
@@ -289,7 +300,7 @@ export class DMKnowledgeRerankerService {
       params.activeTopic,
     );
 
-    if (prioritizeAgePolicies || prioritizeRoomAvailability) {
+    if (prioritizeAgePolicies || prioritizeMembershipInclusion || prioritizeRoomAvailability) {
       return false;
     }
 
@@ -312,6 +323,11 @@ export class DMKnowledgeRerankerService {
       params.followUpHint?.rewrittenQuestion,
       activeTopic,
     );
+    const prioritizeMembershipInclusion = hasMembershipInclusionSignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      activeTopic,
+    );
     const prioritizeRoomAvailability = hasRoomAvailabilitySignals(
       params.messageText,
       params.followUpHint?.rewrittenQuestion,
@@ -320,8 +336,8 @@ export class DMKnowledgeRerankerService {
 
     return [
       'Sen bir bilgi secim reranker ajanisin.',
-      'Amac: Mevcut musteri sorusunu yanitlamaya dogrudan yardim eden EK bilgi adaylarini secmek.',
-      'Bu adaylar zaten ana bilgi kategorileri DISINDA kalan destek girisleridir.',
+      'Amac: Mevcut musteri sorusunu yanitlamaya dogrudan yardim eden odakli bilgi adaylarini secmek.',
+      'Bu adaylar bazen ana kategoriler disindaki destek girisleri, bazen de ayni kategoriler icindeki daha odakli satirlardir.',
       'Yalnizca musteri sorusuna dogrudan yardim eden adaylari sec.',
       'Genis, alakasiz, cok genel veya sadece dolayli faydali adaylari secme.',
       'Eger hicbiri gercekten yardim etmiyorsa bos liste don.',
@@ -336,6 +352,8 @@ export class DMKnowledgeRerankerService {
       '- Yalnizca musteri sorusuna cevap kurmaya yardim eden destek bilgileri sec.',
       prioritizeAgePolicies
         ? '- Mesaj yas, 18+, cocuk, veli veya ebeveyn izni soruyorsa ilgili policies adaylarini ONCELIKLE sec; aktif konu fiyat olsa bile yas kurali alakasiz sayilmaz.'
+        : prioritizeMembershipInclusion
+          ? '- Mesaj uyeligin icinde neler oldugunu soruyorsa, uyelikte nelerin dahil oldugunu ACIKCA soyleyen services/pricing satirlarini ONCELIKLE sec. Sadece tesis tanitimi yapan genel satirlari veya ayri fiyatlanan hizmet satirlarini, uyeligin bunlari kapsadigi net yazmiyorsa secme.'
         : prioritizeRoomAvailability
           ? '- Mesaj oda secenegi, cift oda, tek kisilik/iki kisilik oda veya couple masaj soruyorsa ilgili faq adaylarini ONCELIKLE sec; aktif konu daha once fiyat olsa bile oda secenegi alakasiz sayilmaz.'
         : '- Soru fiyat/saat odakliysa, sadece konu kapsaminda aciklayici destek girisleri sec; alakasiz politika metinlerini secme.',
@@ -374,6 +392,12 @@ export class DMKnowledgeRerankerService {
       params.followUpHint?.topicLabel,
       params.activeTopic,
     );
+    const prioritizeMembershipInclusion = hasMembershipInclusionSignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
+    );
     const prioritizeRoomAvailability = hasRoomAvailabilitySignals(
       params.messageText,
       params.followUpHint?.rewrittenQuestion,
@@ -381,14 +405,18 @@ export class DMKnowledgeRerankerService {
       params.activeTopic,
     );
 
-    if (!prioritizeAgePolicies && !prioritizeRoomAvailability) {
+    if (!prioritizeAgePolicies && !prioritizeMembershipInclusion && !prioritizeRoomAvailability) {
       if (params.candidates.length === 1 && params.candidates[0].score < 0.30) {
         return [];
       }
       return params.candidates.slice(0, maxSelections);
     }
 
-    const normalizeFn = prioritizeAgePolicies ? normalizePolicySignalText : normalizeRoomAvailabilitySignalText;
+    const normalizeFn = prioritizeAgePolicies
+      ? normalizePolicySignalText
+      : prioritizeMembershipInclusion
+        ? normalizeMembershipInclusionSignalText
+        : normalizeRoomAvailabilitySignalText;
     const topicTokens = new Set(
       normalizeFn([
         params.messageText,
@@ -404,9 +432,13 @@ export class DMKnowledgeRerankerService {
       .sort((left, right) => {
         const leftBoost = prioritizeAgePolicies
           ? this.getAgePolicyCandidateBoost(left, topicTokens)
+          : prioritizeMembershipInclusion
+            ? this.getMembershipInclusionCandidateBoost(left, topicTokens)
           : this.getRoomAvailabilityCandidateBoost(left, topicTokens);
         const rightBoost = prioritizeAgePolicies
           ? this.getAgePolicyCandidateBoost(right, topicTokens)
+          : prioritizeMembershipInclusion
+            ? this.getMembershipInclusionCandidateBoost(right, topicTokens)
           : this.getRoomAvailabilityCandidateBoost(right, topicTokens);
         return (rightBoost - leftBoost) || (right.score - left.score);
       })
@@ -440,6 +472,11 @@ export class DMKnowledgeRerankerService {
       params.followUpHint?.rewrittenQuestion,
       params.followUpHint?.topicLabel,
       params.activeTopic,
+    ) || hasMembershipInclusionSignals(
+      params.messageText,
+      params.followUpHint?.rewrittenQuestion,
+      params.followUpHint?.topicLabel,
+      params.activeTopic,
     ) || hasRoomAvailabilitySignals(
       params.messageText,
       params.followUpHint?.rewrittenQuestion,
@@ -464,6 +501,54 @@ export class DMKnowledgeRerankerService {
         score += 1;
       }
     }
+    return score;
+  }
+
+  private getMembershipInclusionCandidateBoost(candidate: SemanticRetrievalCandidate, topicTokens: Set<string>): number {
+    const candidateText = normalizeMembershipInclusionSignalText([
+      candidate.category,
+      candidate.keyName,
+      candidate.value,
+      candidate.description || '',
+    ].join(' '));
+    const hasMembershipAnchor = /\b(?:uyelik|membership|abonelik)\b/.test(candidateText);
+    const hasExplicitInclusion = hasExplicitMembershipInclusionEvidenceLine([
+      candidate.keyName,
+      candidate.value,
+      candidate.description || '',
+    ].join(' '));
+    const hasStandalonePricing = /\d/.test(candidateText)
+      && /\b(?:tl|lira|ucret|aylik|hafta|haftada|seans|ders|dk|dakika|saat)\b/.test(candidateText);
+
+    let score = 0;
+    if (candidate.category === 'services' || candidate.category === 'pricing') {
+      score += 1;
+    }
+    if (hasMembershipAnchor) {
+      score += 5;
+    }
+    if (hasExplicitInclusion) {
+      score += 6;
+    }
+    if (candidate.category === 'pricing' && hasMembershipAnchor) {
+      score += 2;
+    }
+    if (!hasMembershipAnchor && !hasExplicitInclusion) {
+      score -= 2;
+    }
+    if (candidate.category === 'general') {
+      score -= 2;
+    }
+    if (hasStandalonePricing && !hasMembershipAnchor && !hasExplicitInclusion) {
+      score -= 3;
+    }
+
+    for (const token of topicTokens) {
+      if (candidateText.includes(token)) {
+        score += 1;
+      }
+    }
+
     return score;
   }
 

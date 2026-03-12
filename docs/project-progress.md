@@ -26,6 +26,11 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - 2026-03-12: PR `#3` merged `codex/turkish-dm-humanizer` into `master` as commit `08c0f55`, and the merged tree was re-verified locally with the same targeted DM/backend tests plus a frontend production build.
 - 2026-03-12: Pi production backend was reconciled to merged `master` by staging a clean `08c0f55` checkout, rebuilding it with the repo production build path, preserving `backend/.env` and `data/`, and restarting PM2 from `~/kio-new/backend` with `humanizer.enabled=true` still verified.
 - 2026-03-12: Repo hygiene cleanup removed committed root-level scratch artifacts, old DM review mock screenshots, and stale temp query files; `backend/scripts/simulateRealDmTraffic.ts` now defaults to the real repo `data/kiosk.db` path instead of a tracked Pi snapshot file.
+- 2026-03-12: Repo-side DM fast-lane fix centralized generic-info detection around shared semantic signals, so service-specific asks like `kickboks hakkinda bilgi verirmisin` no longer fall into the deterministic generic info template path.
+- 2026-03-12: Repo-side DM membership grounding was hardened so membership-scope questions can rerank focused `membership_includes` evidence from already loaded categories, while deterministic policy validation now rejects separately priced services such as reformer pilates when they are presented as membership-included without explicit KB support.
+- 2026-03-12: Repo-side DM pricing flow was hardened so broad massage/spa pricing asks such as `Masaj ucreti ne kadar` now stay on a shared deterministic path: the planner/simple-turn logic marks them as directly answerable, and the webhook/simulator can answer from the grounded massage pricing template instead of asking an unnecessary `hangi masaj` clarifier.
+- 2026-03-12: Live Pi KB change-set `e552836f-d8ef-405c-9ef2-2a6512e73460` updated `services.membership_includes` so fitness/spor salonu memberships now explicitly include mat pilates, while reformer pilates is stated as a separate paid service.
+- 2026-03-12: Live Pi KB change-set `3e984706-4fd1-4164-908a-78c86e3a3fd1` corrected the same canonical `services.membership_includes` row so fitness/spor salonu memberships now say `step aerobik ve pilates dersleri`, while reformer pilates remains a separate paid service.
 
 ## Open Work
 - Keep `README.md` aligned enough for human onboarding while treating it as an overview, not the live runtime contract.
@@ -35,6 +40,10 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - Decide when the archived Pi pre-cutover trees can be deleted after enough soak time without rollback needs.
 - Upgrade the Pi OpenClaw runtime to `2026.3.8` only after backup, doctor, security-audit, and channel verification steps are followed.
 - Apply the same OpenClaw config hardening to the live Pi machine-local config only after backup and runtime verification.
+- Deploy the shared DM generic-info fast-lane fix to the Pi backend so live Instagram traffic stops treating service-specific `bilgi` requests as broad generic-info turns.
+- Deploy the shared DM massage-pricing fast-lane fix to the Pi backend so live Instagram traffic stops asking unnecessary `hangi masaj` clarifiers for broad pricing questions that are already answerable from KB.
+- Deploy the shared DM membership-grounding fix to the Pi backend so the new rerank/policy guard becomes live in production, even though the current KB-updated simulator answer already includes step aerobik ve pilates dersleri and keeps reformer pilates separate.
+- Harmonize the shorter membership wording still present in `pricing.membership_individual` with the canonical `services.membership_includes` row if you want membership answers to stay fully consistent across all retrieved slices.
 
 ## Known Drift
 - `README.md` still contains older architecture/runtime wording and should not be treated as the source of truth for what is live today.
@@ -54,6 +63,19 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
   - Deployment/runtime change on Pi -> `docs/agent-runtime-memory.md`
   - Mission Control feature addition -> `docs/project-progress.md` plus any feature-specific guide
   - OpenClaw workspace instruction change -> `AGENTS.md` or workspace `AGENTS.md`, with `docs/project-progress.md` updated if the change is milestone-worthy
+- 2026-03-12: Local DM regression verification passed on Windows Node 18:
+  - targeted backend suite passed for `DMPipelineHeuristics`, `DMResponseCacheService`, `DMKnowledgeRetrievalService`, `ResponsePolicyService`, and `DMRealTrafficRegression`
+  - `npx tsc -p tsconfig.build.json` passed in `backend/`
+  - frontend production build passed
+- 2026-03-12: Local broad-massage-pricing verification passed on Windows Node 18:
+  - targeted backend suite passed for `GenericInfoTemplateService`, `DMPipelineHeuristics`, `InstagramContextService`, and `DMRealTrafficRegression`
+  - `Masaj ucreti ne kadar` now stays on the simple-turn path locally with `generic_massage_pricing_signal`
+  - planner overrides broad massage pricing clarifiers to `answer_directly` with grounded pricing instructions
+  - `npx tsc -p tsconfig.build.json` passed in `backend/`
+- 2026-03-12: Live Pi simulator verification:
+  - `kickboks hakkinda bilgi verirmisin` still returned the deterministic generic-info template on `/api/workflow-test/simulate-agent`, confirming the fast-lane fix is still local-only until the backend deploy
+  - `1 aylik uyelik icerisinde tesisinizde yararlanabilecegim imkanlar nelerdir` returned a materially correct answer that included step aerobik ve pilates dersleri and kept reformer pilates separate
+  - live KB row `bf7484c229047cb9075bfb339eefa19e` was re-verified through both the integration API and direct SQLite read from `/home/eform-kio/kio-new/data/kiosk.db` at version `3`
 - 2026-03-12: Read order verified for repo and OpenClaw workspace entrypoints:
   1. `AGENTS.md`
   2. `docs/agent-runtime-memory.md`

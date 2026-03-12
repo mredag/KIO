@@ -48,6 +48,22 @@ describe('DM real traffic regressions', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps broad massage pricing asks on the simple-turn path without a clarifier loop', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-real-traffic', 'Masaj ucreti ne kadar');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toEqual(expect.arrayContaining(['pricing', 'services']));
+    expect(result?.matchedKeywords).toContain('generic_massage_pricing_signal');
+    expect(result?.followUpHint).toBeNull();
+    expect(result?.responseDirective.mode).toBe('answer_directly');
+    expect(result?.responseDirective.instruction).toContain('Gereksiz sekilde hangi masaj turunu');
+  });
+
   it.each([
     {
       label: 'generic info opener from live traffic',

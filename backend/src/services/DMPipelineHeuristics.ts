@@ -1,4 +1,4 @@
-import { normalizeTurkish } from './InstagramContextService.js';
+import { KEYWORD_CATEGORY_MAP, MASSAGE_DETAIL_KEYWORDS, normalizeTurkish } from './DMIntentShared.js';
 import type { ConversationEntry, ResponseMode } from './InstagramContextService.js';
 import { buildDeterministicCloseoutTemplate } from './GenericInfoTemplateService.js';
 
@@ -7,6 +7,7 @@ export const TOPIC_SELECTION_CLARIFIER_MODEL_ID = 'deterministic/clarifier-topic
 export const APPOINTMENT_MODEL_ID = 'deterministic/appointment-booking-v1';
 export const HOURS_APPOINTMENT_MODEL_ID = 'deterministic/hours-appointment-v1';
 export const PILATES_INFO_MODEL_ID = 'deterministic/pilates-info-v1';
+export const MASSAGE_PRICING_MODEL_ID = 'deterministic/massage-pricing-v1';
 export const CLOSEOUT_MODEL_ID = 'deterministic/closeout-v1';
 export const NO_REPLY_MODEL_ID = 'deterministic/no-reply-v1';
 export const CLARIFY_EXHAUSTED_CONTACT_MODEL_ID = 'deterministic/clarify-exhausted-contact-v1';
@@ -39,6 +40,13 @@ const PRICING_SIGNAL_PATTERNS = [
 ];
 const POLITE_LEAD_IN_PATTERN = /^(?:tesekkur(?:ler)?|sag ?ol(?:un)?|saol|eyvallah|tamam(?:dir)?|peki|ok(?:ay)?|anladim|olur|rica ederim)\b\s*/;
 const SPECIFIC_TOPIC_ANCHOR_PATTERN = /\b(?:masaj|klasik|medikal|mix|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/;
+const GENERIC_INFO_DIMENSION_PATTERN = /\b(?:fiyat|ucret|tl|lira|ne kadar|kac|adres|telefon|konum|saat|acik|kapali|randevu)\b/;
+const GENERIC_INFO_ALLOWED_CATEGORIES = new Set(['general', 'faq', 'services']);
+const GENERIC_INFO_GENERIC_SERVICE_KEYWORDS = new Set(['spa', 'hizmet', 'servis']);
+const DETERMINISTIC_PRICING_ALLOWED_CATEGORIES = new Set(['pricing', 'services', 'general', 'faq']);
+const GENERIC_MASSAGE_CONTEXT_KEYWORDS = new Set(['masaj', 'massage', 'spa']);
+const MASSAGE_PRICING_DURATION_PATTERN = /\b(?:\d+\s*(?:dk|dakika)|uzun\s*sure(?:li)?|kisa\s*sure(?:li)?|sure|sureli|dakika|dk|seans|saat)\b/;
+const MASSAGE_PRICING_BLOCKING_DIMENSION_PATTERN = /\b(?:adres|telefon|numara|iletisim|whatsapp|konum|nerede|neredesiniz|neresindesiniz|randevu|rezervasyon|kampanya|indirim|yas|cocuk|ebeveyn|veli)\b/;
 const VAGUE_CLARIFICATION_FOLLOW_UP_PATTERN = /\b(?:bu|bunu|bundan|bunda|bu hizmet|bu paket|bu seans|o|onu|ondan|onda|o hizmet|istiyorum|istedigim|istedigimi|yani|bundaki|ondaki)\b/;
 const CLARIFICATION_REPLY_PATTERNS = [
   /\bhangi\b.*\bbelirtir misiniz\b/,
@@ -51,6 +59,26 @@ const CLARIFICATION_REPLY_PATTERNS = [
 ];
 const CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN = /\b(?:kampanya|indirim|promosyon|firsat|grup|toplu|ucretsiz|bedava|hediye)\b/;
 const CAMPAIGN_INFO_UNAVAILABLE_MESSAGE = 'Su anda paylasabilecegim net bir kampanya bilgisi goremiyorum.';
+const SPECIFIC_SERVICE_KEYWORDS = new Set(
+  (KEYWORD_CATEGORY_MAP.services || [])
+    .map(keyword => normalizeTemplateText(keyword))
+    .filter(keyword => keyword && !GENERIC_INFO_GENERIC_SERVICE_KEYWORDS.has(keyword)),
+);
+const MASSAGE_PRICING_DETAIL_KEYWORDS = new Set(
+  [...(KEYWORD_CATEGORY_MAP.services || []), ...MASSAGE_DETAIL_KEYWORDS]
+    .map(keyword => normalizeTemplateText(keyword))
+    .filter(keyword => keyword && !GENERIC_MASSAGE_CONTEXT_KEYWORDS.has(keyword) && !GENERIC_INFO_GENERIC_SERVICE_KEYWORDS.has(keyword)),
+);
+
+export interface GenericInfoRequestParams {
+  messageText: string;
+  intentCategories?: string[];
+  semanticSignals?: string[];
+}
+
+export type DeterministicPricingTopic = 'massage';
+
+export interface DeterministicPricingTopicParams extends GenericInfoRequestParams {}
 
 function stripPoliteLeadIn(normalized: string): string {
   let stripped = normalized.trim();
@@ -133,7 +161,49 @@ export function normalizeTemplateText(text: string): string {
     .trim();
 }
 
-export function isGenericInfoRequest(messageText: string): boolean {
+function escapePattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasSpecificServiceTopicSignal(normalizedMessage: string, semanticSignals: string[]): boolean {
+  const normalizedSignals = new Set(
+    semanticSignals
+      .map(signal => normalizeTemplateText(signal))
+      .filter(Boolean),
+  );
+
+  if (Array.from(normalizedSignals).some(signal => SPECIFIC_SERVICE_KEYWORDS.has(signal))) {
+    return true;
+  }
+
+  return Array.from(SPECIFIC_SERVICE_KEYWORDS).some(keyword => {
+    const pattern = new RegExp(`\\b${escapePattern(keyword)}\\b`);
+    return pattern.test(normalizedMessage);
+  });
+}
+
+function hasDetailedMassagePricingSignal(normalizedMessage: string, semanticSignals: string[]): boolean {
+  const normalizedSignals = new Set(
+    semanticSignals
+      .map(signal => normalizeTemplateText(signal))
+      .filter(Boolean),
+  );
+
+  if (Array.from(normalizedSignals).some(signal => MASSAGE_PRICING_DETAIL_KEYWORDS.has(signal))) {
+    return true;
+  }
+
+  return Array.from(MASSAGE_PRICING_DETAIL_KEYWORDS).some(keyword => {
+    const pattern = new RegExp(`\\b${escapePattern(keyword)}\\b`);
+    return pattern.test(normalizedMessage);
+  });
+}
+
+export function isGenericInfoRequest(input: string | GenericInfoRequestParams): boolean {
+  const params = typeof input === 'string'
+    ? { messageText: input }
+    : input;
+  const messageText = params.messageText;
   const normalized = normalizeTemplateText(messageText);
   if (!normalized) {
     return false;
@@ -145,9 +215,69 @@ export function isGenericInfoRequest(messageText: string): boolean {
     return false;
   }
 
-  const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
+  const intentCategories = new Set((params.intentCategories || []).map(category => category.toLowerCase()));
+  const hasDisallowedIntentCategory = Array.from(intentCategories)
+    .some(category => !GENERIC_INFO_ALLOWED_CATEGORIES.has(category));
+  if (hasDisallowedIntentCategory) {
+    return false;
+  }
 
-  return !hasSpecificAnchor;
+  if (GENERIC_INFO_DIMENSION_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  if (hasSpecificServiceTopicSignal(normalized, params.semanticSignals || [])) {
+    return false;
+  }
+
+  return true;
+}
+
+export function detectDeterministicPricingTopic(
+  input: string | DeterministicPricingTopicParams,
+): DeterministicPricingTopic | null {
+  const params = typeof input === 'string'
+    ? { messageText: input }
+    : input;
+  const normalized = normalizeTemplateText(params.messageText);
+  if (!normalized || !hasPricingSignal(params.messageText)) {
+    return null;
+  }
+
+  const intentCategories = new Set((params.intentCategories || []).map(category => category.toLowerCase()));
+  const hasDisallowedIntentCategory = Array.from(intentCategories)
+    .some(category => !DETERMINISTIC_PRICING_ALLOWED_CATEGORIES.has(category));
+  if (hasDisallowedIntentCategory) {
+    return null;
+  }
+
+  if (MASSAGE_PRICING_BLOCKING_DIMENSION_PATTERN.test(normalized)) {
+    return null;
+  }
+
+  const hasGenericMassageContext = Array.from(GENERIC_MASSAGE_CONTEXT_KEYWORDS).some(keyword => {
+    const pattern = new RegExp(`\\b${escapePattern(keyword)}\\b`);
+    return pattern.test(normalized);
+  });
+  if (!hasGenericMassageContext) {
+    return null;
+  }
+
+  if (MASSAGE_PRICING_DURATION_PATTERN.test(normalized)) {
+    return null;
+  }
+
+  if (hasDetailedMassagePricingSignal(normalized, params.semanticSignals || [])) {
+    return null;
+  }
+
+  return 'massage';
+}
+
+export function isGenericMassagePricingRequest(
+  input: string | DeterministicPricingTopicParams,
+): boolean {
+  return detectDeterministicPricingTopic(input) === 'massage';
 }
 
 export function isStandaloneCloseoutMessage(messageText: string): boolean {

@@ -6,6 +6,7 @@ import {
   buildDeterministicHoursAppointmentTemplate,
   buildDeterministicHoursTemplate,
   buildDeterministicLocationTemplate,
+  buildDeterministicMassagePricingTemplate,
   buildDeterministicPilatesTemplate,
   buildDeterministicPhoneTemplate,
   buildGenericInfoTemplate,
@@ -140,5 +141,17 @@ describe('GenericInfoTemplateService', () => {
 
     expect(result).toContain('Reformer Pilates bilgilerimiz:');
     expect(result).toContain('Fiyat: 3500 TL/ay (Haftada 2 gun)');
+  });
+
+  it('builds a deterministic generic massage pricing template without unnecessary clarifier text', () => {
+    const result = buildDeterministicMassagePricingTemplate({
+      massagePricing: 'KLASIK MASAJ:\n• 30dk → 800₺\n• 40dk → 1000₺\n• 60dk → 1300₺\n• 90dk → 2400₺',
+      phoneInfo: '0326 502 58 58',
+    });
+
+    expect(result).toContain('Masaj fiyatlarimiz:');
+    expect(result).toContain('30dk masaj');
+    expect(result).toContain('Detayli bilgi ve randevu: 0326 502 58 58');
+    expect(result).not.toContain('Hangi masaj');
   });
 });

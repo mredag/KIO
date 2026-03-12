@@ -23,10 +23,12 @@ import {
   buildDeterministicCloseoutResponse,
   CAMPAIGN_INFO_MODEL_ID,
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
+  detectDeterministicPricingTopic,
   HOURS_APPOINTMENT_MODEL_ID,
   isDirectLocationQuestion,
   isDirectPhoneQuestion,
   isGenericInfoRequest as isGenericInfoFastLaneRequest,
+  MASSAGE_PRICING_MODEL_ID,
   isPilatesInfoRequest,
   isStandaloneAppointmentRequest,
   normalizeTemplateText as normalizeFastLaneText,
@@ -85,33 +87,6 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
   };
 
   /*
-  function normalizeTemplateText(text: string): string {
-    return text
-      .toLocaleLowerCase('tr-TR')
-      .replace(/ü/g, 'u')
-      .replace(/ö/g, 'o')
-      .replace(/ş/g, 's')
-      .replace(/ç/g, 'c')
-      .replace(/ğ/g, 'g')
-      .replace(/ı/g, 'i')
-      .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function isGenericInfoRequest(messageText: string): boolean {
-    const normalized = normalizeTemplateText(messageText);
-    if (!normalized) return false;
-
-    const hasInfoIntent = /\b(bilgi|detay)\b/.test(normalized)
-      || /\bbilgi\s+(al|ver)/.test(normalized);
-    if (!hasInfoIntent) return false;
-
-    const hasSpecificAnchor = /\b(fiyat|ucret|tl|lira|ne kadar|kac|masaj|hamam|sauna|havuz|fitness|pilates|reformer|pt|kurs|ders|uyelik|adres|telefon|konum|saat|acik|kapali|randevu)\b/.test(normalized);
-
-    return !hasSpecificAnchor;
-  }
-
   function clipTemplateBlock(value: string, maxLines: number, maxChars: number): string {
     const cleaned = value.replace(/\r/g, '').trim();
     if (!cleaned) return '';
@@ -215,7 +190,11 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     if (analysis.matchedKeywords.includes('standalone_hours_request')) {
       return 'direct_hours';
     }
-    if (isGenericInfoFastLaneRequest(messageText)) {
+    if (isGenericInfoFastLaneRequest({
+      messageText,
+      intentCategories: analysis.intentCategories,
+      semanticSignals: analysis.matchedKeywords,
+    })) {
       return 'general_info';
     }
     if (analysis.intentCategories.includes('services')
@@ -1552,6 +1531,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           followUpHint: analysis.followUpHint,
           activeTopic: analysis.activeTopicLabel,
           primaryCategories: kbCategories,
+          allowInContextCandidates: true,
           maxCandidates: 8,
         });
 
@@ -1669,8 +1649,20 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         matchedKeywords: analysis.matchedKeywords,
         intentCategories: analysis.intentCategories,
       });
-      const deterministicInfoResponse = conductStateForReply === 'normal' && isGenericInfoFastLaneRequest(text)
+      const deterministicInfoResponse = conductStateForReply === 'normal' && isGenericInfoFastLaneRequest({
+        messageText: text,
+        intentCategories: analysis.intentCategories,
+        semanticSignals: analysis.matchedKeywords,
+      })
         ? buildGenericInfoTemplateFromKnowledge()
+        : null;
+      const deterministicMassagePricingResponse = conductStateForReply === 'normal'
+        && detectDeterministicPricingTopic({
+          messageText: text,
+          intentCategories: analysis.intentCategories,
+          semanticSignals: analysis.matchedKeywords,
+        }) === 'massage'
+        ? deterministicTemplates.massagePricingInfo
         : null;
       const deterministicPilatesResponse = conductStateForReply === 'normal' && isPilatesInfoRequest(text)
         ? deterministicTemplates.pilatesInfo
@@ -1704,6 +1696,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         : null;
       const deterministicContactFallback = deterministicConductResponse
         || deterministicInfoResponse
+        || deterministicMassagePricingResponse
         || deterministicPilatesResponse
         || deterministicCampaignResponse
         || deterministicLocationResponse
@@ -1723,6 +1716,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           });
       const deterministicClarifier = deterministicConductResponse
         || deterministicInfoResponse
+        || deterministicMassagePricingResponse
         || deterministicPilatesResponse
         || deterministicCampaignResponse
         || deterministicLocationResponse
@@ -1742,6 +1736,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
           });
       let deterministicResponse = deterministicConductResponse?.response
         || deterministicInfoResponse
+        || deterministicMassagePricingResponse
         || deterministicPilatesResponse
         || deterministicCampaignResponse?.response
         || deterministicLocationResponse
@@ -1755,6 +1750,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         || null;
       let deterministicModelId = deterministicConductResponse?.modelId || (deterministicInfoResponse
         ? 'deterministic/info-template-v1'
+        : deterministicMassagePricingResponse
+          ? MASSAGE_PRICING_MODEL_ID
         : deterministicLocationResponse
           ? 'deterministic/contact-location-v1'
             : deterministicPilatesResponse
@@ -1778,6 +1775,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         ? 'deterministic-conduct'
         : deterministicInfoResponse
         ? 'deterministic-info-template'
+        : deterministicMassagePricingResponse
+        ? 'deterministic-massage-pricing'
         : deterministicPilatesResponse
         ? 'deterministic-pilates-info'
         : deterministicCampaignResponse
@@ -2023,6 +2022,8 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               ? 'deterministic_conduct'
               : deterministicSessionKey === 'deterministic-info-template'
                 ? 'deterministic_info_template'
+                : deterministicSessionKey === 'deterministic-massage-pricing'
+                  ? 'deterministic_massage_pricing'
                 : deterministicSessionKey === 'deterministic-pilates-info'
                   ? 'deterministic_pilates_info'
                 : deterministicSessionKey === 'deterministic-campaign-info'

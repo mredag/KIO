@@ -305,7 +305,11 @@ export class DMResponseCacheService {
     if (params.matchedKeywords.includes('standalone_hours_request')) {
       return 'direct_hours';
     }
-    if (isGenericInfoRequest(params.messageText)) {
+    if (isGenericInfoRequest({
+      messageText: params.messageText,
+      intentCategories: params.intentCategories,
+      semanticSignals: params.matchedKeywords,
+    })) {
       return 'general_info';
     }
     if (params.intentCategories.includes('services')

@@ -68,6 +68,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.
 - Generic pricing clarifiers and topic-selection clarifiers should stay lightweight and deterministic when possible.
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.
+- Broad massage/spa pricing asks such as `Masaj ucreti ne kadar` should be treated as directly answerable when the live KB already has the full massage pricing row. Do not bounce these turns back with `hangi masaj` unless the customer asks for a specific massage type or duration.
+- Service-specific `bilgi` asks such as `kickboks hakkinda bilgi verirmisin` should stay off the generic info template path when the service/topic is already explicit in the message.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).
 - Operator-facing UI, reports, and agent messages should say `Bad customer`; keep `silent` only for DB/API/internal references.
@@ -93,6 +95,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - `ResponsePolicyService` now has a deterministic age-policy contradiction guard. Replies like `yasa bakmiyoruz` must fail when KB evidence says massage/spa is `18+` or otherwise age-restricted.
 - Duration-led massage follow-ups (`uzun sureli masaj`, `kisa sureli`, `60 dk`, `90dk`, `seans`) must force `pricing` alongside `services`; otherwise policy repair can ground on unrelated package prices.
 - Service-specific pricing validation now checks the service + duration + price tuple, not just the naked number. Do not let `Medikal 60dk -> 1300` pass just because `1300` exists elsewhere in KB.
+- Membership-scope answers must not claim `reformer pilates` is included in fitness/spor salonu membership unless the KB explicitly says so. The current canonical KB wording is that membership includes `step aerobik ve pilates dersleri`, while reformer pilates remains a separate paid service.
 - Room / couple-room questions must preserve FAQ grounding and answer directly from `faq.massage_room_options`; do not ask the customer the same room-availability question back.
 - Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must force `answer_directly` from contact KB. Do not ask which area the customer is near unless they explicitly ask for transport detail.
 - Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` and pure `tesekkurler` / closure turns must break stale service-topic carryover instead of reviving the previous service context.
@@ -151,13 +154,15 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Pi path: `/home/eform-kio/kio-new/`
 - Agent workspace docs should resolve at `~/.openclaw/workspace/docs/` (recommended symlink target: `/home/eform-kio/kio-new/docs/` on Pi).
 - Pi backend process: `pm2 restart kio-backend`
-- On March 12, 2026, Pi backend cutover completed: PM2 `kio-backend` now runs from `/home/eform-kio/kio-new/backend` on `master` commit `08c0f55`.
+- On March 12, 2026, Pi backend cutover completed: PM2 `kio-backend` now runs from `/home/eform-kio/kio-new/backend` on `master` commit `e29c23f`.
 - The Pi `~/kio-new` checkout was reconciled from a clean staged `master` clone, and `git status --short` is now clean there.
 - The previous live repo trees were archived instead of deleted:
   - `/home/eform-kio/kio-archives/kio-new-pre-master-cutover-20260312-092212`
   - `/home/eform-kio/kio-archives/kio-humanizer-test-merged-c31eb64-20260312-092247`
 - Fresh Pi safety bundle for the cutover lives at `/home/eform-kio/kio-backups/pi-master-reconcile-20260312-090916` and includes repo tarballs, diffs, `.env` backups, `~/.openclaw/openclaw.json`, PM2 state, and a consistent SQLite backup.
 - Post-cutover verification on March 12, 2026: `/api/kiosk/health` returned `status=ok`, and `/api/mc/dm-kontrol/pipeline-config` still reported `humanizer.enabled=true`.
+- Before deploying the March 12 grounding/pricing fix tranche, a fresh Pi snapshot was captured at `/home/eform-kio/kio-backups/pre-feature/20260312-192012`, and the deploy also created SQLite backups under `/home/eform-kio/kio-new/data/backups/`.
+- Current Pi deploy note: `deployment/raspberry-pi/update-pi.sh` may require `PUPPETEER_SKIP_DOWNLOAD=1` on the Pi so `npm ci` does not fail trying to download a Chrome build that KIO does not need at runtime.
 - Pi OpenClaw process: `pm2 restart kio-openclaw`
 - On March 12, 2026, the Pi repo-side OpenClaw docs/workspaces were synced from `openclaw-config/` into `~/.openclaw/` with `deployment/raspberry-pi/sync-openclaw-runtime.sh --restart`; machine-local `~/.openclaw/openclaw.json` was intentionally not overwritten.
 - The Pi is still running OpenClaw `2026.3.2` after that sync. The repo example and local Windows CLI review already target `2026.3.8`, so version parity is still pending.

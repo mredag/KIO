@@ -31,6 +31,7 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - 2026-03-12: Repo-side DM pricing flow was hardened so broad massage/spa pricing asks such as `Masaj ucreti ne kadar` now stay on a shared deterministic path: the planner/simple-turn logic marks them as directly answerable, and the webhook/simulator can answer from the grounded massage pricing template instead of asking an unnecessary `hangi masaj` clarifier.
 - 2026-03-12: Live Pi KB change-set `e552836f-d8ef-405c-9ef2-2a6512e73460` updated `services.membership_includes` so fitness/spor salonu memberships now explicitly include mat pilates, while reformer pilates is stated as a separate paid service.
 - 2026-03-12: Live Pi KB change-set `3e984706-4fd1-4164-908a-78c86e3a3fd1` corrected the same canonical `services.membership_includes` row so fitness/spor salonu memberships now say `step aerobik ve pilates dersleri`, while reformer pilates remains a separate paid service.
+- 2026-03-12: Commit `e29c23f` deployed the shared DM grounding tranche to the Pi on merged `master`, making the `kickboks` generic-info fix, the membership grounding/policy guard, and the broad massage-pricing deterministic answer path live in production.
 
 ## Open Work
 - Keep `README.md` aligned enough for human onboarding while treating it as an overview, not the live runtime contract.
@@ -40,9 +41,6 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - Decide when the archived Pi pre-cutover trees can be deleted after enough soak time without rollback needs.
 - Upgrade the Pi OpenClaw runtime to `2026.3.8` only after backup, doctor, security-audit, and channel verification steps are followed.
 - Apply the same OpenClaw config hardening to the live Pi machine-local config only after backup and runtime verification.
-- Deploy the shared DM generic-info fast-lane fix to the Pi backend so live Instagram traffic stops treating service-specific `bilgi` requests as broad generic-info turns.
-- Deploy the shared DM massage-pricing fast-lane fix to the Pi backend so live Instagram traffic stops asking unnecessary `hangi masaj` clarifiers for broad pricing questions that are already answerable from KB.
-- Deploy the shared DM membership-grounding fix to the Pi backend so the new rerank/policy guard becomes live in production, even though the current KB-updated simulator answer already includes step aerobik ve pilates dersleri and keeps reformer pilates separate.
 - Harmonize the shorter membership wording still present in `pricing.membership_individual` with the canonical `services.membership_includes` row if you want membership answers to stay fully consistent across all retrieved slices.
 
 ## Known Drift
@@ -53,7 +51,7 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 ## Last Verified
 - 2026-03-12: Documentation hierarchy reviewed and consolidated.
 - 2026-03-12: Pi backend cutover re-verified:
-  - `~/kio-new` is on `master` `08c0f55` with a clean git status
+  - `~/kio-new` is on `master` `e29c23f` with a clean git status
   - `pm2` runs `kio-backend` from `/home/eform-kio/kio-new/backend/dist/index.js`
   - `/api/kiosk/health` returns `status=ok`
   - `/api/mc/dm-kontrol/pipeline-config` still reports `humanizer.enabled=true`
@@ -73,7 +71,8 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
   - planner overrides broad massage pricing clarifiers to `answer_directly` with grounded pricing instructions
   - `npx tsc -p tsconfig.build.json` passed in `backend/`
 - 2026-03-12: Live Pi simulator verification:
-  - `kickboks hakkinda bilgi verirmisin` still returned the deterministic generic-info template on `/api/workflow-test/simulate-agent`, confirming the fast-lane fix is still local-only until the backend deploy
+  - `kickboks hakkinda bilgi verirmisin` returned a service-grounded kickboks answer instead of the deterministic generic-info template
+  - `Masaj ucreti ne kadar` returned the grounded massage pricing summary directly, without asking `hangi masaj`
   - `1 aylik uyelik icerisinde tesisinizde yararlanabilecegim imkanlar nelerdir` returned a materially correct answer that included step aerobik ve pilates dersleri and kept reformer pilates separate
   - live KB row `bf7484c229047cb9075bfb339eefa19e` was re-verified through both the integration API and direct SQLite read from `/home/eform-kio/kio-new/data/kiosk.db` at version `3`
 - 2026-03-12: Read order verified for repo and OpenClaw workspace entrypoints:

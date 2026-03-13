@@ -265,6 +265,19 @@ describe('DMPipelineHeuristics', () => {
     });
   });
 
+  it('detects inflected campaign wording without relying on a semantic signal', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Su an kampanyaniz var mi?',
+      semanticSignals: [],
+      campaignTemplate: 'Guncel kampanya bilgisi',
+    });
+
+    expect(result).toEqual({
+      response: 'Guncel kampanya bilgisi',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
+  });
+
   it('uses a grounded safe fallback when campaign info is unavailable', () => {
     const result = buildDeterministicCampaignResponse({
       messageText: 'Grup indirimi var mi',
@@ -276,5 +289,28 @@ describe('DMPipelineHeuristics', () => {
       response: 'Su anda paylasabilecegim net bir kampanya bilgisi goremiyorum.',
       modelId: CAMPAIGN_INFO_MODEL_ID,
     });
+  });
+
+  it('detects campaign intent from generic opportunity questions without depending on current KB text', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Su an firsat var mi',
+      semanticSignals: [],
+      campaignTemplate: 'Guncel kampanya bilgisi',
+    });
+
+    expect(result).toEqual({
+      response: 'Guncel kampanya bilgisi',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
+  });
+
+  it('does not treat unrelated firsat wording as a campaign inquiry', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Ismini sormama firsat vermedi ama tesekkurlerimi iletin',
+      semanticSignals: ['staff_inquiry', 'positive_feedback'],
+      campaignTemplate: 'Guncel kampanya bilgisi',
+    });
+
+    expect(result).toBeNull();
   });
 });

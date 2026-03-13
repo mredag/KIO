@@ -57,8 +57,18 @@ const CLARIFICATION_REPLY_PATTERNS = [
   /\bhangi konuda bilgi almak istediginizi belirtirseniz\b/,
   /\bhangi alt bilgiyi ogrenmek istersiniz\b/,
 ];
-const CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN = /\b(?:kampanya|indirim|promosyon|firsat|grup|toplu|ucretsiz|bedava|hediye)\b/;
 const CAMPAIGN_INFO_UNAVAILABLE_MESSAGE = 'Su anda paylasabilecegim net bir kampanya bilgisi goremiyorum.';
+const CAMPAIGN_STRONG_TERM_PATTERN = /\b(?:kampanya\w*|indirim\w*|promosyon\w*)\b/;
+const CAMPAIGN_GROUP_OFFER_PATTERN = /\b(?:grup\w*|toplu\w*|ucretsiz\w*|bedava|hediye\w*)\b/;
+const CAMPAIGN_OPPORTUNITY_TERM_PATTERN = /\b(?:firsat\w*|avantaj\w*)\b/;
+const CAMPAIGN_QUERY_SHAPE_PATTERN = /\b(?:var\s*mi|varmi|ne\s*var|nedir|hangi|bilgi|detay|duyuru|guncel|su\s*an|mevcut)\b/;
+const CAMPAIGN_DISQUALIFYING_SEMANTIC_SIGNALS = new Set([
+  'staff_inquiry',
+  'positive_feedback',
+  'contact_inquiry',
+  'direct_location_answer_signal',
+  'standalone_hours_request',
+]);
 const SPECIFIC_SERVICE_KEYWORDS = new Set(
   (KEYWORD_CATEGORY_MAP.services || [])
     .map(keyword => normalizeTemplateText(keyword))
@@ -386,9 +396,32 @@ export function isCampaignInfoRequest(params: {
   const normalizedMessage = normalizeTemplateText(params.messageText || '');
   const semanticSignals = new Set((params.semanticSignals || []).map(signal => signal.toLowerCase()));
 
-  return CAMPAIGN_OR_GROUP_FOLLOW_UP_PATTERN.test(normalizedMessage)
-    || semanticSignals.has('campaign_inquiry')
-    || semanticSignals.has('group_discount_inquiry');
+  if (!normalizedMessage) {
+    return false;
+  }
+
+  if (semanticSignals.has('campaign_inquiry') || semanticSignals.has('group_discount_inquiry')) {
+    return true;
+  }
+
+  const hasStrongCampaignTerm = CAMPAIGN_STRONG_TERM_PATTERN.test(normalizedMessage);
+  const hasGroupOfferTerm = CAMPAIGN_GROUP_OFFER_PATTERN.test(normalizedMessage);
+  const hasOpportunityTerm = CAMPAIGN_OPPORTUNITY_TERM_PATTERN.test(normalizedMessage);
+  const hasQueryShape = CAMPAIGN_QUERY_SHAPE_PATTERN.test(normalizedMessage);
+
+  const hasLexicalCampaignIntent =
+    hasStrongCampaignTerm
+    || (hasGroupOfferTerm && hasQueryShape)
+    || (hasOpportunityTerm && hasQueryShape);
+
+  if (!hasLexicalCampaignIntent) {
+    return false;
+  }
+
+  const hasDisqualifyingSemanticSignal = Array.from(CAMPAIGN_DISQUALIFYING_SEMANTIC_SIGNALS)
+    .some(signal => semanticSignals.has(signal));
+
+  return !hasDisqualifyingSemanticSignal;
 }
 
 export function buildDeterministicCampaignResponse(params: {

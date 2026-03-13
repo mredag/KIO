@@ -99,6 +99,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Room / couple-room questions must preserve FAQ grounding and answer directly from `faq.massage_room_options`; do not ask the customer the same room-availability question back.
 - Direct address/location questions such as `adresiniz nerede`, `neredesiniz`, or `Iskenderun'un neresindesiniz` must force `answer_directly` from contact KB. Do not ask which area the customer is near unless they explicitly ask for transport detail.
 - Gratitude-prefixed standalone hours questions such as `tesekkurler acilis kapanis saatleriniz` and pure `tesekkurler` / closure turns must break stale service-topic carryover instead of reviving the previous service context.
+- Campaign fast-lane replies must trigger only on real campaign/group-discount inquiry shape. A bare word like `firsat` inside unrelated praise, staff feedback, or contact text must not route to the deterministic campaign template.
 - Rule-stage style/format failures are treated as soft signals; hard blocking should come from moderation, explicit hard-rule violations, or deterministic grounding mismatches.
 - Do not turn the safety layer into a long brittle banned-word list.
 - `DMSafetyPhraseService` adds an admin-reviewed DM safety loop ahead of the AI gate.

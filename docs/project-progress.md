@@ -32,6 +32,7 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - 2026-03-12: Live Pi KB change-set `e552836f-d8ef-405c-9ef2-2a6512e73460` updated `services.membership_includes` so fitness/spor salonu memberships now explicitly include mat pilates, while reformer pilates is stated as a separate paid service.
 - 2026-03-12: Live Pi KB change-set `3e984706-4fd1-4164-908a-78c86e3a3fd1` corrected the same canonical `services.membership_includes` row so fitness/spor salonu memberships now say `step aerobik ve pilates dersleri`, while reformer pilates remains a separate paid service.
 - 2026-03-12: Commit `e29c23f` deployed the shared DM grounding tranche to the Pi on merged `master`, making the `kickboks` generic-info fix, the membership grounding/policy guard, and the broad massage-pricing deterministic answer path live in production.
+- 2026-03-14: Instagram DM reply finalization gained a shared assistant-identity layer. The first assistant reply in an active chat window now introduces itself as the Eform Spor Merkezi AI digital assistant, and explicit bot/AI identity questions are answered with a canonical disclosure without relying only on prompt wording.
 
 ## Open Work
 - Keep `README.md` aligned enough for human onboarding while treating it as an overview, not the live runtime contract.

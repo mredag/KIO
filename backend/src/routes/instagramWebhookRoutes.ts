@@ -36,6 +36,10 @@ import {
   PILATES_INFO_MODEL_ID,
 } from '../services/DMPipelineHeuristics.js';
 import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
+import {
+  applyAssistantIdentityBehavior,
+  type AssistantIdentityTrace,
+} from '../services/DMAssistantIdentityService.js';
 import { estimateTokens } from '../services/UsageMetrics.js';
 import { hasAgePolicySignals } from '../services/PolicySignalService.js';
 import { hasRoomAvailabilitySignals } from '../services/RoomAvailabilitySignalService.js';
@@ -194,6 +198,7 @@ export interface PipelineTrace {
     ctaPolicy: 'only_when_needed' | 'minimal';
     antiRepeatSignals: string[];
   };
+  assistantIdentity?: AssistantIdentityTrace;
   inboundAggregation?: DMInboundAggregationTrace;
   humanizer?: TurkishDMHumanizerTrace;
   fastLane?: {
@@ -1511,13 +1516,20 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
             }
           };
           const finalizeResponseText = (responseText: string): string => {
-            const result = humanizerService.humanize({
+            const humanized = humanizerService.humanize({
               text: sanitizeConductResponse(responseText, conductStateForReply),
               config: pipelineConfig.humanizer,
               conductState: conductStateForReply,
             });
-            updateHumanizerTrace(result.trace);
-            return result.text;
+            updateHumanizerTrace(humanized.trace);
+            const identityResult = applyAssistantIdentityBehavior({
+              customerMessage: messageText,
+              responseText: humanized.text,
+              conversationHistory: analysis.conversationHistory,
+              conductState: conductStateForReply,
+            });
+            trace.assistantIdentity = identityResult.trace;
+            return identityResult.text;
           };
           const styleProfile = buildDMStyleProfile({
             customerMessage: messageText,

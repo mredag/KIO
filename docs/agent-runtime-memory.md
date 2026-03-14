@@ -63,6 +63,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - DM Kontrol backend exposes cache ops at `GET /api/mc/dm-kontrol/response-cache/stats`, `GET /api/mc/dm-kontrol/response-cache/entries`, `POST /api/mc/dm-kontrol/response-cache/seed`, and `POST /api/mc/dm-kontrol/response-cache/clear`.
 - Full operational guide for agents lives in `docs/DM_RESPONSE_CACHE_AGENT_GUIDE.md`.
 - A real cache hit appears in pipeline trace as `fastLane.kind = "response_cache"` plus a populated `trace.cache` block.
+- Instagram DM replies now apply a shared assistant-identity disclosure layer in code. On the first assistant reply in the active chat window, the customer-facing text should introduce the bot as `Eform Spor Merkezi yapay zeka dijital asistani`. Do not copy this into every template by hand.
+- If the customer explicitly asks whether they are talking to AI / a bot / a digital assistant, the reply should explicitly disclose that it is the Eform Spor Merkezi AI digital assistant. This is enforced in code after generation, not left to prompt luck.
 - Instagram inbound fragment buffering is tracked in `DMInboundAggregationService.ts` and wired only in the live Instagram webhook path.
 - The current buffer rule is limited to short fragments only: no punctuation, max 24 chars, max 3 tokens, with a 5 second rolling window before flush.
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.

@@ -39,6 +39,7 @@ import {
   PILATES_INFO_MODEL_ID,
 } from '../services/DMPipelineHeuristics.js';
 import { buildDMStyleProfile, getDeterministicConductResponse, sanitizeConductResponse } from '../services/DMResponseStyleService.js';
+import { applyAssistantIdentityBehavior } from '../services/DMAssistantIdentityService.js';
 import { estimateTokens, ZERO_USAGE_METRICS } from '../services/UsageMetrics.js';
 import {
   aggregateUsageByModel,
@@ -768,13 +769,18 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
         };
       };
       const finalizeResponseText = (responseText: string): string => {
-        const result = humanizerService.humanize({
+        const humanized = humanizerService.humanize({
           text: sanitizeConductResponse(responseText, conductStateForReply),
           config: pipelineConfig.humanizer,
           conductState: conductStateForReply,
         });
-        updateHumanizerTrace(result.trace);
-        return result.text;
+        updateHumanizerTrace(humanized.trace);
+        return applyAssistantIdentityBehavior({
+          customerMessage: text,
+          responseText: humanized.text,
+          conversationHistory: analysis.conversationHistory,
+          conductState: conductStateForReply,
+        }).text;
       };
       const styleProfile = buildDMStyleProfile({
         customerMessage: text,

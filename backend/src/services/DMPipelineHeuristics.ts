@@ -526,18 +526,28 @@ export function buildDeterministicCloseoutResponse(messageText: string): Determi
 }
 
 export function countRecentClarificationReplies(conversationHistory: ConversationEntry[]): number {
-  return conversationHistory
-    .slice(-6)
-    .filter(entry => entry.direction === 'outbound')
-    .reduce((count, entry) => {
-      const normalized = normalizeTemplateText(entry.messageText || '');
-      if (!normalized) {
-        return count;
-      }
-      return CLARIFICATION_REPLY_PATTERNS.some(pattern => pattern.test(normalized))
-        ? count + 1
-        : count;
-    }, 0);
+  let clarificationCount = 0;
+
+  for (let index = conversationHistory.length - 1; index >= 0; index -= 1) {
+    const entry = conversationHistory[index];
+    if (entry.direction !== 'outbound') {
+      continue;
+    }
+
+    const normalized = normalizeTemplateText(entry.messageText || '');
+    if (!normalized) {
+      continue;
+    }
+
+    if (CLARIFICATION_REPLY_PATTERNS.some(pattern => pattern.test(normalized))) {
+      clarificationCount += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return clarificationCount;
 }
 
 export function buildClarifyExhaustedContactResponse(params: {

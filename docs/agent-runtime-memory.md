@@ -70,6 +70,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Instagram quick replies/buttons are not the production default. Use compact plain-text menus for customer choices.
 - Generic pricing clarifiers and topic-selection clarifiers should stay lightweight and deterministic when possible.
 - For simple clarifiers, avoid expensive semantic enrichment and avoid policy repair loops unless the turn really needs them.
+- Clarification budget is now per active unresolved thread, not a loose recent-history count. One clarification reply is acceptable; if the user is still unclear on the very next unresolved turn, route them to the contact phone instead of asking a second clarifier.
 - Broad massage/spa pricing asks such as `Masaj ucreti ne kadar` should be treated as directly answerable when the live KB already has the full massage pricing row. Do not bounce these turns back with `hangi masaj` unless the customer asks for a specific massage type or duration.
 - Service-specific `bilgi` asks such as `kickboks hakkinda bilgi verirmisin` should stay off the generic info template path when the service/topic is already explicit in the message.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.

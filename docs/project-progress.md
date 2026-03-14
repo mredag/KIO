@@ -50,6 +50,10 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - The repo-stored OpenClaw example now targets `2026.3.8` semantics, but Pi runtime parity and the live machine-local secret migration still need explicit verification.
 
 ## Last Verified
+- 2026-03-15: Clarification fallback behavior tightened:
+  - one clarification is still allowed for an unclear user turn
+  - the second unresolved turn in the same clarification thread routes to phone/contact fallback
+  - old clarification replies no longer leak into unrelated later topics when counting the fallback budget
 - 2026-03-12: Documentation hierarchy reviewed and consolidated.
 - 2026-03-12: Pi backend cutover re-verified:
   - `~/kio-new` is on `master` `e29c23f` with a clean git status

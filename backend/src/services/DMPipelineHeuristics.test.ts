@@ -176,6 +176,37 @@ describe('DMPipelineHeuristics', () => {
     expect(result).toBe(2);
   });
 
+  it('resets the clarification budget after a normal outbound answer', () => {
+    const result = countRecentClarificationReplies([
+      {
+        direction: 'outbound',
+        messageText: 'Merhaba! Hangi hizmetimizin fiyatini ogrenmek istersiniz? Masaj, uyelik, PT dersleri ve kurslar gibi seceneklerimiz var.',
+        createdAt: new Date().toISOString(),
+        relativeTime: '2dk once',
+      },
+      {
+        direction: 'inbound',
+        messageText: 'Masaj',
+        createdAt: new Date().toISOString(),
+        relativeTime: '2dk once',
+      },
+      {
+        direction: 'outbound',
+        messageText: 'Klasik masaj 60dk 1300 TL, 90dk 2400 TL.',
+        createdAt: new Date().toISOString(),
+        relativeTime: '1dk once',
+      },
+      {
+        direction: 'inbound',
+        messageText: 'Baska bir sey soracagim',
+        createdAt: new Date().toISOString(),
+        relativeTime: 'az once',
+      },
+    ]);
+
+    expect(result).toBe(0);
+  });
+
   it('falls back to contact after a clarification budget is exhausted', () => {
     const result = buildClarifyExhaustedContactResponse({
       messageText: 'Bu hizmeti istiyorum fiyat nedir',

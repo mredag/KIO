@@ -78,4 +78,16 @@ describe('DMAssistantIdentityService', () => {
     expect(result.text).toBe('Ben Eform Spor Merkezi yapay zeka dijital asistanıyım.');
     expect(result.trace.reason).toBe('identity_question_override');
   });
+
+  it('still prepends the opening disclosure on the first reply in silent mode', () => {
+    const result = applyAssistantIdentityBehavior({
+      customerMessage: 'Ne kadar?',
+      responseText: 'Böyle bir hizmet yok.',
+      conversationHistory: [],
+      conductState: 'silent',
+    });
+
+    expect(result.text).toBe('Merhaba, ben Eform Spor Merkezi yapay zeka dijital asistanıyım. Böyle bir hizmet yok.');
+    expect(result.trace.reason).toBe('opening_disclosure');
+  });
 });

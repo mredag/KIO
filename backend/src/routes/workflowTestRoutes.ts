@@ -217,18 +217,47 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
     return knowledgeContextService.getDeterministicTemplates().genericInfo;
   }
 
-  function buildConductReply(
-    action: 'retry_question' | 'block_message',
-    conductState: ConductState,
-  ): string | null {
+function buildConductReply(
+  action: 'retry_question' | 'block_message',
+  conductState: ConductState,
+): string | null {
     if (conductState === 'silent') {
       return action === 'block_message'
         ? 'Böyle bir hizmet yok.'
         : 'Sadece profesyonel spa ve spor hizmeti veriyoruz.';
     }
 
-    return getSexualIntentReply(action);
-  }
+  return getSexualIntentReply(action);
+}
+
+function getRecentConversationWindowForIdentity(
+  rawDb: ReturnType<DatabaseService['getDb']>,
+  senderId: string,
+  limit: number = 8,
+  maxAgeMinutes: number = 10,
+): Array<{ direction: 'inbound' | 'outbound'; messageText: string }> {
+  const rows = rawDb.prepare(`
+    SELECT direction, message_text, created_at
+    FROM instagram_interactions
+    WHERE instagram_id = ?
+    ORDER BY created_at DESC
+    LIMIT 20
+  `).all(senderId) as Array<{ direction: 'inbound' | 'outbound'; message_text: string; created_at: string }>;
+
+  const cutoffMs = Date.now() - (maxAgeMinutes * 60 * 1000);
+  const recentRows = rows
+    .filter(row => {
+      const timestamp = new Date(row.created_at).getTime();
+      return !Number.isNaN(timestamp) && timestamp >= cutoffMs;
+    })
+    .reverse()
+    .slice(-limit);
+
+  return recentRows.map(row => ({
+    direction: row.direction,
+    messageText: row.message_text,
+  }));
+}
 
   function getResponseCacheClass(messageText: string, analysis: MessageAnalysis | null): string | null {
     if (!analysis) {
@@ -613,7 +642,16 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               })
             : conductBefore;
           const effectiveState = conductAfter?.conductState || 'normal';
-          const responseText = buildConductReply(sexualIntentResult.action, effectiveState) || '[sessiz engel]';
+          const conductReply = buildConductReply(sexualIntentResult.action, effectiveState);
+          const identityResult = conductReply
+            ? applyAssistantIdentityBehavior({
+                customerMessage: text,
+                responseText: conductReply,
+                conversationHistory: getRecentConversationWindowForIdentity(rawDb, senderId),
+                conductState: effectiveState,
+              })
+            : null;
+          const responseText = identityResult?.text || '[sessiz engel]';
           const interactionIntent = effectiveState === 'silent'
             ? 'blocked_silent'
             : (sexualIntentResult.action === 'block_message' ? 'security_block' : 'retry_question');
@@ -638,6 +676,7 @@ export function createWorkflowTestRoutes(db: DatabaseService): Router {
               silentUntil: conductAfter?.silentUntil || null,
               reason: conductAfter?.reason || sexualIntentResult.reason,
             },
+            assistantIdentity: identityResult?.trace,
           };
 
           rawDb.prepare(`

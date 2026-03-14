@@ -151,7 +151,7 @@ export function applyAssistantIdentityBehavior(params: {
     };
   }
 
-  if (firstReplyInConversation && params.conductState !== 'silent') {
+  if (firstReplyInConversation) {
     return {
       text: mergeDisclosure(OPENING_DISCLOSURE, responseText),
       trace: {

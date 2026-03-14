@@ -62,6 +62,8 @@ const CAMPAIGN_STRONG_TERM_PATTERN = /\b(?:kampanya\w*|indirim\w*|promosyon\w*)\
 const CAMPAIGN_GROUP_OFFER_PATTERN = /\b(?:grup\w*|toplu\w*|ucretsiz\w*|bedava|hediye\w*)\b/;
 const CAMPAIGN_OPPORTUNITY_TERM_PATTERN = /\b(?:firsat\w*|avantaj\w*)\b/;
 const CAMPAIGN_QUERY_SHAPE_PATTERN = /\b(?:var\s*mi|varmi|ne\s*var|nedir|hangi|bilgi|detay|duyuru|guncel|su\s*an|mevcut)\b/;
+const CAMPAIGN_STATUS_QUERY_PATTERN = /\b(?:devam\s*ed(?:iyor|ecek|er)\s*mi|sur(?:uyor|ecek|er)\s*mi|hala\s*(?:var|guncel|gecerli)\s*mi|gecerli\s*mi|aktif\s*mi|ne\s*zamana\s*kadar|ne\s*zamana\s*dek|ne\s*zaman\s*bit(?:iyor|ecek)|bitis\s*tarihi|bugun\s*de\s*var\s*mi|yarin\s*da\s*var\s*mi|bayram\s*sonrasi|tatil\s*sonrasi|sonrasi(?:nda)?\s*da\s*var\s*mi)\b/;
+const CAMPAIGN_VALIDITY_HINT_PATTERN = /\b(?:\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|\d{1,2}\s*(?:ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos|eylul|ekim|kasim|aralik)|\d{4}|\bkadar\b|bitis|sona\s*erer|sona\s*eriyor|sona\s*erecek|gecerli|son\s*gun|bugun|yarin|hafta\s*sonu|hafta\s*ici|bayram)\b/;
 const CAMPAIGN_DISQUALIFYING_SEMANTIC_SIGNALS = new Set([
   'staff_inquiry',
   'positive_feedback',
@@ -424,6 +426,30 @@ export function isCampaignInfoRequest(params: {
   return !hasDisqualifyingSemanticSignal;
 }
 
+function isCampaignStatusQuestion(messageText: string): boolean {
+  const normalizedMessage = normalizeTemplateText(messageText || '');
+  if (!normalizedMessage) {
+    return false;
+  }
+
+  return CAMPAIGN_STATUS_QUERY_PATTERN.test(normalizedMessage);
+}
+
+function hasCampaignValidityHint(campaignTemplate: string): boolean {
+  return CAMPAIGN_VALIDITY_HINT_PATTERN.test(normalizeTemplateText(campaignTemplate));
+}
+
+function buildCampaignStatusReply(campaignTemplate: string): string {
+  const normalizedTemplate = campaignTemplate.trim();
+  const intro = `Su anki guncel kampanya kaydinda su bilgi yer aliyor: ${normalizedTemplate}`;
+
+  if (hasCampaignValidityHint(normalizedTemplate)) {
+    return intro;
+  }
+
+  return `${intro}\n\nBu kayitta kampanyanin devam veya bitis tarihi acikca belirtilmedigi icin ileri bir tarih icin net teyit veremiyorum.`;
+}
+
 export function buildDeterministicCampaignResponse(params: {
   messageText: string;
   semanticSignals?: string[];
@@ -436,8 +462,18 @@ export function buildDeterministicCampaignResponse(params: {
     return null;
   }
 
+  const campaignTemplate = String(params.campaignTemplate || '').trim();
+  if (!campaignTemplate) {
+    return {
+      response: CAMPAIGN_INFO_UNAVAILABLE_MESSAGE,
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    };
+  }
+
   return {
-    response: String(params.campaignTemplate || '').trim() || CAMPAIGN_INFO_UNAVAILABLE_MESSAGE,
+    response: isCampaignStatusQuestion(params.messageText)
+      ? buildCampaignStatusReply(campaignTemplate)
+      : campaignTemplate,
     modelId: CAMPAIGN_INFO_MODEL_ID,
   };
 }

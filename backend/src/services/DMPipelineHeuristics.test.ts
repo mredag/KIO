@@ -278,6 +278,32 @@ describe('DMPipelineHeuristics', () => {
     });
   });
 
+  it('answers campaign continuation questions instead of dumping the raw template', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Kampanya bayram sonrasi devam edecekmi',
+      semanticSignals: ['campaign_inquiry'],
+      campaignTemplate: '4 kisi gelirse 5. kisiye ayni masaj hediye!',
+    });
+
+    expect(result).toEqual({
+      response: 'Su anki guncel kampanya kaydinda su bilgi yer aliyor: 4 kisi gelirse 5. kisiye ayni masaj hediye!\n\nBu kayitta kampanyanin devam veya bitis tarihi acikca belirtilmedigi icin ileri bir tarih icin net teyit veremiyorum.',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
+  });
+
+  it('uses explicit campaign validity details when the template already contains them', () => {
+    const result = buildDeterministicCampaignResponse({
+      messageText: 'Kampanya ne zamana kadar gecerli',
+      semanticSignals: ['campaign_inquiry'],
+      campaignTemplate: '4 kisi gelirse 5. kisiye ayni masaj hediye. Kampanya 31 Mart 2026 tarihine kadar gecerlidir.',
+    });
+
+    expect(result).toEqual({
+      response: 'Su anki guncel kampanya kaydinda su bilgi yer aliyor: 4 kisi gelirse 5. kisiye ayni masaj hediye. Kampanya 31 Mart 2026 tarihine kadar gecerlidir.',
+      modelId: CAMPAIGN_INFO_MODEL_ID,
+    });
+  });
+
   it('uses a grounded safe fallback when campaign info is unavailable', () => {
     const result = buildDeterministicCampaignResponse({
       messageText: 'Grup indirimi var mi',

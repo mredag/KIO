@@ -379,34 +379,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
     return getSexualIntentReply(action);
   }
 
-  function getRecentConversationWindowForIdentity(
-    senderId: string,
-    limit: number = 8,
-    maxAgeMinutes: number = 10,
-  ): Array<{ direction: 'inbound' | 'outbound'; messageText: string }> {
-    const rows = db.prepare(`
-      SELECT direction, message_text, created_at
-      FROM instagram_interactions
-      WHERE instagram_id = ?
-      ORDER BY created_at DESC
-      LIMIT 20
-    `).all(senderId) as Array<{ direction: 'inbound' | 'outbound'; message_text: string; created_at: string }>;
-
-    const cutoffMs = Date.now() - (maxAgeMinutes * 60 * 1000);
-    const recentRows = rows
-      .filter(row => {
-        const timestamp = new Date(row.created_at).getTime();
-        return !Number.isNaN(timestamp) && timestamp >= cutoffMs;
-      })
-      .reverse()
-      .slice(-limit);
-
-    return recentRows.map(row => ({
-      direction: row.direction,
-      messageText: row.message_text,
-    }));
-  }
-
   function markFastLane(
     trace: Partial<PipelineTrace>,
     kind: NonNullable<PipelineTrace['fastLane']>['kind'],
@@ -1270,16 +1242,7 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                   })
                 : conductBefore;
               const effectiveState = conductAfter?.conductState || 'normal';
-              const conductReply = buildConductReply(sexualDecision.action, effectiveState);
-              const identityResult = conductReply
-                ? applyAssistantIdentityBehavior({
-                    customerMessage: messageText,
-                    responseText: conductReply,
-                    conversationHistory: getRecentConversationWindowForIdentity(senderId),
-                    conductState: effectiveState,
-                  })
-                : null;
-              const replyText = identityResult?.text || null;
+              const replyText = buildConductReply(sexualDecision.action, effectiveState);
               const now = new Date().toISOString();
               const interactionIntent = effectiveState === 'silent'
                 ? 'blocked_silent'
@@ -1293,7 +1256,6 @@ export function createInstagramWebhookRoutes(db: Database.Database): Router {
                 silentUntil: conductAfter?.silentUntil || null,
                 reason: conductAfter?.reason || sexualDecision.reason,
               };
-              trace.assistantIdentity = identityResult?.trace;
 
               db.prepare(`
                 INSERT INTO instagram_customers (instagram_id, interaction_count, created_at, updated_at)

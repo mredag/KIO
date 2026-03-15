@@ -13,88 +13,95 @@ import {
   formatMassagePricingTemplate,
 } from './GenericInfoTemplateService.js';
 
+const BULLET = '\u2022';
+const ARROW = '\u2192';
+const TL = '\u20ba';
+
 describe('GenericInfoTemplateService', () => {
   it('adds masaj label to all duration-based massage pricing rows', () => {
     const result = formatMassagePricingTemplate(
       [
         'KLASIK MASAJ:',
-        '\u2022 30dk \u2192 800\u20ba',
-        '\u2022 40dk \u2192 1000\u20ba',
-        '\u2022 30dk+kese kopuk \u2192 900\u20ba',
-        '\u2022 MIX 70dk (7 teknik) \u2192 2000\u20ba',
-        '\u2022 Sicak Tas 60dk \u2192 1600\u20ba',
-        '\u2022 Medikal 30dk \u2192 1200\u20ba',
-        '\u2022 Kese ekleme \u2192 +100\u20ba',
+        `${BULLET} 30dk ${ARROW} 800${TL}`,
+        `${BULLET} 40dk ${ARROW} 1000${TL}`,
+        `${BULLET} 30dk+kese kopuk ${ARROW} 900${TL}`,
+        `${BULLET} MIX 70dk (7 teknik) ${ARROW} 2000${TL}`,
+        `${BULLET} Sicak Tas 60dk ${ARROW} 1600${TL}`,
+        `${BULLET} Medikal 30dk ${ARROW} 1200${TL}`,
+        `${BULLET} Kese ekleme ${ARROW} +100${TL}`,
       ].join('\n'),
     );
 
-    expect(result).toContain('\u2022 30dk masaj \u2192 800\u20ba');
-    expect(result).toContain('\u2022 40dk masaj \u2192 1000\u20ba');
-    expect(result).toContain('\u2022 30dk+kese kopuk masaj \u2192 900\u20ba');
-    expect(result).toContain('\u2022 MIX 70dk (7 teknik) masaj \u2192 2000\u20ba');
-    expect(result).toContain('\u2022 Sicak Tas 60dk masaj \u2192 1600\u20ba');
-    expect(result).toContain('\u2022 Medikal 30dk masaj \u2192 1200\u20ba');
-    expect(result).toContain('\u2022 Kese ekleme \u2192 +100\u20ba');
+    expect(result).toContain(`${BULLET} 30dk masaj ${ARROW} 800${TL}`);
+    expect(result).toContain(`${BULLET} 40dk masaj ${ARROW} 1000${TL}`);
+    expect(result).toContain(`${BULLET} 30dk+kese kopuk masaj ${ARROW} 900${TL}`);
+    expect(result).toContain(`${BULLET} MIX 70dk (7 teknik) masaj ${ARROW} 2000${TL}`);
+    expect(result).toContain(`${BULLET} Sicak Tas 60dk masaj ${ARROW} 1600${TL}`);
+    expect(result).toContain(`${BULLET} Medikal 30dk masaj ${ARROW} 1200${TL}`);
+    expect(result).toContain(`${BULLET} Kese ekleme ${ARROW} +100${TL}`);
   });
 
   it('does not touch headings or rows that already contain masaj', () => {
     const result = formatMassagePricingTemplate(
       [
         'KLASIK MASAJ:',
-        '\u2022 30dk masaj \u2192 800\u20ba',
-        '\u2022 Aromaterapi masaj 50dk \u2192 1800\u20ba',
+        `${BULLET} 30dk masaj ${ARROW} 800${TL}`,
+        `${BULLET} Aromaterapi masaj 50dk ${ARROW} 1800${TL}`,
       ].join('\n'),
     );
 
     expect(result).toContain('KLASIK MASAJ:');
-    expect(result).toContain('\u2022 30dk masaj \u2192 800\u20ba');
-    expect(result).toContain('\u2022 Aromaterapi masaj 50dk \u2192 1800\u20ba');
+    expect(result).toContain(`${BULLET} 30dk masaj ${ARROW} 800${TL}`);
+    expect(result).toContain(`${BULLET} Aromaterapi masaj 50dk ${ARROW} 1800${TL}`);
   });
 
   it('builds a reusable generic info template from stable KB sections', () => {
     const result = buildGenericInfoTemplate({
-      massagePricing: 'KLASIK MASAJ:\n\u2022 30dk \u2192 800\u20ba\n\u2022 40dk \u2192 1000\u20ba\n\u2022 60dk \u2192 1300\u20ba\n\u2022 90dk \u2192 2400\u20ba',
+      massagePricing: `KLASIK MASAJ:\n${BULLET} 30dk ${ARROW} 800${TL}\n${BULLET} 40dk ${ARROW} 1000${TL}\n${BULLET} 60dk ${ARROW} 1300${TL}\n${BULLET} 90dk ${ARROW} 2400${TL}`,
       therapistInfo: 'Tum terapistlerimiz kadindir.',
       spaAccessInfo: 'Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.',
+      facilityOverview: 'Tesisimizde yuzme havuzu, hamam, sauna ve buhar odasi bulunur.',
       bringInfo: 'Terlik ve mayo getirmeniz yeterlidir.',
       phoneInfo: '0532 000 00 00',
       locationInfo: 'Steel Towers A Blok 4. Kat, Iskenderun / Hatay',
     });
 
     expect(result).toContain('Size kisa bir ozet paylasayim:');
-    expect(result).toContain('• Masaj fiyatlarimizdan kisa bir ozet:');
-    expect(result).toContain('• Spa alani: Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.');
-    expect(result).toContain('• Terapistlerimiz:');
-    expect(result).toContain('• Konum: Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
-    expect(result).toContain('• Randevu ve detayli bilgi: 0532 000 00 00');
+    expect(result).toContain(`Masaj fiyatlari:\n${BULLET} 30dk masaj ${ARROW} 800${TL}`);
+    expect(result).toContain(`Spa alani:\n${BULLET} Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.`);
+    expect(result).toContain(`${BULLET} Tesisimizde havuz da bulunur.`);
+    expect(result).toContain(`Terapistlerimiz:\n${BULLET} Tum terapistlerimiz kadindir.`);
+    expect(result).toContain(`Konum:\n${BULLET} Steel Towers A Blok 4. Kat, Iskenderun / Hatay`);
+    expect(result).toContain(`Randevu ve detayli bilgi:\n${BULLET} 0532 000 00 00`);
     expect(result!.length).toBeLessThanOrEqual(900);
   });
 
   it('keeps the generic info template under 900 chars with long KB content', () => {
     const result = buildGenericInfoTemplate({
-      massagePricing: Array.from({ length: 12 }, (_, i) => `\u2022 ${30 + (i * 10)}dk \u2192 ${800 + (i * 100)}\u20ba`).join('\n'),
+      massagePricing: Array.from({ length: 12 }, (_, i) => `${BULLET} ${30 + (i * 10)}dk ${ARROW} ${800 + (i * 100)}${TL}`).join('\n'),
       therapistInfo: 'Tum terapistlerimiz profesyonel kadin terapistlerdir ve geleneksel uzak dogu tekniklerinde deneyimlidir. Musteri memnuniyetine odakli calisirlar.',
       bringInfo: 'Terlik, mayo, bikini, yedek camasir ve kisisel bakim urunlerinizi getirmeniz yeterlidir. Bone gerekiyorsa tesisimizde temin edebilirsiniz.',
       phoneInfo: 'Sabit: 0326 502 58 58\nCep/WhatsApp: 0530 250 05 58',
       locationInfo: 'Eform Spor Merkezi, Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Tower Is Merkezi (Steel Towers), A Blok, 4. Kat, Iskenderun / Hatay. Google Maps konumu mevcut.',
+      facilityOverview: 'Eform Spor Merkezi: Fitness salonu, yuzme havuzu, hamam, sauna ve buhar odasi bulunur.',
     });
 
     expect(result).toBeTruthy();
-    expect(result).toContain('• Konum:');
-    expect(result).toContain('• Randevu ve detayli bilgi:');
+    expect(result).toContain(`Konum:\n${BULLET} `);
+    expect(result).toContain(`Randevu ve detayli bilgi:\n${BULLET} `);
     expect(result!.length).toBeLessThanOrEqual(900);
   });
 
   it('keeps the generic info opener focused and strips raw prep guide noise', () => {
     const result = buildGenericInfoTemplate({
-      massagePricing: 'KLASIK MASAJ:\n\u2022 30dk \u2192 800\u20ba\n\u2022 40dk \u2192 1000\u20ba\n\u2022 60dk \u2192 1300\u20ba\n\u2022 90dk \u2192 2400\u20ba',
-      therapistInfo: '👩 Tum masaj terapistlerimiz profesyonel kadin terapistlerdir. Sertifikali ve deneyimli ekibimiz vardir.',
-      bringInfo: '🧳 YANIMDA NE GETIREYIM?\nTEMIN EDILENLER:\n• Havlu\n• Terlik\n• Sort',
+      massagePricing: `KLASIK MASAJ:\n${BULLET} 30dk ${ARROW} 800${TL}\n${BULLET} 40dk ${ARROW} 1000${TL}\n${BULLET} 60dk ${ARROW} 1300${TL}\n${BULLET} 90dk ${ARROW} 2400${TL}`,
+      therapistInfo: 'Tum masaj terapistlerimiz profesyonel kadin terapistlerdir. Sertifikali ve deneyimli ekibimiz vardir.',
+      bringInfo: 'YANIMDA NE GETIREYIM?\nTEMIN EDILENLER:\nHavlu\nTerlik\nSort',
       phoneInfo: 'Sabit: 0326 502 58 58\nCep/WhatsApp: 0530 250 05 58',
       locationInfo: 'Eform Spor Merkezi\nAdres: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay\nKonum (Google Maps): https://maps.app.goo.gl/qC4jh7fquXYX3vPA6',
     });
 
-    expect(result).toContain('• Konum: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
+    expect(result).toContain(`Konum:\n${BULLET} Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay`);
     expect(result).not.toContain('YANIMDA NE GETIREYIM');
     expect(result).not.toContain('Google Maps');
     expect(result).not.toContain('maps.app.goo.gl');
@@ -121,8 +128,8 @@ describe('GenericInfoTemplateService', () => {
 
   it('builds a deterministic campaign snippet from KB campaign info', () => {
     expect(buildDeterministicCampaignTemplate({
-      campaignInfo: '🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
-    })).toBe('🔥 KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!');
+      campaignInfo: 'KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!',
+    })).toBe('KAMPANYA: 4 kisi gelirse 5. kisiye ayni masaj HEDIYE!');
   });
 
   it('builds deterministic combined hours and appointment snippets', () => {
@@ -147,12 +154,12 @@ describe('GenericInfoTemplateService', () => {
 
   it('builds a deterministic generic massage pricing template without unnecessary clarifier text', () => {
     const result = buildDeterministicMassagePricingTemplate({
-      massagePricing: 'KLASIK MASAJ:\n• 30dk → 800₺\n• 40dk → 1000₺\n• 60dk → 1300₺\n• 90dk → 2400₺',
+      massagePricing: `KLASIK MASAJ:\n${BULLET} 30dk ${ARROW} 800${TL}\n${BULLET} 40dk ${ARROW} 1000${TL}\n${BULLET} 60dk ${ARROW} 1300${TL}\n${BULLET} 90dk ${ARROW} 2400${TL}`,
       phoneInfo: '0326 502 58 58',
     });
 
     expect(result).toContain('Masaj fiyatlarimizdan kisa bir ozet:');
-    expect(result).toContain('30dk masaj');
+    expect(result).toContain(`30dk masaj ${ARROW} 800${TL}`);
     expect(result).toContain('Detayli bilgi ve randevu: 0326 502 58 58');
     expect(result).not.toContain('Hangi masaj');
   });

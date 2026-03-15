@@ -131,6 +131,7 @@ export class DMKnowledgeContextService {
     const contact = context.contact || {};
     const hours = context.hours || {};
     const faq = context.faq || {};
+    const general = context.general || {};
     const policies = context.policies || {};
     const hourExtras = Object.entries(hours)
       .filter(([key]) => !['facility_working_hours', 'spa_working_hours'].includes(key))
@@ -146,6 +147,7 @@ export class DMKnowledgeContextService {
         phoneInfo: contact.phone || null,
         locationInfo: contact.address || null,
         spaAccessInfo: policies.hamam_sauna_access || null,
+        facilityOverview: services.facility_overview || general.facility_description || null,
       }),
       massagePricingInfo: buildDeterministicMassagePricingTemplate({
         massagePricing: pricing.complete_massage_pricing || this.pickFirstValue(pricing),

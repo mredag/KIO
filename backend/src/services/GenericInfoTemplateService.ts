@@ -7,6 +7,7 @@ export interface GenericInfoTemplateInput {
   phoneInfo?: string | null;
   locationInfo?: string | null;
   spaAccessInfo?: string | null;
+  facilityOverview?: string | null;
 }
 
 export interface DeterministicHoursTemplateInput {
@@ -114,6 +115,16 @@ function buildCompactPhoneSummary(value: string): string {
   return clipSingleLine(value.replace(/\s*\n\s*/g, ' | '), 160);
 }
 
+function buildCompactPhoneLines(value: string): string[] {
+  return value
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => clipSingleLine(line, 120))
+    .slice(0, 2);
+}
+
 function buildCompactTherapistSummary(value: string): string {
   const cleaned = value
     .replace(/\r/g, '')
@@ -131,7 +142,7 @@ function buildCompactMassagePricingSummary(value: string): string {
     .map(line => line.trim())
     .filter(Boolean);
   const priceLines = formatted
-    .filter(line => /→/.test(line))
+    .filter(line => /\u2192/.test(line))
     .slice(0, 4)
     .map(line => line.replace(/^[\u2022-]\s*/u, '').replace(/\s+/g, ' '));
 
@@ -142,6 +153,25 @@ function buildCompactMassagePricingSummary(value: string): string {
   return `Masaj fiyatlarimizdan kisa bir ozet: ${clipSingleLine(priceLines.join(', '), 260)}`;
 }
 
+function buildCompactMassagePricingLines(value: string): string[] {
+  const formatted = formatMassagePricingTemplate(value)
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+  const priceLines = formatted
+    .filter(line => /\u2192/.test(line))
+    .slice(0, 4)
+    .map(line => line.replace(/^[\u2022-]\s*/u, '').replace(/\s+/g, ' '));
+
+  if (priceLines.length > 0) {
+    return priceLines;
+  }
+
+  const fallback = clipSingleLine(value, 220);
+  return fallback ? [fallback] : [];
+}
+
 function buildCompactSpaAccessSummary(value: string): string {
   const cleaned = value
     .replace(/\r/g, ' ')
@@ -149,6 +179,25 @@ function buildCompactSpaAccessSummary(value: string): string {
     .trim();
   const firstSentence = cleaned.match(/[^.!?]+[.!?]?/u)?.[0] || cleaned;
   return clipSingleLine(firstSentence, 180);
+}
+
+function buildCompactSpaAccessLines(accessInfo?: string | null, facilityOverview?: string | null): string[] {
+  const lines: string[] = [];
+
+  if (accessInfo?.trim()) {
+    lines.push(buildCompactSpaAccessSummary(accessInfo));
+  }
+
+  const facilityNormalized = normalizeTurkish((facilityOverview || '').toLowerCase());
+  const accessNormalized = normalizeTurkish((accessInfo || '').toLowerCase());
+  const mentionsPool = facilityNormalized.includes('havuz') || facilityNormalized.includes('yuzme havuzu');
+  const accessAlreadyMentionsPool = accessNormalized.includes('havuz') || accessNormalized.includes('pool');
+
+  if (mentionsPool && !accessAlreadyMentionsPool) {
+    lines.push('Tesisimizde havuz da bulunur.');
+  }
+
+  return lines.slice(0, 2);
 }
 
 function joinSectionsWithinLimit(sections: string[], maxChars: number): string {
@@ -181,19 +230,32 @@ export function buildGenericInfoTemplate(input: GenericInfoTemplateInput): strin
   const sections: string[] = ['Size kisa bir ozet paylasayim:'];
 
   if (input.massagePricing?.trim()) {
-    sections.push(`• ${buildCompactMassagePricingSummary(input.massagePricing)}`);
+    const pricingLines = buildCompactMassagePricingLines(input.massagePricing);
+    if (pricingLines.length > 0) {
+      sections.push(['Masaj fiyatlari:', ...pricingLines.map(line => `\u2022 ${line}`)].join('\n'));
+    }
   }
-  if (input.spaAccessInfo?.trim()) {
-    sections.push(`• Spa alani: ${buildCompactSpaAccessSummary(input.spaAccessInfo)}`);
+
+  const spaLines = buildCompactSpaAccessLines(input.spaAccessInfo, input.facilityOverview);
+  if (spaLines.length > 0) {
+    sections.push(['Spa alani:', ...spaLines.map(line => `\u2022 ${line}`)].join('\n'));
   }
+
   if (input.locationInfo?.trim()) {
-    sections.push(`• Konum: ${buildCompactLocationSummary(input.locationInfo)}`);
+    sections.push(`Konum:\n\u2022 ${buildCompactLocationSummary(input.locationInfo)}`);
   }
+
   if (input.phoneInfo?.trim()) {
-    sections.push(`• Randevu ve detayli bilgi: ${buildCompactPhoneSummary(input.phoneInfo)}`);
+    const phoneLines = buildCompactPhoneLines(input.phoneInfo);
+    if (phoneLines.length > 0) {
+      sections.push(['Randevu ve detayli bilgi:', ...phoneLines.map(line => `\u2022 ${line}`)].join('\n'));
+    } else {
+      sections.push(`Randevu ve detayli bilgi:\n\u2022 ${buildCompactPhoneSummary(input.phoneInfo)}`);
+    }
   }
+
   if (input.therapistInfo?.trim()) {
-    sections.push(`• Terapistlerimiz: ${buildCompactTherapistSummary(input.therapistInfo)}`);
+    sections.push(`Terapistlerimiz:\n\u2022 ${buildCompactTherapistSummary(input.therapistInfo)}`);
   }
 
   const result = joinSectionsWithinLimit(sections, GENERIC_INFO_TEMPLATE_MAX_CHARS);

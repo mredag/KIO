@@ -61,12 +61,12 @@ describe('GenericInfoTemplateService', () => {
       locationInfo: 'Steel Towers A Blok 4. Kat, Iskenderun / Hatay',
     });
 
-    expect(result).toContain('Kisaca temel bilgileri paylasayim:');
-    expect(result).toContain('Masaj fiyatlarimiz:');
-    expect(result).toContain('Spa alani: Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.');
-    expect(result).toContain('Terapist bilgisi:');
-    expect(result).toContain('Konum: Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
-    expect(result).toContain('Detayli bilgi ve randevu: 0532 000 00 00');
+    expect(result).toContain('Size kisa bir ozet paylasayim:');
+    expect(result).toContain('• Masaj fiyatlarimizdan kisa bir ozet:');
+    expect(result).toContain('• Spa alani: Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.');
+    expect(result).toContain('• Terapistlerimiz:');
+    expect(result).toContain('• Konum: Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
+    expect(result).toContain('• Randevu ve detayli bilgi: 0532 000 00 00');
     expect(result!.length).toBeLessThanOrEqual(900);
   });
 
@@ -80,8 +80,8 @@ describe('GenericInfoTemplateService', () => {
     });
 
     expect(result).toBeTruthy();
-    expect(result).toContain('Konum:');
-    expect(result).toContain('Detayli bilgi ve randevu:');
+    expect(result).toContain('• Konum:');
+    expect(result).toContain('• Randevu ve detayli bilgi:');
     expect(result!.length).toBeLessThanOrEqual(900);
   });
 
@@ -94,7 +94,7 @@ describe('GenericInfoTemplateService', () => {
       locationInfo: 'Eform Spor Merkezi\nAdres: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay\nKonum (Google Maps): https://maps.app.goo.gl/qC4jh7fquXYX3vPA6',
     });
 
-    expect(result).toContain('Konum: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
+    expect(result).toContain('• Konum: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
     expect(result).not.toContain('YANIMDA NE GETIREYIM');
     expect(result).not.toContain('Google Maps');
     expect(result).not.toContain('maps.app.goo.gl');
@@ -151,7 +151,7 @@ describe('GenericInfoTemplateService', () => {
       phoneInfo: '0326 502 58 58',
     });
 
-    expect(result).toContain('Masaj fiyatlarimiz:');
+    expect(result).toContain('Masaj fiyatlarimizdan kisa bir ozet:');
     expect(result).toContain('30dk masaj');
     expect(result).toContain('Detayli bilgi ve randevu: 0326 502 58 58');
     expect(result).not.toContain('Hangi masaj');

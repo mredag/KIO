@@ -136,10 +136,10 @@ function buildCompactMassagePricingSummary(value: string): string {
     .map(line => line.replace(/^[\u2022-]\s*/u, '').replace(/\s+/g, ' '));
 
   if (priceLines.length === 0) {
-    return `Masaj fiyatlarimiz: ${clipSingleLine(value, 240)}`;
+    return `Masaj fiyatlarimizdan kisa bir ozet: ${clipSingleLine(value, 240)}`;
   }
 
-  return `Masaj fiyatlarimiz: ${clipSingleLine(priceLines.join(' | '), 260)}`;
+  return `Masaj fiyatlarimizdan kisa bir ozet: ${clipSingleLine(priceLines.join(', '), 260)}`;
 }
 
 function buildCompactSpaAccessSummary(value: string): string {
@@ -178,22 +178,22 @@ function joinSectionsWithinLimit(sections: string[], maxChars: number): string {
 }
 
 export function buildGenericInfoTemplate(input: GenericInfoTemplateInput): string | null {
-  const sections: string[] = ['Kisaca temel bilgileri paylasayim:'];
+  const sections: string[] = ['Size kisa bir ozet paylasayim:'];
 
   if (input.massagePricing?.trim()) {
-    sections.push(buildCompactMassagePricingSummary(input.massagePricing));
+    sections.push(`• ${buildCompactMassagePricingSummary(input.massagePricing)}`);
   }
   if (input.spaAccessInfo?.trim()) {
-    sections.push(`Spa alani: ${buildCompactSpaAccessSummary(input.spaAccessInfo)}`);
+    sections.push(`• Spa alani: ${buildCompactSpaAccessSummary(input.spaAccessInfo)}`);
   }
   if (input.locationInfo?.trim()) {
-    sections.push(`Konum: ${buildCompactLocationSummary(input.locationInfo)}`);
+    sections.push(`• Konum: ${buildCompactLocationSummary(input.locationInfo)}`);
   }
   if (input.phoneInfo?.trim()) {
-    sections.push(`Detayli bilgi ve randevu: ${buildCompactPhoneSummary(input.phoneInfo)}`);
+    sections.push(`• Randevu ve detayli bilgi: ${buildCompactPhoneSummary(input.phoneInfo)}`);
   }
   if (input.therapistInfo?.trim()) {
-    sections.push(`Terapist bilgisi: ${buildCompactTherapistSummary(input.therapistInfo)}`);
+    sections.push(`• Terapistlerimiz: ${buildCompactTherapistSummary(input.therapistInfo)}`);
   }
 
   const result = joinSectionsWithinLimit(sections, GENERIC_INFO_TEMPLATE_MAX_CHARS);

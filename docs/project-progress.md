@@ -53,6 +53,7 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - 2026-03-15: Broad massage/spa overview asks can now reuse the deterministic generic info template. The template was extended to include the live `hamam_sauna_access` KB fact so messages like `masaj ve sauna hakkinda bilgi alabilir miyim` can return pricing plus current spa-access info instead of generated summary text.
 - 2026-03-15: The deterministic generic massage/spa info template was restyled into a more polished front-desk summary format, keeping the same live KB-backed facts while replacing pipe-heavy raw output with cleaner section wording.
 - 2026-03-15: The same generic massage/spa template was further optimized for phone screens: multiline sections, one price per line, split contact lines, and a spa block that can mention `havuz` when current KB facility rows confirm pool availability.
+- 2026-03-15: The phone-optimized generic massage/spa template now also supports a compact `kese kopuk +100 TL` note, a KB-driven pool-temperature line, a combined `hamam/sauna/buhar/kapali havuz` access line, and cleaner `Steel Towers` address formatting for mobile DM bubbles.
 - 2026-03-15: Broad multi-service overview asks such as `masaj ve sauna hakkinda bilgi alabilir miyim` now stay on a direct-answer overview path instead of `answer_then_clarify`; the planner strips incidental price/hour categories when the customer did not explicitly ask for them.
 - 2026-03-15: Clarification fallback behavior tightened:
   - one clarification is still allowed for an unclear user turn

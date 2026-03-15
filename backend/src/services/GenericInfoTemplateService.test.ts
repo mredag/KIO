@@ -58,9 +58,11 @@ describe('GenericInfoTemplateService', () => {
   it('builds a reusable generic info template from stable KB sections', () => {
     const result = buildGenericInfoTemplate({
       massagePricing: `KLASIK MASAJ:\n${BULLET} 30dk ${ARROW} 800${TL}\n${BULLET} 40dk ${ARROW} 1000${TL}\n${BULLET} 60dk ${ARROW} 1300${TL}\n${BULLET} 90dk ${ARROW} 2400${TL}`,
+      massageAddonInfo: '30dk masajda kopuk yoktur, kese+kopuk eklemek +100₺ (toplam 900₺).',
       therapistInfo: 'Tum terapistlerimiz kadindir.',
       spaAccessInfo: 'Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.',
       facilityOverview: 'Tesisimizde yuzme havuzu, hamam, sauna ve buhar odasi bulunur.',
+      poolTemperatureInfo: 'Kapali havuz sicakligi kis aylarinda 27-30 derece sicakliktadir.',
       bringInfo: 'Terlik ve mayo getirmeniz yeterlidir.',
       phoneInfo: '0532 000 00 00',
       locationInfo: 'Steel Towers A Blok 4. Kat, Iskenderun / Hatay',
@@ -68,8 +70,9 @@ describe('GenericInfoTemplateService', () => {
 
     expect(result).toContain('Size kisa bir ozet paylasayim:');
     expect(result).toContain(`Masaj fiyatlari:\n${BULLET} 30dk masaj ${ARROW} 800${TL}`);
-    expect(result).toContain(`Spa alani:\n${BULLET} Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.`);
-    expect(result).toContain(`${BULLET} Tesisimizde havuz da bulunur.`);
+    expect(result).toContain(`${BULLET} Kese kopuk ilavesi: +100₺`);
+    expect(result).toContain(`Spa alani:\n${BULLET} Masaj alanlara hamam/sauna/buhar/kapali havuz ucretsiz.`);
+    expect(result).toContain(`${BULLET} Kapali havuz sicakligi kis aylarinda 27-30 derecedir.`);
     expect(result).toContain(`Terapistlerimiz:\n${BULLET} Tum terapistlerimiz kadindir.`);
     expect(result).toContain(`Konum:\n${BULLET} Steel Towers A Blok 4. Kat, Iskenderun / Hatay`);
     expect(result).toContain(`Randevu ve detayli bilgi:\n${BULLET} 0532 000 00 00`);
@@ -84,6 +87,7 @@ describe('GenericInfoTemplateService', () => {
       phoneInfo: 'Sabit: 0326 502 58 58\nCep/WhatsApp: 0530 250 05 58',
       locationInfo: 'Eform Spor Merkezi, Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Tower Is Merkezi (Steel Towers), A Blok, 4. Kat, Iskenderun / Hatay. Google Maps konumu mevcut.',
       facilityOverview: 'Eform Spor Merkezi: Fitness salonu, yuzme havuzu, hamam, sauna ve buhar odasi bulunur.',
+      poolTemperatureInfo: 'Kapali havuz sicakligi kis aylarinda 27-30 derece sicakliktadir.',
     });
 
     expect(result).toBeTruthy();
@@ -98,10 +102,10 @@ describe('GenericInfoTemplateService', () => {
       therapistInfo: 'Tum masaj terapistlerimiz profesyonel kadin terapistlerdir. Sertifikali ve deneyimli ekibimiz vardir.',
       bringInfo: 'YANIMDA NE GETIREYIM?\nTEMIN EDILENLER:\nHavlu\nTerlik\nSort',
       phoneInfo: 'Sabit: 0326 502 58 58\nCep/WhatsApp: 0530 250 05 58',
-      locationInfo: 'Eform Spor Merkezi\nAdres: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay\nKonum (Google Maps): https://maps.app.goo.gl/qC4jh7fquXYX3vPA6',
+      locationInfo: 'Eform Spor Merkezi\nAdres: Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Tower Is Merkezi (Steel Towers), A Blok, 4. Kat, Iskenderun / Hatay\nKonum (Google Maps): https://maps.app.goo.gl/qC4jh7fquXYX3vPA6',
     });
 
-    expect(result).toContain(`Konum:\n${BULLET} Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers A Blok 4. Kat, Iskenderun / Hatay`);
+    expect(result).toContain(`Konum:\n${BULLET} Cay Mahallesi, Tayfur Sokmen Bulvari, Steel Towers, A Blok, 4. Kat, Iskenderun / Hatay`);
     expect(result).not.toContain('YANIMDA NE GETIREYIM');
     expect(result).not.toContain('Google Maps');
     expect(result).not.toContain('maps.app.goo.gl');

@@ -2,12 +2,14 @@ import { normalizeTurkish } from './InstagramContextService.js';
 
 export interface GenericInfoTemplateInput {
   massagePricing?: string | null;
+  massageAddonInfo?: string | null;
   therapistInfo?: string | null;
   bringInfo?: string | null;
   phoneInfo?: string | null;
   locationInfo?: string | null;
   spaAccessInfo?: string | null;
   facilityOverview?: string | null;
+  poolTemperatureInfo?: string | null;
 }
 
 export interface DeterministicHoursTemplateInput {
@@ -107,8 +109,17 @@ function buildCompactLocationSummary(value: string): string {
   const addressLine = lines.find(line => /^adres\s*:/iu.test(line))
     || lines.find(line => !/^konum\s*\(google maps\)/iu.test(line))
     || value;
+  const cleaned = addressLine
+    .replace(/^adres\s*:\s*/iu, '')
+    .replace(/Steel Tower İş Merkezi \(Steel Towers\)/iu, 'Steel Towers')
+    .replace(/Steel Tower Is Merkezi \(Steel Towers\)/iu, 'Steel Towers')
+    .replace(/Steel Tower İş Merkezi/iu, 'Steel Towers')
+    .replace(/Steel Tower Is Merkezi/iu, 'Steel Towers')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  return clipSingleLine(addressLine.replace(/^adres\s*:\s*/iu, ''), 180);
+  return clipSingleLine(cleaned, 180);
 }
 
 function buildCompactPhoneSummary(value: string): string {
@@ -172,6 +183,24 @@ function buildCompactMassagePricingLines(value: string): string[] {
   return fallback ? [fallback] : [];
 }
 
+function buildCompactMassageAddonLine(value?: string | null): string | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const normalized = normalizeTurkish(value.toLowerCase());
+  const extraPrice = value.match(/\+\s*\d+[.,]?\d*\s*₺/u)?.[0]?.replace(/\s+/g, '');
+  if (!extraPrice) {
+    return null;
+  }
+
+  if (normalized.includes('kese') || normalized.includes('kopuk')) {
+    return `Kese kopuk ilavesi: ${extraPrice}`;
+  }
+
+  return null;
+}
+
 function buildCompactSpaAccessSummary(value: string): string {
   const cleaned = value
     .replace(/\r/g, ' ')
@@ -181,20 +210,57 @@ function buildCompactSpaAccessSummary(value: string): string {
   return clipSingleLine(firstSentence, 180);
 }
 
-function buildCompactSpaAccessLines(accessInfo?: string | null, facilityOverview?: string | null): string[] {
-  const lines: string[] = [];
-
-  if (accessInfo?.trim()) {
-    lines.push(buildCompactSpaAccessSummary(accessInfo));
+function buildCompactPoolTemperatureLine(value?: string | null): string | null {
+  if (!value?.trim()) {
+    return null;
   }
+
+  const normalized = normalizeTurkish(value.toLowerCase());
+  const rangeMatch = value.match(/(\d{2}\s*[-–]\s*\d{2})/u);
+  if (normalized.includes('kis') && rangeMatch) {
+    return `Kapali havuz sicakligi kis aylarinda ${rangeMatch[1].replace(/\s+/g, '')} derecedir.`;
+  }
+
+  const firstSentence = value
+    .replace(/\r/g, ' ')
+    .replace(/\n+/g, ' ')
+    .trim()
+    .match(/[^.!?]+[.!?]?/u)?.[0] || value;
+  return clipSingleLine(firstSentence, 120);
+}
+
+function buildCompactSpaAccessLines(
+  accessInfo?: string | null,
+  facilityOverview?: string | null,
+  poolTemperatureInfo?: string | null,
+): string[] {
+  const lines: string[] = [];
 
   const facilityNormalized = normalizeTurkish((facilityOverview || '').toLowerCase());
   const accessNormalized = normalizeTurkish((accessInfo || '').toLowerCase());
   const mentionsPool = facilityNormalized.includes('havuz') || facilityNormalized.includes('yuzme havuzu');
   const accessAlreadyMentionsPool = accessNormalized.includes('havuz') || accessNormalized.includes('pool');
 
-  if (mentionsPool && !accessAlreadyMentionsPool) {
-    lines.push('Tesisimizde havuz da bulunur.');
+  if (accessInfo?.trim()) {
+    const canPromoteToCombinedSpaLine = mentionsPool
+      && !accessAlreadyMentionsPool
+      && accessNormalized.includes('masaj alan')
+      && accessNormalized.includes('hamam')
+      && accessNormalized.includes('sauna')
+      && accessNormalized.includes('buhar');
+
+    if (canPromoteToCombinedSpaLine) {
+      lines.push('Masaj alanlara hamam/sauna/buhar/kapali havuz ucretsiz.');
+    } else {
+      lines.push(buildCompactSpaAccessSummary(accessInfo));
+    }
+  } else if (mentionsPool) {
+    lines.push('Spa alanimizda hamam/sauna/buhar/kapali havuz bulunur.');
+  }
+
+  const poolTemperatureLine = buildCompactPoolTemperatureLine(poolTemperatureInfo);
+  if (poolTemperatureLine) {
+    lines.push(poolTemperatureLine);
   }
 
   return lines.slice(0, 2);
@@ -232,11 +298,20 @@ export function buildGenericInfoTemplate(input: GenericInfoTemplateInput): strin
   if (input.massagePricing?.trim()) {
     const pricingLines = buildCompactMassagePricingLines(input.massagePricing);
     if (pricingLines.length > 0) {
-      sections.push(['Masaj fiyatlari:', ...pricingLines.map(line => `\u2022 ${line}`)].join('\n'));
+      const addonLine = buildCompactMassageAddonLine(input.massageAddonInfo || input.massagePricing);
+      sections.push([
+        'Masaj fiyatlari:',
+        ...pricingLines.map(line => `\u2022 ${line}`),
+        ...(addonLine ? [`\u2022 ${addonLine}`] : []),
+      ].join('\n'));
     }
   }
 
-  const spaLines = buildCompactSpaAccessLines(input.spaAccessInfo, input.facilityOverview);
+  const spaLines = buildCompactSpaAccessLines(
+    input.spaAccessInfo,
+    input.facilityOverview,
+    input.poolTemperatureInfo,
+  );
   if (spaLines.length > 0) {
     sections.push(['Spa alani:', ...spaLines.map(line => `\u2022 ${line}`)].join('\n'));
   }

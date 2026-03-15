@@ -142,12 +142,14 @@ export class DMKnowledgeContextService {
       signature,
       genericInfo: buildGenericInfoTemplate({
         massagePricing: pricing.complete_massage_pricing || this.pickFirstValue(pricing),
+        massageAddonInfo: faq.kese_kopuk_fiyat || services.massage_kese_kopuk || null,
         therapistInfo: services.therapist_info || null,
         bringInfo: services.complete_customer_bring_guide || null,
         phoneInfo: contact.phone || null,
         locationInfo: contact.address || null,
         spaAccessInfo: policies.hamam_sauna_access || null,
         facilityOverview: services.facility_overview || general.facility_description || null,
+        poolTemperatureInfo: faq.havuz_sicaklik || null,
       }),
       massagePricingInfo: buildDeterministicMassagePricingTemplate({
         massagePricing: pricing.complete_massage_pricing || this.pickFirstValue(pricing),

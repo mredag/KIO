@@ -11,7 +11,7 @@
  * - 60-second auto-close for detail view
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Massage } from '../../types';
 import ShowcaseColumn from './ShowcaseColumn';
 import GlassDetailCard from './GlassDetailCard';
@@ -25,7 +25,10 @@ interface ShowcaseModeProps {
 const TRANSITION_DURATION = 500;
 
 export default function ShowcaseMode({ massages }: ShowcaseModeProps) {
-  const displayMassages = selectDisplayMassages(massages as any) as unknown as Massage[];
+  const displayMassages = useMemo(
+    () => selectDisplayMassages(massages as any) as unknown as Massage[],
+    [massages]
+  );
   
   // State
   const [selectedIndex, setSelectedIndex] = useState(0);

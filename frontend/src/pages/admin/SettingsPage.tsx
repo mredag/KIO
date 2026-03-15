@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
 import {
@@ -12,12 +13,19 @@ type TabId = 'timing' | 'theme' | 'google-review' | 'sheets' | 'security';
 
 export default function SettingsPage() {
   const { t } = useTranslation('admin');
+  const [searchParams] = useSearchParams();
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
   const testConnection = useTestSheetsConnection();
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<TabId>('timing');
+  const getInitialTab = (): TabId => {
+    const tab = searchParams.get('tab');
+    return tab === 'timing' || tab === 'theme' || tab === 'google-review' || tab === 'sheets' || tab === 'security'
+      ? tab
+      : 'timing';
+  };
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
 
   // Timing settings
   const [slideshowTimeout, setSlideshowTimeout] = useState<number>(60);
@@ -68,6 +76,10 @@ export default function SettingsPage() {
       setKioskTheme((backendSettings.kiosk_theme as KioskThemeId) || 'classic');
     }
   }, [settings]);
+
+  useEffect(() => {
+    setActiveTab(getInitialTab());
+  }, [searchParams]);
 
   // Inline validation
   const validateField = (field: string, value: any): string | null => {

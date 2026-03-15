@@ -11,7 +11,7 @@
  * - 1.3, 3.1, 3.2, 3.3, 6.2: Expand/collapse width transitions
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { Massage } from '../../types';
 import { SHOWCASE_COLORS, SHOWCASE_ANIMATION_CONFIG } from '../../lib/kioskTheme';
 
@@ -24,7 +24,7 @@ interface ShowcaseColumnProps {
   animationDelay: number;       // Staggered entrance animation
 }
 
-export default function ShowcaseColumn({
+function ShowcaseColumn({
   massage,
   isMain,
   onSelect,
@@ -35,7 +35,6 @@ export default function ShowcaseColumn({
   const [isVisible, setIsVisible] = useState(false);
   const [isTouched, setIsTouched] = useState(false);
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Staggered entrance animation (Requirement 6.5)
@@ -47,22 +46,19 @@ export default function ShowcaseColumn({
     return () => clearTimeout(timer);
   }, [animationDelay]);
 
-  // Video lazy loading with Intersection Observer (Requirement 9.4)
-  // Only load video when column is visible or about to become visible
+  // Load media only when the active column is visible.
   useEffect(() => {
     if (!containerRef.current) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          // Load video when column is visible or within viewport
           if (entry.isIntersecting || entry.intersectionRatio > 0) {
             setShouldLoadVideo(true);
           }
         });
       },
       {
-        // Start loading slightly before column enters viewport
         rootMargin: '50px',
         threshold: 0.1,
       }
@@ -75,51 +71,12 @@ export default function ShowcaseColumn({
     };
   }, []);
 
-  // Prioritize loading for main column (Requirement 9.4)
   useEffect(() => {
     if (isMain) {
       setShouldLoadVideo(true);
     }
   }, [isMain]);
 
-  // Periodic video health check to prevent stuck loading state
-  useEffect(() => {
-    if (!videoRef.current || !shouldLoadVideo) return;
-
-    const healthCheck = setInterval(() => {
-      const video = videoRef.current;
-      if (video && video.readyState < 2 && !video.paused) {
-        // Video is stuck in loading state, try to recover
-        console.log('Video health check: recovering stuck video');
-        video.load();
-        video.play().catch(() => {});
-      }
-    }, 30000); // Check every 30 seconds
-
-    return () => clearInterval(healthCheck);
-  }, [shouldLoadVideo]);
-
-  // Handle page visibility changes to recover videos
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && videoRef.current) {
-        // Page became visible, ensure video is playing
-        if (videoRef.current.paused || videoRef.current.readyState < 3) {
-          console.log('Page visible, recovering video playback');
-          videoRef.current.play().catch(() => {
-            // If play fails, try reloading
-            videoRef.current?.load();
-            videoRef.current?.play().catch(() => {});
-          });
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
-
-  // Handle video load error (Requirement 1.5)
   const handleVideoError = () => {
     setVideoError(true);
   };
@@ -129,8 +86,9 @@ export default function ShowcaseColumn({
     setVideoError(false);
   }, [massage.id]);
 
-  // Extract short benefit from shortDescription (first sentence or first 50 chars)
   const benefit = massage.shortDescription.split('.')[0].substring(0, 50);
+  const shouldRenderVideo = isMain && massage.mediaType === 'video' && shouldLoadVideo && !videoError;
+  const shouldRenderImage = massage.mediaType === 'photo' && Boolean(massage.mediaUrl);
 
   // Touch feedback handlers (Requirements 10.1, 10.2)
   const handleTouchStart = () => {
@@ -176,63 +134,40 @@ export default function ShowcaseColumn({
         transform: 'translateZ(0)', // Force GPU layer
       }}
     >
-      {/* Video or Gradient Placeholder */}
-      {!videoError && massage.mediaType === 'video' && shouldLoadVideo ? (
+      {shouldRenderVideo ? (
         <video
-          ref={videoRef}
-          key={`video-${massage.id}`} // Stable key to prevent unnecessary reloads
+          key={`video-${massage.id}`}
           className="absolute inset-0 w-full h-full object-cover rounded-2xl transition-all duration-300"
           src={massage.mediaUrl}
           autoPlay
           loop
           muted
           playsInline
-          preload="auto"
+          preload="metadata"
           onError={handleVideoError}
-          onStalled={() => {
-            // Auto-recover from stalled state after a delay
-            setTimeout(() => {
-              if (videoRef.current && videoRef.current.readyState < 3) {
-                console.log('Video stalled, attempting recovery...');
-                videoRef.current.load();
-                videoRef.current.play().catch(() => {});
-              }
-            }, 2000);
-          }}
-          onWaiting={() => {
-            // Try to recover if waiting too long
-            setTimeout(() => {
-              if (videoRef.current && videoRef.current.readyState < 3) {
-                console.log('Video waiting too long, attempting recovery...');
-                videoRef.current.load();
-                videoRef.current.play().catch(() => {});
-              }
-            }, 5000);
-          }}
-          onCanPlay={() => {
-            // Ensure video plays when ready
-            if (videoRef.current && videoRef.current.paused) {
-              videoRef.current.play().catch(() => {});
-            }
-          }}
           style={{
-            borderRadius: '16px', // Requirement 1.4
-            // GPU acceleration for video (Requirements 9.1, 9.2)
+            borderRadius: '16px',
             transform: 'translateZ(0)',
             willChange: 'transform',
-            // Blur video on non-selected columns
-            filter: isMain ? 'none' : 'blur(3px) brightness(0.5)',
+          }}
+        />
+      ) : shouldRenderImage ? (
+        <img
+          src={massage.mediaUrl}
+          alt={massage.name}
+          loading="lazy"
+          className="absolute inset-0 w-full h-full object-cover rounded-2xl transition-all duration-300"
+          style={{
+            borderRadius: '16px',
+            transform: 'translateZ(0)',
           }}
         />
       ) : (
-        // Gradient placeholder (Requirement 1.5)
         <div
           className="absolute inset-0 flex items-center justify-center rounded-2xl transition-all duration-300"
           style={{
             background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)`,
             borderRadius: '16px',
-            // Blur placeholder on non-selected columns
-            filter: isMain ? 'none' : 'blur(3px) brightness(0.5)',
           }}
         >
           <div className="text-center px-4">
@@ -247,14 +182,13 @@ export default function ShowcaseColumn({
         </div>
       )}
 
-      {/* Gradient overlay for better text readability */}
       <div
         className="absolute inset-0 rounded-2xl transition-all duration-300"
         style={{
-          background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 40%)',
+          background: isMain
+            ? 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 40%)'
+            : 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.12) 100%)',
           borderRadius: '16px',
-          // Blur gradient on non-selected columns
-          filter: isMain ? 'none' : 'blur(3px) brightness(0.5)',
         }}
       />
 
@@ -374,7 +308,6 @@ export default function ShowcaseColumn({
         )}
       </div>
 
-      {/* Touch feedback indicator (subtle pulse on hover) */}
       <div
         className={`
           absolute inset-0 rounded-2xl pointer-events-none
@@ -389,3 +322,5 @@ export default function ShowcaseColumn({
     </div>
   );
 }
+
+export default memo(ShowcaseColumn);

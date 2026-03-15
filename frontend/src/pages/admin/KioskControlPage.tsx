@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import AdminLayout from '../../layouts/AdminLayout';
 import {
@@ -178,6 +179,37 @@ export default function KioskControlPage() {
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             {t('kioskControl.subtitle')}
           </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Link
+            to="/admin/settings?tab=theme"
+            className="group rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-4 transition-colors hover:bg-sky-100 dark:hover:bg-sky-900/30"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-sky-900 dark:text-sky-100">Kiosk tema ayarlari</h3>
+                <p className="mt-1 text-sm text-sky-700 dark:text-sky-300">
+                  Dijital menu temasini degistir ve canli gorunumu yonet.
+                </p>
+              </div>
+              <span className="text-sky-600 dark:text-sky-300">Ac</span>
+            </div>
+          </Link>
+          <Link
+            to="/admin/settings?tab=timing"
+            className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/60"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Kiosk sure ayarlari</h3>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Slayt gecisleri, anket bekleme suresi ve QR ekran suresini duzenle.
+                </p>
+              </div>
+              <span className="text-gray-500 dark:text-gray-300">Ac</span>
+            </div>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

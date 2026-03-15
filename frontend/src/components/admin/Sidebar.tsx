@@ -41,7 +41,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen, o
     channels: true,
     content: true,
     business: true,
-    system: false,
+    system: true,
   });
 
   const isActive = (path: string) => (path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(path));

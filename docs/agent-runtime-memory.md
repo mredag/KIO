@@ -80,6 +80,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Address output in the mobile summary is intentionally normalized for readability: `Steel Tower Is Merkezi (Steel Towers)` should collapse to `Steel Towers` in the compact location line instead of echoing the raw admin text verbatim.
 - Kiosk frontend boot should trust live server state, not stale browser persistence. Only reusable cache/theme data should survive reloads; transient fields like `mode`, `activeSurveyId`, `isOffline`, and QR-view flags must reset on boot and sync from `/api/kiosk/state`.
 - Live kiosk state can now return `theme: "showcase"`. Frontend theme typing and theme-application logic must accept `showcase` as a first-class kiosk theme instead of remapping or dropping it.
+- The kiosk theme and timing controls still live under `/admin/settings`, while `/admin/kiosk-control` is the mode switcher. Keep quick links between them so operators can find theme/timing controls without hunting through the sidebar.
+- Showcase-mode performance should avoid multiple blurred autoplaying videos at once. Prefer one active video path plus lightweight non-main previews so the Pi kiosk stays smooth.
 - Service-specific `bilgi` asks such as `kickboks hakkinda bilgi verirmisin` should stay off the generic info template path when the service/topic is already explicit in the message.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).

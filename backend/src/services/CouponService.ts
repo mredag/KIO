@@ -165,10 +165,19 @@ export class CouponService {
 
       // Check if already used
       if (tokenRow.status === 'used') {
-        // Return error for already-used token
+        const tokenPhone = tokenRow.phone ? PhoneNormalizer.normalize(tokenRow.phone) : null;
         const wallet = this.getOrCreateWallet(normalizedPhone);
         const remainingToFree = Math.max(0, threshold - wallet.couponCount);
-        
+
+        // Same customer retrying the same token should replay the original success.
+        if (tokenPhone && tokenPhone === normalizedPhone) {
+          return {
+            ok: true,
+            balance: wallet.couponCount,
+            remainingToFree,
+          };
+        }
+
         return {
           ok: false,
           balance: wallet.couponCount,

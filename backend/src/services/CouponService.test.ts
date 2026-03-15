@@ -128,6 +128,18 @@ describe('CouponService', () => {
       expect(result2.balance).toBe(1); // Same balance, not incremented
     });
 
+    it('should reject reused token for a different customer', () => {
+      const issued = service.issueToken('kiosk-1');
+
+      const result1 = service.consumeToken('+905551234567', issued.token);
+      expect(result1.ok).toBe(true);
+
+      const result2 = service.consumeToken('+905551234568', issued.token);
+      expect(result2.ok).toBe(false);
+      expect(result2.error).toBe('ALREADY_USED');
+      expect(result2.balance).toBe(0);
+    });
+
     it('should track total earned separately from balance', () => {
       const token1 = service.issueToken('kiosk-1');
       const token2 = service.issueToken('kiosk-1');

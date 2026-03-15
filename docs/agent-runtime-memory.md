@@ -149,6 +149,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - If the owner sends an image with new prices, extract a structured list first, mark unreadable items, then build the KB preview from that list.
 - Coupon token expiration and consume-side `remainingToFree` values should come from live coupon policy, not hardcoded `24h` or `4 kupon` assumptions.
 - Coupon consume rate limits should honor `coupon_settings.max_coupons_per_day`; do not leave inflated test-only limits wired into production middleware.
+- Coupon token consume must stay idempotent for the same normalized phone. Replayed consume requests for the original customer should return the existing success balance, while a reused token from a different phone must still return `ALREADY_USED`.
 
 ## Where To Look First
 - DM planner and follow-up logic: `backend/src/services/InstagramContextService.ts`

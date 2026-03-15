@@ -15,6 +15,7 @@ import SlideshowMode from './SlideshowMode';
  */
 export default function KioskModeRouter() {
   const { t } = useTranslation('kiosk');
+  const kioskStateQuery = useKioskState();
   const mode = useKioskStore((state) => state.mode);
   const isOffline = useKioskStore((state) => state.isOffline);
   const pendingModeChange = useKioskStore((state) => state.pendingModeChange);
@@ -23,9 +24,6 @@ export default function KioskModeRouter() {
 
   // SSE connection for real-time updates
   useKioskEvents();
-
-  // Fallback polling when SSE disconnected (Requirement 1.3)
-  useKioskState();
 
   // Health check for offline detection (Requirement 19.5)
   useHealthCheck();
@@ -92,6 +90,15 @@ export default function KioskModeRouter() {
 
   return (
     <div className="h-full w-full relative">
+      {!kioskStateQuery.isFetched && !isOffline && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950 text-white">
+          <div className="text-center">
+            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+            <p className="text-lg font-medium">Yukleniyor...</p>
+          </div>
+        </div>
+      )}
+
       {/* Offline indicator (Requirement 19.7) */}
       {isOffline && (
         <div className="absolute top-4 right-4 z-50 bg-yellow-500 text-gray-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2">
@@ -128,7 +135,7 @@ export default function KioskModeRouter() {
               d="M13 10V3L4 14h7v7l9-11h-7z"
             />
           </svg>
-          Mod değişikliği bekliyor...
+          Mod degisikligi bekleniyor...
         </div>
       )}
 

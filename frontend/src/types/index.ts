@@ -1,5 +1,6 @@
 // Import i18n type definitions
 import './i18n';
+import type { KioskThemeId } from '../lib/kioskTheme';
 
 // Kiosk types
 export type KioskMode = 'digital-menu' | 'survey' | 'google-qr' | 'coupon-qr' | 'slideshow';
@@ -20,7 +21,7 @@ export interface KioskState {
     slideshowTimeout: number;
     surveyTimeout: number;
     googleQrDisplayDuration: number;
-    theme?: 'classic' | 'immersive' | 'neo';
+    theme?: KioskThemeId;
   };
 }
 
@@ -123,7 +124,7 @@ export interface SystemSettings {
   slideshowTimeout: number;
   surveyTimeout: number;
   googleQrDisplayDuration: number;
-  kioskTheme?: 'classic' | 'immersive';
+  kioskTheme?: KioskThemeId;
   googleReviewUrl?: string;
   googleReviewTitle?: string;
   googleReviewDescription?: string;

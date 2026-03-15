@@ -78,6 +78,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - The spa section can combine the direct access rule from `policies.hamam_sauna_access` with facility-level pool availability from `services.facility_overview` or `general.facility_description`, so it can mention `havuz` without hardcoding it into one static sentence.
 - The same template can now surface a short `kese kopuk +100 TL` line from the live `faq.kese_kopuk_fiyat` / `services.massage_kese_kopuk` facts, and can add a pool-temperature line from `faq.havuz_sicaklik` when that KB fact exists.
 - Address output in the mobile summary is intentionally normalized for readability: `Steel Tower Is Merkezi (Steel Towers)` should collapse to `Steel Towers` in the compact location line instead of echoing the raw admin text verbatim.
+- Kiosk frontend boot should trust live server state, not stale browser persistence. Only reusable cache/theme data should survive reloads; transient fields like `mode`, `activeSurveyId`, `isOffline`, and QR-view flags must reset on boot and sync from `/api/kiosk/state`.
+- Live kiosk state can now return `theme: "showcase"`. Frontend theme typing and theme-application logic must accept `showcase` as a first-class kiosk theme instead of remapping or dropping it.
 - Service-specific `bilgi` asks such as `kickboks hakkinda bilgi verirmisin` should stay off the generic info template path when the service/topic is already explicit in the message.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.
 - DM conduct states are `normal`, `guarded`, `final_warning`, and `silent` (operator-facing label: `Bad customer`).
@@ -145,6 +147,8 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Price updates must scan `pricing` first, then review related `faq` / `services` rows only if those rows repeat the same fact. Do not widen scope silently.
 - For massage price changes, start with `pricing.complete_massage_pricing`. The generic `bilgi almak istiyorum` reply uses that live row dynamically, so changing it updates the template automatically.
 - If the owner sends an image with new prices, extract a structured list first, mark unreadable items, then build the KB preview from that list.
+- Coupon token expiration and consume-side `remainingToFree` values should come from live coupon policy, not hardcoded `24h` or `4 kupon` assumptions.
+- Coupon consume rate limits should honor `coupon_settings.max_coupons_per_day`; do not leave inflated test-only limits wired into production middleware.
 
 ## Where To Look First
 - DM planner and follow-up logic: `backend/src/services/InstagramContextService.ts`

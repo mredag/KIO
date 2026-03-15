@@ -77,9 +77,11 @@ export class CouponService {
       throw new Error('Failed to generate unique token after 3 attempts');
     }
 
-    // Calculate expiration (24 hours from now)
+    const expirationHours = this.policyService.getTokenExpirationHours();
+
+    // Calculate expiration from live coupon policy
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(now.getTime() + expirationHours * 60 * 60 * 1000);
 
     // Store token in database
     this.db
@@ -299,7 +301,7 @@ export class CouponService {
 
       // Determine which tier to use
       let couponsRequired = threshold;
-      let rewardName = 'Ücretsiz Masaj';
+      let rewardName = 'Ucretsiz Masaj';
       
       if (tierId) {
         const tiers = this.policyService.getAllRewardTiers();
@@ -726,3 +728,4 @@ export class CouponService {
     };
   }
 }
+

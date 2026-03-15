@@ -9,13 +9,10 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { RateLimitService } from '../services/RateLimitService.js';
+import { CouponPolicyService } from '../services/CouponPolicyService.js';
 import Database from 'better-sqlite3';
 
-// Rate limit configuration
-const RATE_LIMITS = {
-  consume: 100, // 100 requests per day (increased for testing)
-  claim: 50,    // 50 requests per day (increased for testing)
-};
+const CLAIM_DAILY_LIMIT = 5;
 
 /**
  * Create coupon rate limit middleware
@@ -25,6 +22,7 @@ const RATE_LIMITS = {
  */
 export function createCouponRateLimitMiddleware(db: Database.Database) {
   const rateLimitService = new RateLimitService(db);
+  const policyService = new CouponPolicyService(db);
 
   return (req: Request, res: Response, next: NextFunction): void => {
     // Extract phone from request body
@@ -46,10 +44,10 @@ export function createCouponRateLimitMiddleware(db: Database.Database) {
 
     if (req.path.includes('/consume')) {
       endpoint = 'consume';
-      limit = RATE_LIMITS.consume;
+      limit = policyService.getPolicy().maxCouponsPerDay;
     } else if (req.path.includes('/claim')) {
       endpoint = 'claim';
-      limit = RATE_LIMITS.claim;
+      limit = CLAIM_DAILY_LIMIT;
     } else {
       // If path doesn't match known endpoints, skip rate limiting
       next();

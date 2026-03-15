@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import api from '../lib/api';
+import { isKioskThemeId } from '../lib/kioskTheme';
 import { useKioskStore } from '../stores/kioskStore';
 import {
   KioskState,
@@ -36,9 +37,9 @@ export function useKioskState() {
       setActiveSurveyId(response.data.activeSurveyId || null);
 
       // Apply kiosk theme from settings (with fallback)
-      const theme = response.data.config?.theme as 'classic' | 'immersive' | 'neo' | undefined;
-      if (theme) {
-        setTheme(theme === 'neo' ? 'immersive' : theme);
+      const theme = response.data.config?.theme;
+      if (isKioskThemeId(theme)) {
+        setTheme(theme);
       }
 
       setOffline(false);

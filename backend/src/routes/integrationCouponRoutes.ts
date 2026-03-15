@@ -151,10 +151,11 @@ export function createIntegrationCouponRoutes(
         if (existing) {
           // Message already processed - return current balance without error
           const wallet = couponService.getWallet(phone);
+          const threshold = couponService.getRedemptionThreshold();
           res.json({
             ok: true,
             balance: wallet?.couponCount || 0,
-            remainingToFree: Math.max(0, 4 - (wallet?.couponCount || 0)),
+            remainingToFree: Math.max(0, threshold - (wallet?.couponCount || 0)),
             duplicate: true,
           });
           return;

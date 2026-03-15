@@ -19,7 +19,7 @@ import {
 fc.configureGlobal({ numRuns: 100 });
 
 // Arbitrary for valid theme IDs
-const themeIdArbitrary = fc.constantFrom<KioskThemeId>('classic', 'neo', 'immersive');
+const themeIdArbitrary = fc.constantFrom<KioskThemeId>('classic', 'neo', 'immersive', 'showcase');
 
 // Arbitrary for theme variant
 const variantArbitrary = fc.constantFrom<'googleQr' | 'couponQr' | undefined>('googleQr', 'couponQr', undefined);
@@ -200,8 +200,12 @@ describe('Kiosk Theme System - Property Tests', () => {
           // All themes should have animations enabled for smooth transitions
           expect(theme.animations.enabled).toBe(true);
           
-          // At least float animation should be enabled for visual smoothness
-          expect(theme.animations.floatAnimation).toBe(true);
+          // Each theme should expose at least one transition-friendly animation signal.
+          expect(
+            theme.animations.floatAnimation === true
+            || theme.animations.pulseAnimation === true
+            || theme.animations.glowEffect === true
+          ).toBe(true);
           
           // Animation properties should be boolean
           if (theme.animations.pulseAnimation !== undefined) {

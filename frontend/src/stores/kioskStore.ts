@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { KioskMode, Massage, SurveyTemplate, SurveyResponse, GoogleReviewConfig } from '../types';
-import type { KioskThemeId } from '../lib/kioskTheme';
+import { isKioskThemeId, type KioskThemeId } from '../lib/kioskTheme';
 
 interface KioskStore {
   // Current state
@@ -52,6 +52,33 @@ interface KioskStore {
   getCachedMassages: () => Massage[];
   getCachedSurvey: () => SurveyTemplate | null;
   getCachedGoogleReviewConfig: () => GoogleReviewConfig | null;
+}
+
+type PersistedKioskState = Partial<Pick<
+  KioskStore,
+  'theme' | 'massages' | 'activeSurvey' | 'googleReviewConfig' | 'queuedResponses'
+>>;
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+export function sanitizePersistedKioskState(value: unknown): PersistedKioskState {
+  const persisted = isObjectRecord(value) ? value : {};
+
+  return {
+    theme: isKioskThemeId(persisted.theme) ? persisted.theme : 'classic',
+    massages: Array.isArray(persisted.massages) ? persisted.massages as Massage[] : [],
+    activeSurvey: isObjectRecord(persisted.activeSurvey)
+      ? persisted.activeSurvey as unknown as SurveyTemplate
+      : null,
+    googleReviewConfig: isObjectRecord(persisted.googleReviewConfig)
+      ? persisted.googleReviewConfig as unknown as GoogleReviewConfig
+      : null,
+    queuedResponses: Array.isArray(persisted.queuedResponses)
+      ? persisted.queuedResponses as SurveyResponse[]
+      : [],
+  };
 }
 
 export const useKioskStore = create<KioskStore>()(
@@ -127,19 +154,16 @@ export const useKioskStore = create<KioskStore>()(
     }),
     {
       name: 'kiosk-storage',
+      version: 2,
+      migrate: (persistedState) => sanitizePersistedKioskState(persistedState),
       partialize: (state) => ({
-        // Don't persist isUserActive and pendingModeChange - they should reset on page load
-        mode: state.mode,
-        activeSurveyId: state.activeSurveyId,
-        isOffline: state.isOffline,
-        lastSync: state.lastSync,
-        isUserViewingQR: state.isUserViewingQR,
+        // Persist only reusable cache/theme data. Runtime mode and connectivity
+        // must always boot from live server state, not stale local storage.
         theme: state.theme,
         massages: state.massages,
         activeSurvey: state.activeSurvey,
         googleReviewConfig: state.googleReviewConfig,
         queuedResponses: state.queuedResponses,
-        // Explicitly exclude isUserActive, pendingModeChange, sseConnected
       }),
     }
   )

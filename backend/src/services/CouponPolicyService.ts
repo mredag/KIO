@@ -112,10 +112,10 @@ export class CouponPolicyService {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         'Free Massage',
-        'Ücretsiz Masaj',
+        'Ucretsiz Masaj',
         4,
         'Redeem 4 coupons for a free massage session',
-        '4 kupon karşılığında ücretsiz masaj hakkı',
+        '4 kupon karsiliginda ucretsiz masaj hakki',
         1,
         1
       );
@@ -321,3 +321,4 @@ export class CouponPolicyService {
     }));
   }
 }
+

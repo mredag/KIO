@@ -9,6 +9,10 @@ import { useKioskStore } from '../stores/kioskStore';
 // Theme type
 export type KioskThemeId = 'classic' | 'neo' | 'immersive' | 'showcase';
 
+export function isKioskThemeId(value: unknown): value is KioskThemeId {
+  return value === 'classic' || value === 'neo' || value === 'immersive' || value === 'showcase';
+}
+
 // Theme configuration interface
 export interface KioskThemeConfig {
   id: KioskThemeId;

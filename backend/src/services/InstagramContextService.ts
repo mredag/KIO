@@ -953,6 +953,30 @@ export class InstagramContextService {
     };
   }
 
+  private applyBroadServiceOverviewSignals(plan: AIContextPlan, messageText: string): void {
+    if (!this.isBroadServiceOverviewRequest(messageText, plan.categories, plan.keywords)) {
+      return;
+    }
+
+    const retainedCategories = plan.categories.filter(category => ['services', 'general', 'faq', 'policies'].includes(category));
+    plan.categories = ['services', ...retainedCategories.filter(category => category !== 'services')];
+    if (!plan.categories.includes('general')) {
+      plan.categories.push('general');
+    }
+    plan.categories = [...new Set(plan.categories)];
+    plan.followUpHint = null;
+
+    if (!plan.keywords.includes('broad_service_overview_signal')) {
+      plan.keywords.push('broad_service_overview_signal');
+    }
+
+    plan.responseDirective = {
+      mode: 'answer_directly',
+      instruction: 'Musteri bir veya birden fazla hizmet hakkinda genel bilgi istiyor. Verilen KB bilgisinden hizmetlerin ana ozelliklerini kisa ve dogrudan ozetle. Musteri fiyat, saat, randevu veya konum sormadiysa bunlar icin ek netlestirme sorusu sorma; yalnizca bilgi gercekten eksikse tek ve gerekli bir soru sor.',
+      rationale: 'Genel hizmet ozeti talebi dogrudan cevaplanabilir; fiyat veya saat detayini musteri istemeden geri soru sormak gereksizdir.',
+    };
+  }
+
   private isModifierOnlyRequest(categories: string[]): boolean {
     if (categories.length === 0) {
       return false;
@@ -1622,6 +1646,7 @@ export class InstagramContextService {
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
     this.applyDirectContactLocationSignals(plan, messageText);
+    this.applyBroadServiceOverviewSignals(plan, messageText);
     this.applyIndependentTurnGuards(plan, messageText);
 
     return plan;
@@ -1656,6 +1681,7 @@ export class InstagramContextService {
       || this.isGreetingOrCourtesyOnly(messageText)
       || this.isGenericInfoRequest(messageText, plan.categories, plan.keywords)
       || plan.keywords.includes('generic_massage_pricing_signal')
+      || plan.keywords.includes('broad_service_overview_signal')
       || this.isGenericPricingClarifierQuestion(messageText, plan.categories)
       || this.hasStandaloneAppointmentRequest(messageText, plan.categories)
       || this.hasStandaloneHoursRequest(messageText, plan.categories)
@@ -1725,6 +1751,31 @@ export class InstagramContextService {
 
     const normalized = this.normalizeMessageForHeuristics(messageText);
     return /\b(?:nedir|nasil bir|ne ise yarar|detay|detaylari|icerik|icerigi|anlatir misiniz|var mi|neler var)\b/.test(normalized);
+  }
+
+  private isBroadServiceOverviewRequest(messageText: string, categories: string[], semanticSignals: string[]): boolean {
+    if (!categories.includes('services')) {
+      return false;
+    }
+
+    if (!this.hasExplicitServiceMention(messageText)) {
+      return false;
+    }
+
+    const normalized = this.normalizeMessageForHeuristics(messageText);
+    const asksOverview = /\b(?:hakkinda|bilgi|detay|anlat(?:ir misiniz|abilir misiniz|abilir miyim|ir misin)?|bahsed(?:er misiniz|ebilir misiniz|ebilir miyim|er misin)?)\b/.test(normalized);
+    if (!asksOverview) {
+      return false;
+    }
+
+    const hasExplicitDetailDimension = /\b(?:fiyat|ucret|ne kadar|kac para|tl|lira|saat|acik|kapali|calisma|program|randevu|rezervasyon|telefon|numara|adres|konum|kampanya|indirim)\b/.test(normalized);
+    if (hasExplicitDetailDimension) {
+      return false;
+    }
+
+    return semanticSignals.includes('service_inquiry')
+      || semanticSignals.includes('multi_service_inquiry')
+      || categories.every(category => ['services', 'pricing', 'hours', 'general', 'faq'].includes(category));
   }
 
 
@@ -1835,6 +1886,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
     this.applyDirectContactLocationSignals(plan, messageText);
+    this.applyBroadServiceOverviewSignals(plan, messageText);
     this.applyIndependentTurnGuards(plan, messageText);
     return plan;
   }
@@ -1874,6 +1926,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
     this.applyMassagePricingSignals(plan, messageText);
     this.applyRoomAvailabilitySignals(plan, messageText);
     this.applyDirectContactLocationSignals(plan, messageText);
+    this.applyBroadServiceOverviewSignals(plan, messageText);
     this.applyIndependentTurnGuards(plan, messageText);
     return plan;
   }
@@ -2019,6 +2072,7 @@ Eğer hiçbir kategoriye uymuyorsa: {"categories": ["general", "faq"], "confiden
       this.applyMassagePricingSignals(plan, messageText);
       this.applyRoomAvailabilitySignals(plan, messageText);
       this.applyDirectContactLocationSignals(plan, messageText);
+      this.applyBroadServiceOverviewSignals(plan, messageText);
       this.applyIndependentTurnGuards(plan, messageText);
       this.applyGroundedFollowUpGuard(plan);
 

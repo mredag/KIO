@@ -324,6 +324,54 @@ describe('InstagramContextService AI context planner', () => {
     expect(result.responseDirective.instruction).toContain('Gereksiz sekilde hangi masaj turunu');
   });
 
+  it('forces direct overview answers for broad multi-service info asks instead of answer-then-clarify', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(createAiResponse({
+      categories: ['services', 'pricing', 'hours'],
+      semanticSignals: ['service_inquiry', 'multi_service_inquiry'],
+      followUpHint: null,
+      responseDirective: {
+        mode: 'answer_then_clarify',
+        instruction: 'Masaj ve sauna hizmetleri hakkinda genel bilgi ver. Fiyat ve saat bilgisi icin ek bilgi gerekirse sor.',
+        rationale: 'Musteri birden fazla hizmet sordu, detay secilmeli.',
+      },
+      tier: 'standard',
+      tierReason: 'Birden fazla hizmet hakkinda genel bilgi talebi.',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new InstagramContextService({} as any);
+    const result = await service.detectIntentWithContextAI(
+      'Merhabalar masaj ve sauna hakkinda bilgi alabilir miyim',
+      [],
+    );
+
+    expect(result.categories).toContain('services');
+    expect(result.categories).toContain('general');
+    expect(result.categories).not.toContain('pricing');
+    expect(result.categories).not.toContain('hours');
+    expect(result.followUpHint).toBeNull();
+    expect(result.keywords).toContain('broad_service_overview_signal');
+    expect(result.responseDirective.mode).toBe('answer_directly');
+    expect(result.responseDirective.instruction).toContain('genel bilgi istiyor');
+    expect(result.responseDirective.instruction).toContain('ek netlestirme sorusu sorma');
+  });
+
+  it('keeps broad service overview asks on the simple-turn path', () => {
+    const service = new InstagramContextService(createMockDb());
+    vi.spyOn(service, 'getConversationHistory').mockReturnValue([]);
+    vi.spyOn(service, 'getTotalInteractionCount').mockReturnValue(0);
+    (service as any).conversationStateService = { getState: vi.fn().mockReturnValue(null) };
+
+    const result = service.analyzeSimpleTurn('ig-1', 'Masaj ve sauna hakkinda bilgi alabilir miyim');
+
+    expect(result).not.toBeNull();
+    expect(result?.intentCategories).toContain('services');
+    expect(result?.intentCategories).toContain('general');
+    expect(result?.matchedKeywords).toContain('broad_service_overview_signal');
+    expect(result?.responseDirective.mode).toBe('answer_directly');
+  });
+
   it('forces policies into age-related follow-ups even when the planner anchors to a service topic', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key';
     const fetchMock = vi.fn().mockResolvedValue(createAiResponse({

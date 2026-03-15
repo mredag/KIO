@@ -145,6 +145,7 @@ export class DMKnowledgeContextService {
         bringInfo: services.complete_customer_bring_guide || null,
         phoneInfo: contact.phone || null,
         locationInfo: contact.address || null,
+        spaAccessInfo: policies.hamam_sauna_access || null,
       }),
       massagePricingInfo: buildDeterministicMassagePricingTemplate({
         massagePricing: pricing.complete_massage_pricing || this.pickFirstValue(pricing),

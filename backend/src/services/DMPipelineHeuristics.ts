@@ -43,6 +43,9 @@ const SPECIFIC_TOPIC_ANCHOR_PATTERN = /\b(?:masaj|klasik|medikal|mix|hamam|sauna
 const GENERIC_INFO_DIMENSION_PATTERN = /\b(?:fiyat|ucret|tl|lira|ne kadar|kac|adres|telefon|konum|saat|acik|kapali|randevu)\b/;
 const GENERIC_INFO_ALLOWED_CATEGORIES = new Set(['general', 'faq', 'services']);
 const GENERIC_INFO_GENERIC_SERVICE_KEYWORDS = new Set(['spa', 'hizmet', 'servis']);
+const SPA_OVERVIEW_CONTEXT_PATTERN = /\b(?:masaj|massage|spa|hamam|sauna|buhar)\b/;
+const SPA_OVERVIEW_SPECIFIC_BLOCK_PATTERN = /\b(?:klasik|medikal|mix|sicak tas|aromaterapi|bali|thai|fitness|pilates|reformer|jimnastik|kickboks|boks|taekwondo|havuz|yuzme|pt|personal trainer|uyelik|kurs|ders)\b/;
+const SPA_OVERVIEW_DIMENSION_BLOCK_PATTERN = /\b(?:fiyat|ucret|ne kadar|kac para|tl|lira|saat|acik|kapali|calisma|program|randevu|rezervasyon|telefon|numara|adres|konum|kampanya|indirim)\b/;
 const DETERMINISTIC_PRICING_ALLOWED_CATEGORIES = new Set(['pricing', 'services', 'general', 'faq']);
 const GENERIC_MASSAGE_CONTEXT_KEYWORDS = new Set(['masaj', 'massage', 'spa']);
 const MASSAGE_PRICING_DURATION_PATTERN = /\b(?:\d+\s*(?:dk|dakika)|uzun\s*sure(?:li)?|kisa\s*sure(?:li)?|sure|sureli|dakika|dk|seans|saat)\b/;
@@ -238,7 +241,53 @@ export function isGenericInfoRequest(input: string | GenericInfoRequestParams): 
     return false;
   }
 
+  if (isBroadSpaOverviewTemplateRequest(params)) {
+    return true;
+  }
+
   if (hasSpecificServiceTopicSignal(normalized, params.semanticSignals || [])) {
+    return false;
+  }
+
+  return true;
+}
+
+export function isBroadSpaOverviewTemplateRequest(input: string | GenericInfoRequestParams): boolean {
+  const params = typeof input === 'string'
+    ? { messageText: input }
+    : input;
+  const normalized = normalizeTemplateText(params.messageText || '');
+  if (!normalized) {
+    return false;
+  }
+
+  const intentCategories = new Set((params.intentCategories || []).map(category => category.toLowerCase()));
+  if (!intentCategories.has('services')) {
+    return false;
+  }
+
+  const semanticSignals = new Set((params.semanticSignals || []).map(signal => signal.toLowerCase()));
+  const hasOverviewSignal = semanticSignals.has('broad_service_overview_signal')
+    || semanticSignals.has('service_inquiry')
+    || semanticSignals.has('multi_service_inquiry');
+  if (!hasOverviewSignal) {
+    return false;
+  }
+
+  const hasInfoIntent = /\b(?:bilgi|detay|hakkinda|anlat|bahset)\b/.test(normalized);
+  if (!hasInfoIntent) {
+    return false;
+  }
+
+  if (!SPA_OVERVIEW_CONTEXT_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  if (SPA_OVERVIEW_DIMENSION_BLOCK_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  if (SPA_OVERVIEW_SPECIFIC_BLOCK_PATTERN.test(normalized)) {
     return false;
   }
 

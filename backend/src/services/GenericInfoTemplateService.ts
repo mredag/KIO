@@ -6,6 +6,7 @@ export interface GenericInfoTemplateInput {
   bringInfo?: string | null;
   phoneInfo?: string | null;
   locationInfo?: string | null;
+  spaAccessInfo?: string | null;
 }
 
 export interface DeterministicHoursTemplateInput {
@@ -141,6 +142,15 @@ function buildCompactMassagePricingSummary(value: string): string {
   return `Masaj fiyatlarimiz: ${clipSingleLine(priceLines.join(' | '), 260)}`;
 }
 
+function buildCompactSpaAccessSummary(value: string): string {
+  const cleaned = value
+    .replace(/\r/g, ' ')
+    .replace(/\n+/g, ' ')
+    .trim();
+  const firstSentence = cleaned.match(/[^.!?]+[.!?]?/u)?.[0] || cleaned;
+  return clipSingleLine(firstSentence, 180);
+}
+
 function joinSectionsWithinLimit(sections: string[], maxChars: number): string {
   const accepted: string[] = [];
   for (const section of sections) {
@@ -172,6 +182,9 @@ export function buildGenericInfoTemplate(input: GenericInfoTemplateInput): strin
 
   if (input.massagePricing?.trim()) {
     sections.push(buildCompactMassagePricingSummary(input.massagePricing));
+  }
+  if (input.spaAccessInfo?.trim()) {
+    sections.push(`Spa alani: ${buildCompactSpaAccessSummary(input.spaAccessInfo)}`);
   }
   if (input.locationInfo?.trim()) {
     sections.push(`Konum: ${buildCompactLocationSummary(input.locationInfo)}`);

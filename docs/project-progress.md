@@ -50,6 +50,7 @@ This is the canonical recent-change ledger for KIO. Use it to answer "what chang
 - The repo-stored OpenClaw example now targets `2026.3.8` semantics, but Pi runtime parity and the live machine-local secret migration still need explicit verification.
 
 ## Last Verified
+- 2026-03-15: Broad massage/spa overview asks can now reuse the deterministic generic info template. The template was extended to include the live `hamam_sauna_access` KB fact so messages like `masaj ve sauna hakkinda bilgi alabilir miyim` can return pricing plus current spa-access info instead of generated summary text.
 - 2026-03-15: Broad multi-service overview asks such as `masaj ve sauna hakkinda bilgi alabilir miyim` now stay on a direct-answer overview path instead of `answer_then_clarify`; the planner strips incidental price/hour categories when the customer did not explicitly ask for them.
 - 2026-03-15: Clarification fallback behavior tightened:
   - one clarification is still allowed for an unclear user turn

@@ -55,6 +55,7 @@ describe('GenericInfoTemplateService', () => {
     const result = buildGenericInfoTemplate({
       massagePricing: 'KLASIK MASAJ:\n\u2022 30dk \u2192 800\u20ba\n\u2022 40dk \u2192 1000\u20ba\n\u2022 60dk \u2192 1300\u20ba\n\u2022 90dk \u2192 2400\u20ba',
       therapistInfo: 'Tum terapistlerimiz kadindir.',
+      spaAccessInfo: 'Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.',
       bringInfo: 'Terlik ve mayo getirmeniz yeterlidir.',
       phoneInfo: '0532 000 00 00',
       locationInfo: 'Steel Towers A Blok 4. Kat, Iskenderun / Hatay',
@@ -62,6 +63,7 @@ describe('GenericInfoTemplateService', () => {
 
     expect(result).toContain('Kisaca temel bilgileri paylasayim:');
     expect(result).toContain('Masaj fiyatlarimiz:');
+    expect(result).toContain('Spa alani: Masaj alan musterilerimize hamam, sauna ve buhar odasi ucretsiz olarak sunuluyor.');
     expect(result).toContain('Terapist bilgisi:');
     expect(result).toContain('Konum: Steel Towers A Blok 4. Kat, Iskenderun / Hatay');
     expect(result).toContain('Detayli bilgi ve randevu: 0532 000 00 00');

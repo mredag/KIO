@@ -8,6 +8,7 @@ import {
   CLARIFY_EXHAUSTED_CONTACT_MODEL_ID,
   countRecentClarificationReplies,
   hasAppointmentIntentSignal,
+  isBroadSpaOverviewTemplateRequest,
   isDirectLocationQuestion,
   isDirectPhoneQuestion,
   isGenericInfoRequest,
@@ -107,6 +108,11 @@ describe('DMPipelineHeuristics', () => {
       intentCategories: ['services'],
       semanticSignals: ['kickboks', 'boks'],
     })).toBe(false);
+    expect(isGenericInfoRequest({
+      messageText: 'Masaj ve sauna hakkinda bilgi alabilir miyim',
+      intentCategories: ['services', 'general'],
+      semanticSignals: ['service_inquiry', 'multi_service_inquiry', 'broad_service_overview_signal'],
+    })).toBe(true);
     expect(isGenericInfoRequest('Kickboks hakkinda bilgi verirmisin')).toBe(false);
     expect(isPilatesInfoRequest('pilates var mi')).toBe(true);
     expect(isPilatesInfoRequest('reformer pilates')).toBe(true);
@@ -121,6 +127,26 @@ describe('DMPipelineHeuristics', () => {
       response: 'Rica ederiz.',
       modelId: 'deterministic/closeout-v1',
     });
+  });
+
+  it('only treats broad spa overview requests as template-eligible when they are generic', () => {
+    expect(isBroadSpaOverviewTemplateRequest({
+      messageText: 'Masaj ve sauna hakkinda bilgi alabilir miyim',
+      intentCategories: ['services', 'general'],
+      semanticSignals: ['service_inquiry', 'multi_service_inquiry', 'broad_service_overview_signal'],
+    })).toBe(true);
+
+    expect(isBroadSpaOverviewTemplateRequest({
+      messageText: 'Medikal masaj hakkinda bilgi alabilir miyim',
+      intentCategories: ['services', 'general'],
+      semanticSignals: ['service_inquiry', 'broad_service_overview_signal'],
+    })).toBe(false);
+
+    expect(isBroadSpaOverviewTemplateRequest({
+      messageText: 'Masaj ve sauna fiyatlari nedir',
+      intentCategories: ['services', 'pricing'],
+      semanticSignals: ['service_inquiry', 'multi_service_inquiry'],
+    })).toBe(false);
   });
 
   it('suppresses replies for terminal courtesy turns', () => {

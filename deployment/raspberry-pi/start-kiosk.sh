@@ -77,8 +77,12 @@ log "Environment: DISPLAY=${DISPLAY} WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_SESS
 log "GPU mode: ${KIOSK_GPU_MODE}"
 
 if pgrep -f "${CHROMIUM_PATTERN}" >/dev/null 2>&1; then
-  log "Kiosk Chromium already running; exiting"
-  exit 0
+  log "Kiosk Chromium already running; waiting briefly for restart race to settle"
+  sleep 4
+  if pgrep -f "${CHROMIUM_PATTERN}" >/dev/null 2>&1; then
+    log "Kiosk Chromium still running after wait; exiting"
+    exit 0
+  fi
 fi
 
 wait_for_socket "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" "Wayland socket"
@@ -115,9 +119,6 @@ CHROMIUM_ARGS=(
 
 case "${KIOSK_GPU_MODE}" in
   hardware)
-    CHROMIUM_ARGS+=(
-      --use-gl=egl
-    )
     ;;
   software)
     CHROMIUM_ARGS+=(

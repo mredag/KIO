@@ -27,6 +27,9 @@ sudo reboot
 Notes:
 - The installer assumes Raspberry Pi OS with sudo access.
 - It installs Node.js 22, PM2, Chromium, the kiosk watchdog, and the backend build.
+- Kiosk browser startup is managed by a user service:
+  - `~/.config/systemd/user/kio-kiosk.service`
+  - `~/.config/autostart/kiosk.desktop` only imports the graphical session environment and starts that service
 - If this Pi also runs OpenClaw, keep `~/.openclaw/openclaw.json` machine-local and sync tracked workspace files with `./sync-openclaw-runtime.sh --restart`.
 
 ## Standard Maintenance
@@ -134,6 +137,8 @@ pm2 logs kio-backend
 pm2 logs kio-openclaw
 sudo journalctl -u kiosk-watchdog -f
 curl http://localhost:3001/api/kiosk/health
+systemctl --user status kio-kiosk.service
+tail -f /run/user/1000/kio-kiosk/launcher.log
 ```
 
 ## Key Files
@@ -147,6 +152,9 @@ curl http://localhost:3001/api/kiosk/health
 - `restore-backup.sh`: interactive DB restore
 - `test-kiosk-setup.sh`: post-install verification
 - `start-backend-pm2.sh`: backend PM2 bootstrap helper
+- `start-kiosk.sh`: Wayland-safe Chromium launcher with readiness gates and single-instance lock
+- `kio-kiosk.service`: managed user service for kiosk browser startup
+- `kiosk-autostart.desktop`: tiny desktop bootstrap that starts the managed user service
 - `watchdog-kiosk.sh`: kiosk/backend watchdog
 
 ## Hard Rules

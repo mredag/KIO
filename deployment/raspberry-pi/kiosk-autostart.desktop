@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=SPA Digital Kiosk
-Comment=Autostart SPA Digital Kiosk in Chromium
-Exec=/home/pi/spa-digital-kiosk/deployment/start-kiosk.sh
+Name=KIO Kiosk Bootstrap
+Comment=Import session environment and start the managed kiosk browser service
+Exec=/bin/bash -lc '/usr/bin/systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_SESSION_TYPE; /usr/bin/systemctl --user start kio-kiosk.service'
 Terminal=false
 Hidden=false
 X-GNOME-Autostart-enabled=true
-X-GNOME-Autostart-Delay=10
+X-GNOME-Autostart-Delay=12

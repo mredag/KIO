@@ -132,11 +132,6 @@ install_system_dependencies() {
         git \
         sqlite3 \
         "$chromium_package" \
-        unclutter \
-        xdotool \
-        x11-xserver-utils \
-        matchbox-window-manager \
-        xautomation \
         sed \
         build-essential
     
@@ -164,75 +159,34 @@ configure_kiosk_autostart() {
     
     # Create autostart directory
     mkdir -p "$APP_HOME/.config/autostart"
-    
-    # Create kiosk autostart file
-    cat > "$APP_HOME/.config/autostart/kiosk.desktop" <<EOF
-[Desktop Entry]
-Type=Application
-Name=Kiosk
-Exec=$APP_HOME/start-kiosk.sh
-X-GNOME-Autostart-enabled=true
-EOF
+
+    sed "s|/home/eform-kio|$APP_HOME|g" \
+        "$APP_DIR/deployment/raspberry-pi/kiosk-autostart.desktop" \
+        > "$APP_HOME/.config/autostart/kiosk.desktop"
     
     log_success "Kiosk autostart configured"
 }
 
 create_kiosk_startup_script() {
     log_info "Creating kiosk startup script..."
-    
-    cat > "$APP_HOME/start-kiosk.sh" <<'EOF'
-#!/bin/bash
 
-# Wait for network
-sleep 10
-
-# Disable screen blanking
-xset s off
-xset -dpms
-xset s noblank
-
-# Hide cursor
-unclutter -idle 0.1 -root &
-
-# Start window manager
-matchbox-window-manager -use_titlebar no &
-
-# Wait for backend to be ready
-while ! curl -s http://localhost:3001/api/kiosk/health > /dev/null; do
-    echo "Waiting for backend..."
-    sleep 2
-done
-
-CHROMIUM_BIN="$(command -v chromium-browser || command -v chromium || true)"
-if [ -z "$CHROMIUM_BIN" ]; then
-    echo "Chromium binary not found"
-    exit 1
-fi
-
-# Start Chromium in kiosk mode
-"$CHROMIUM_BIN" \
-    --kiosk \
-    --noerrdialogs \
-    --disable-infobars \
-    --no-first-run \
-    --fast \
-    --fast-start \
-    --disable-features=TranslateUI \
-    --disable-translate \
-    --disable-session-crashed-bubble \
-    --check-for-update-interval=31536000 \
-    --disable-pinch \
-    --overscroll-history-navigation=0 \
-    --disable-background-timer-throttling \
-    --disable-backgrounding-occluded-windows \
-    --disable-renderer-backgrounding \
-    --disable-features=IsolateOrigins,site-per-process \
-    http://localhost:3001
-EOF
-    
+    cp "$APP_DIR/deployment/raspberry-pi/start-kiosk.sh" "$APP_HOME/start-kiosk.sh"
     chmod +x "$APP_HOME/start-kiosk.sh"
     
     log_success "Kiosk startup script created"
+}
+
+configure_kiosk_user_service() {
+    log_info "Configuring kiosk user service..."
+
+    mkdir -p "$APP_HOME/.config/systemd/user"
+    sed "s|/home/eform-kio|$APP_HOME|g" \
+        "$APP_DIR/deployment/raspberry-pi/kio-kiosk.service" \
+        > "$APP_HOME/.config/systemd/user/kio-kiosk.service"
+
+    systemctl --user daemon-reload || true
+
+    log_success "Kiosk user service configured"
 }
 
 configure_boot_config() {
@@ -532,6 +486,7 @@ main() {
     # Kiosk configuration
     configure_kiosk_autostart
     create_kiosk_startup_script
+    configure_kiosk_user_service
     configure_boot_config
     disable_screen_blanking
     

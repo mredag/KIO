@@ -62,12 +62,12 @@ else
     log_fail "Chromium not installed"
 fi
 
-# Test 4: Unclutter
-log_test "Checking unclutter (cursor hider)..."
-if command -v unclutter &> /dev/null; then
-    log_pass "Unclutter installed"
+# Test 4: User systemd
+log_test "Checking user systemd availability..."
+if systemctl --user --version >/dev/null 2>&1; then
+    log_pass "User systemd available"
 else
-    log_warn "Unclutter not installed (cursor will be visible)"
+    log_fail "User systemd is not available"
 fi
 
 echo ""
@@ -253,8 +253,8 @@ log_test "Checking autostart configuration..."
 if [ -f "$HOME/.config/autostart/kiosk.desktop" ]; then
     log_pass "Autostart desktop file exists"
     
-    if grep -q "start-kiosk.sh" "$HOME/.config/autostart/kiosk.desktop"; then
-        log_pass "Autostart configured correctly"
+    if grep -q "systemctl --user start kio-kiosk.service" "$HOME/.config/autostart/kiosk.desktop"; then
+        log_pass "Autostart uses managed kiosk service"
     else
         log_warn "Autostart file may be misconfigured"
     fi
@@ -262,7 +262,15 @@ else
     log_fail "Autostart desktop file not found"
 fi
 
-# Test 19: Screen blanking disabled
+# Test 19: Kiosk user service
+log_test "Checking kiosk user service..."
+if [ -f "$HOME/.config/systemd/user/kio-kiosk.service" ]; then
+    log_pass "Kiosk user service file exists"
+else
+    log_fail "Kiosk user service file not found"
+fi
+
+# Test 20: Screen blanking disabled
 log_test "Checking screen blanking configuration..."
 if [ -f "/etc/X11/xorg.conf.d/10-monitor.conf" ]; then
     log_pass "Screen blanking configuration exists"
@@ -279,7 +287,7 @@ echo ""
 echo "=== Network Tests ==="
 echo ""
 
-# Test 20: Static IP
+# Test 21: Static IP
 log_test "Checking static IP configuration..."
 if grep -q "static ip_address" /etc/dhcpcd.conf 2>/dev/null; then
     STATIC_IP=$(grep "static ip_address" /etc/dhcpcd.conf | head -1 | awk '{print $3}')
@@ -288,7 +296,7 @@ else
     log_warn "Static IP may not be configured (using DHCP)"
 fi
 
-# Test 21: Current IP
+# Test 22: Current IP
 log_test "Checking current IP address..."
 CURRENT_IP=$(hostname -I | awk '{print $1}')
 log_pass "Current IP: $CURRENT_IP"
@@ -302,7 +310,7 @@ echo ""
 echo "=== Optional Features Tests ==="
 echo ""
 
-# Test 22: Watchdog service
+# Test 23: Watchdog service
 log_test "Checking watchdog service..."
 if systemctl is-active --quiet kiosk-watchdog 2>/dev/null; then
     log_pass "Watchdog service running"
@@ -312,7 +320,7 @@ else
     log_warn "Watchdog service not configured"
 fi
 
-# Test 23: Backup cron job
+# Test 24: Backup cron job
 log_test "Checking backup cron job..."
 if crontab -l 2>/dev/null | grep -q "backup-database.sh"; then
     log_pass "Backup cron job configured"
@@ -320,7 +328,7 @@ else
     log_warn "Backup cron job not configured"
 fi
 
-# Test 24: Backup directory
+# Test 25: Backup directory
 log_test "Checking backup directory..."
 if [ -d "$HOME/kio-new/data/backups" ]; then
     BACKUP_COUNT=$(ls -1 "$HOME/kio-new/data/backups" 2>/dev/null | wc -l)
@@ -338,17 +346,17 @@ echo ""
 echo "=== Performance Tests ==="
 echo ""
 
-# Test 25: Memory usage
+# Test 26: Memory usage
 log_test "Checking memory usage..."
 MEMORY=$(free -h | grep Mem | awk '{print $3 "/" $2}')
 log_pass "Memory usage: $MEMORY"
 
-# Test 26: Disk usage
+# Test 27: Disk usage
 log_test "Checking disk usage..."
 DISK=$(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 " used)"}')
 log_pass "Disk usage: $DISK"
 
-# Test 27: CPU temperature
+# Test 28: CPU temperature
 log_test "Checking CPU temperature..."
 if command -v vcgencmd &> /dev/null; then
     TEMP=$(vcgencmd measure_temp 2>/dev/null | cut -d= -f2)

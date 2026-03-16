@@ -1,0 +1,19 @@
+[Unit]
+Description=KIO Chromium kiosk browser
+After=default.target
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=%t
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=DISPLAY=:0
+Environment=XDG_SESSION_TYPE=wayland
+ExecStart=/home/eform-kio/start-kiosk.sh
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=0
+SuccessExitStatus=0 143
+
+[Install]
+WantedBy=default.target

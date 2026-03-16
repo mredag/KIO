@@ -84,6 +84,10 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
 - Showcase-mode performance should avoid multiple blurred autoplaying videos at once. Prefer one active video path plus lightweight non-main previews so the Pi kiosk stays smooth.
 - Kiosk boot must tolerate missing uploaded media. Kiosk-facing menu responses should strip broken `/uploads/...` media URLs before the frontend sees them, and backend `/uploads` requests must fail fast with a real 404 instead of falling through into the SPA catch-all.
 - Kiosk is now intentionally media-free on the customer-facing path. `/api/kiosk/menu` should strip `media_type` and `media_url` for all massages, and kiosk themes should render generated text-first visuals instead of depending on uploaded videos/photos.
+- Raspberry Pi kiosk browser startup should not launch Chromium directly from a heavy `.desktop` autostart script. The stable pattern is:
+  - `~/.config/autostart/kiosk.desktop` only imports `DISPLAY`, `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, and `XDG_SESSION_TYPE`, then starts `kio-kiosk.service`
+  - `kio-kiosk.service` owns the Chromium process
+  - `start-kiosk.sh` stays Wayland-safe, removes X11-only helpers like `xset` / `unclutter`, waits for the Wayland socket plus backend `/api/kiosk/health` and `/kiosk`, then launches Chromium as a single managed process
 - Production frontend serving on the Pi should prefer `backend/public` when present, because `deployment/raspberry-pi/update-pi.sh` copies the built frontend there. Do not hard-wire kiosk boot to depend only on `frontend/dist`.
 - Service-specific `bilgi` asks such as `kickboks hakkinda bilgi verirmisin` should stay off the generic info template path when the service/topic is already explicit in the message.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.

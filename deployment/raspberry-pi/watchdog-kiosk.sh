@@ -9,7 +9,11 @@ APP_DIR="${APP_DIR:-/home/$USER/kio-new}"
 BACKEND_PM2_NAME="${BACKEND_PM2_NAME:-kio-backend}"
 LOG_FILE="${APP_DIR}/logs/watchdog.log"
 START_BACKEND_SCRIPT="${APP_DIR}/deployment/raspberry-pi/start-backend-pm2.sh"
-START_KIOSK_SCRIPT="${HOME}/start-kiosk.sh"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
+export XDG_RUNTIME_DIR
+export DBUS_SESSION_BUS_ADDRESS
 
 mkdir -p "$(dirname "${LOG_FILE}")"
 
@@ -24,10 +28,9 @@ if ! pm2 list | grep -q "${BACKEND_PM2_NAME}.*online"; then
 fi
 
 if ! pgrep -x "chromium-browser" >/dev/null && ! pgrep -x "chromium" >/dev/null; then
-  log "Chromium not running, restarting..."
-  export DISPLAY=:0
-  "${START_KIOSK_SCRIPT}" >> "${LOG_FILE}" 2>&1 &
-  log "Chromium restarted"
+  log "Chromium not running, starting managed kiosk service..."
+  systemctl --user start kio-kiosk.service >> "${LOG_FILE}" 2>&1 || true
+  log "Kiosk service start requested"
 fi
 
 # Keep last 500 lines.

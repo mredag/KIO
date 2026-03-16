@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Massage } from '../../types';
 import { formatCurrency } from '../../lib/currencyFormatter';
+import MassageVisualFallback from './MassageVisualFallback';
 
 interface NeoDigitalMenuProps {
   massages: Massage[];
@@ -145,9 +146,7 @@ export default function NeoDigitalMenu({ massages }: NeoDigitalMenuProps) {
                 />
               )
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-300">
-                {t('menu.mediaUnavailable')}
-              </div>
+              <MassageVisualFallback massage={selected} />
             )}
             {selected.purposeTags.length > 0 && (
               <div className="absolute top-4 left-4 flex flex-wrap gap-2 max-w-[70%] pointer-events-none">

@@ -37,7 +37,7 @@ export interface Massage {
   shortDescription: string;
   longDescription: string;
   duration: string;
-  mediaType: 'video' | 'photo';
+  mediaType: 'video' | 'photo' | '';
   mediaUrl: string;
   purposeTags: string[];
   sessions: Session[];

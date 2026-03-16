@@ -14,6 +14,7 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { Massage } from '../../types';
 import { SHOWCASE_COLORS, SHOWCASE_ANIMATION_CONFIG } from '../../lib/kioskTheme';
+import MassageVisualFallback from './MassageVisualFallback';
 
 interface ShowcaseColumnProps {
   massage: Massage;
@@ -87,7 +88,7 @@ function ShowcaseColumn({
   }, [massage.id]);
 
   const benefit = massage.shortDescription.split('.')[0].substring(0, 50);
-  const shouldRenderVideo = isMain && massage.mediaType === 'video' && shouldLoadVideo && !videoError;
+  const shouldRenderVideo = isMain && massage.mediaType === 'video' && Boolean(massage.mediaUrl) && shouldLoadVideo && !videoError;
   const shouldRenderImage = massage.mediaType === 'photo' && Boolean(massage.mediaUrl);
 
   // Touch feedback handlers (Requirements 10.1, 10.2)
@@ -163,22 +164,13 @@ function ShowcaseColumn({
           }}
         />
       ) : (
-        <div
-          className="absolute inset-0 flex items-center justify-center rounded-2xl transition-all duration-300"
-          style={{
-            background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)`,
-            borderRadius: '16px',
-          }}
-        >
-          <div className="text-center px-4">
-            <div className="text-4xl mb-4 opacity-50">🎥</div>
-            <p
-              className="font-semibold text-lg"
-              style={{ color: SHOWCASE_COLORS.text.primary }}
-            >
-              {massage.name}
-            </p>
-          </div>
+        <div className="absolute inset-0 rounded-2xl transition-all duration-300" style={{ borderRadius: '16px' }}>
+          <MassageVisualFallback
+            massage={massage}
+            compact={!isMain}
+            showDescription={isMain}
+            showTags={isMain}
+          />
         </div>
       )}
 

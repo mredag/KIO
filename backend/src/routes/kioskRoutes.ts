@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { totalmem, freemem } from 'os';
-import { UPLOADS_DIR } from '../config/paths.js';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { QRCodeService } from '../services/QRCodeService.js';
 import { kioskEventService } from '../services/KioskEventService.js';
@@ -30,7 +29,7 @@ export function createKioskRoutes(
   qrService: QRCodeService
 ): Router {
   const router = Router();
-  const kioskMediaSanitizer = new KioskMediaSanitizer(UPLOADS_DIR);
+  const kioskMediaSanitizer = new KioskMediaSanitizer();
 
   /**
    * Middleware to update heartbeat on every kiosk request

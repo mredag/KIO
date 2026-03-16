@@ -16,6 +16,7 @@ import { Massage } from '../../types';
 import ShowcaseColumn from './ShowcaseColumn';
 import GlassDetailCard from './GlassDetailCard';
 import { SHOWCASE_COLORS, SHOWCASE_ANIMATION_CONFIG, selectDisplayMassages } from '../../lib/kioskTheme';
+import MassageVisualFallback from './MassageVisualFallback';
 
 interface ShowcaseModeProps {
   massages: Massage[];
@@ -237,7 +238,7 @@ export default function ShowcaseMode({ massages }: ShowcaseModeProps) {
               pointerEvents: isDetailView ? 'auto' : 'none',
             }}
           >
-            {selectedMassage && selectedMassage.mediaType === 'video' ? (
+            {selectedMassage && selectedMassage.mediaType === 'video' && selectedMassage.mediaUrl ? (
               <video
                 ref={detailVideoRef}
                 key={`detail-video-${selectedMassage.id}`}
@@ -250,17 +251,7 @@ export default function ShowcaseMode({ massages }: ShowcaseModeProps) {
                 style={{ transform: 'translateZ(0)' }}
               />
             ) : selectedMassage ? (
-              <div
-                className="w-full h-full flex items-center justify-center"
-                style={{ background: `linear-gradient(135deg, ${SHOWCASE_COLORS.background.start} 0%, ${SHOWCASE_COLORS.background.end} 100%)` }}
-              >
-                <div className="text-center">
-                  <div className="text-8xl mb-4 opacity-50">🧘</div>
-                  <p className="text-3xl font-semibold" style={{ color: SHOWCASE_COLORS.text.primary }}>
-                    {selectedMassage.name}
-                  </p>
-                </div>
-              </div>
+              <MassageVisualFallback massage={selectedMassage} />
             ) : null}
             
             {/* Close button */}

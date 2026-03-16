@@ -1,34 +1,23 @@
-import fs from 'fs';
-import path from 'path';
-
 import type { Massage } from '../database/types.js';
 
+/**
+ * Kiosk clients are intentionally media-free. The live kiosk experience should
+ * never depend on uploaded images/videos or on filesystem state.
+ */
 export class KioskMediaSanitizer {
-  constructor(private readonly uploadsDir: string) {}
-
   sanitizeMassage(massage: Massage): Massage {
-    if (!this.isManagedUpload(massage.media_url)) {
-      return massage;
-    }
-
-    const filename = path.basename(massage.media_url as string);
-    const absolutePath = path.join(this.uploadsDir, filename);
-
-    if (fs.existsSync(absolutePath)) {
+    if (!massage.media_type && !massage.media_url) {
       return massage;
     }
 
     return {
       ...massage,
+      media_type: null,
       media_url: null,
     };
   }
 
   sanitizeMassages(massages: Massage[]): Massage[] {
     return massages.map((massage) => this.sanitizeMassage(massage));
-  }
-
-  private isManagedUpload(mediaUrl: string | null | undefined): boolean {
-    return typeof mediaUrl === 'string' && mediaUrl.startsWith('/uploads/');
   }
 }

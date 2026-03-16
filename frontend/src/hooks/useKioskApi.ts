@@ -94,8 +94,10 @@ export function useMassageMenu() {
             shortDescription: data.short_description || '',
             longDescription: data.long_description || '',
             duration: data.duration || '',
-            mediaType: data.media_type || '',
-            mediaUrl: data.media_url || '',
+            mediaType: data.media_type === 'video' || data.media_type === 'photo'
+              ? data.media_type
+              : '',
+            mediaUrl: typeof data.media_url === 'string' ? data.media_url : '',
             purposeTags,
             sessions,
             isFeatured: data.is_featured === 1,

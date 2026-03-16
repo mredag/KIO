@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Massage } from '../../types';
+import MassageVisualFallback from './MassageVisualFallback';
 
 interface SlideshowModeProps {
   massages: Massage[];
@@ -66,6 +67,9 @@ export default function SlideshowMode({ massages, onExit }: SlideshowModeProps) 
   }
 
   const currentMassage = slideshowMassages[currentIndex];
+  const hasRenderableMedia = Boolean(currentMassage.mediaUrl) && (
+    currentMassage.mediaType === 'video' || currentMassage.mediaType === 'photo'
+  );
 
   return (
     <div
@@ -79,23 +83,27 @@ export default function SlideshowMode({ massages, onExit }: SlideshowModeProps) 
       >
         {/* Massage Visual (Requirement 3.3) */}
         <div className="relative w-full max-w-4xl aspect-video mb-8 rounded-2xl overflow-hidden shadow-2xl">
-          {currentMassage.mediaType === 'video' ? (
-            <video
-              key={currentMassage.id}
-              src={currentMassage.mediaUrl}
-              className="w-full h-full object-cover"
-              autoPlay
-              muted
-              loop
-              playsInline
-            />
+          {hasRenderableMedia ? (
+            currentMassage.mediaType === 'video' ? (
+              <video
+                key={currentMassage.id}
+                src={currentMassage.mediaUrl}
+                className="w-full h-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img
+                key={currentMassage.id}
+                src={currentMassage.mediaUrl}
+                alt={currentMassage.name}
+                className="w-full h-full object-cover"
+              />
+            )
           ) : (
-            <img
-              key={currentMassage.id}
-              src={currentMassage.mediaUrl}
-              alt={currentMassage.name}
-              className="w-full h-full object-cover"
-            />
+            <MassageVisualFallback massage={currentMassage} showTags={false} />
           )}
         </div>
 

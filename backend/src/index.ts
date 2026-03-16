@@ -2,13 +2,14 @@ import express from 'express';
 import session from 'express-session';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import dns from 'dns';
 
 // Fix Node 18+ IPv6 DNS resolution issues (EAI_AGAIN / ConnectTimeoutError)
 dns.setDefaultResultOrder('ipv4first');
 import cron from 'node-cron';
-import { UPLOADS_DIR, BACKUPS_DIR, DATABASE_PATH, FRONTEND_DIST } from './config/paths.js';
+import { UPLOADS_DIR, BACKUPS_DIR, DATABASE_PATH, FRONTEND_RUNTIME_DIR } from './config/paths.js';
 import { initializeDatabase } from './database/init.js';
 import { DatabaseService } from './database/DatabaseService.js';
 import { AuthService } from './services/AuthService.js';
@@ -286,7 +287,11 @@ app.use(requestLogger(logger));
 
 // Configure static file serving for /uploads directory - use centralized config
 // Requirements: 4.3
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  fallthrough: false,
+  index: false,
+  redirect: false,
+}));
 
 // Routes
 app.use('/api/admin', createAdminRoutes(dbService, authService, backupService, mediaService, googleSheetsService));
@@ -419,12 +424,16 @@ AgentLifecycleService.init(db);
 
 // Serve frontend static files in production - use centralized config
 if (process.env.NODE_ENV === 'production') {
+  if (!fs.existsSync(path.join(FRONTEND_RUNTIME_DIR, 'index.html'))) {
+    throw new Error(`Production frontend build is missing: ${FRONTEND_RUNTIME_DIR}`);
+  }
+
   // Serve static assets
-  app.use(express.static(FRONTEND_DIST));
+  app.use(express.static(FRONTEND_RUNTIME_DIR));
 
   // Handle client-side routing - serve index.html for all non-API routes
   app.get('*', (_req, res) => {
-    res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+    res.sendFile(path.join(FRONTEND_RUNTIME_DIR, 'index.html'));
   });
 }
 

@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { totalmem, freemem } from 'os';
+import { UPLOADS_DIR } from '../config/paths.js';
 import { DatabaseService } from '../database/DatabaseService.js';
 import { QRCodeService } from '../services/QRCodeService.js';
 import { kioskEventService } from '../services/KioskEventService.js';
+import { KioskMediaSanitizer } from '../services/KioskMediaSanitizer.js';
 import {
   validateSurveyResponse,
   handleValidationErrors,
@@ -28,6 +30,7 @@ export function createKioskRoutes(
   qrService: QRCodeService
 ): Router {
   const router = Router();
+  const kioskMediaSanitizer = new KioskMediaSanitizer(UPLOADS_DIR);
 
   /**
    * Middleware to update heartbeat on every kiosk request
@@ -188,7 +191,7 @@ export function createKioskRoutes(
       const startTime = Date.now();
 
       // Get all massages (already sorted by sort_order)
-      const allMassages = db.getMassages();
+      const allMassages = kioskMediaSanitizer.sanitizeMassages(db.getMassages());
 
       // Separate featured and non-featured massages
       const featured = allMassages.filter((m) => m.is_featured === 1);

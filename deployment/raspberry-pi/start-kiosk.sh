@@ -7,7 +7,8 @@ set -e
 echo "Starting SPA Digital Kiosk..."
 
 # Configuration
-KIOSK_URL="http://localhost:3000/kiosk"
+KIOSK_URL="http://localhost:3001/kiosk"
+HEALTH_URL="http://localhost:3001/api/kiosk/health"
 DISPLAY=":0"
 WAIT_TIME=10
 MAX_RETRIES=30
@@ -16,20 +17,20 @@ MAX_RETRIES=30
 export DISPLAY=$DISPLAY
 
 # Wait for backend to be ready
-echo "Waiting for backend server to be ready..."
+echo "Waiting for backend server and kiosk page to be ready..."
 retry_count=0
-while ! curl -s "$KIOSK_URL" > /dev/null; do
+while ! curl -fsS "$HEALTH_URL" > /dev/null || ! curl -fsS "$KIOSK_URL" > /dev/null; do
     if [ $retry_count -ge $MAX_RETRIES ]; then
-        echo "Error: Backend server did not start within expected time"
+        echo "Error: Backend server or kiosk page did not start within expected time"
         echo "Please check if the backend is running with: pm2 status"
         exit 1
     fi
-    echo "Backend not ready yet, waiting... (attempt $((retry_count + 1))/$MAX_RETRIES)"
+    echo "Backend or kiosk page not ready yet, waiting... (attempt $((retry_count + 1))/$MAX_RETRIES)"
     sleep $WAIT_TIME
     retry_count=$((retry_count + 1))
 done
 
-echo "Backend is ready, launching Chromium..."
+echo "Backend and kiosk page are ready, launching Chromium..."
 
 # Disable screen blanking and power management
 xset s off

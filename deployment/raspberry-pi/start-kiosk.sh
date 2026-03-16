@@ -13,6 +13,7 @@ LOG_DIR="${XDG_RUNTIME_DIR}/kio-kiosk"
 LOCK_FILE="${LOG_DIR}/launch.lock"
 LOG_FILE="${LOG_DIR}/launcher.log"
 CHROMIUM_PATTERN="chromium.*http://localhost:3001/kiosk"
+KIOSK_GPU_MODE="${KIOSK_GPU_MODE:-hardware}"
 
 export XDG_RUNTIME_DIR
 export WAYLAND_DISPLAY
@@ -73,6 +74,7 @@ fi
 
 log "Starting kiosk launcher"
 log "Environment: DISPLAY=${DISPLAY} WAYLAND_DISPLAY=${WAYLAND_DISPLAY} XDG_SESSION_TYPE=${XDG_SESSION_TYPE}"
+log "GPU mode: ${KIOSK_GPU_MODE}"
 
 if pgrep -f "${CHROMIUM_PATTERN}" >/dev/null 2>&1; then
   log "Kiosk Chromium already running; exiting"
@@ -94,21 +96,39 @@ if [ -z "${CHROMIUM_BIN}" ]; then
 fi
 
 log "Launching Chromium from ${CHROMIUM_BIN}"
-exec "${CHROMIUM_BIN}" \
-  --kiosk \
-  --noerrdialogs \
-  --disable-infobars \
-  --disable-session-crashed-bubble \
-  --disable-restore-session-state \
-  --disable-features=TranslateUI,CalculateNativeWinOcclusion \
-  --enable-features=UseOzonePlatform \
-  --ozone-platform=wayland \
-  --disable-gpu \
-  --disable-gpu-compositing \
-  --disable-smooth-scrolling \
-  --disable-pinch \
-  --overscroll-history-navigation=0 \
-  --no-first-run \
-  --password-store=basic \
-  --remote-debugging-port=9222 \
-  "${KIOSK_URL}"
+CHROMIUM_ARGS=(
+  --kiosk
+  --noerrdialogs
+  --disable-infobars
+  --disable-session-crashed-bubble
+  --disable-restore-session-state
+  --disable-features=TranslateUI,CalculateNativeWinOcclusion
+  --enable-features=UseOzonePlatform
+  --ozone-platform=wayland
+  --disable-smooth-scrolling
+  --disable-pinch
+  --overscroll-history-navigation=0
+  --no-first-run
+  --password-store=basic
+  --remote-debugging-port=9222
+)
+
+case "${KIOSK_GPU_MODE}" in
+  hardware)
+    CHROMIUM_ARGS+=(
+      --use-gl=egl
+    )
+    ;;
+  software)
+    CHROMIUM_ARGS+=(
+      --disable-gpu
+      --disable-gpu-compositing
+    )
+    ;;
+  *)
+    log "Unsupported KIOSK_GPU_MODE=${KIOSK_GPU_MODE}; expected hardware or software"
+    exit 1
+    ;;
+esac
+
+exec "${CHROMIUM_BIN}" "${CHROMIUM_ARGS[@]}" "${KIOSK_URL}"

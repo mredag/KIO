@@ -289,7 +289,7 @@ export default function SurveyMode() {
   if (isLoading || !survey) {
     return (
       <div className="premium-survey">
-        <AnimatedBackground particleCount={15} glowIntensity="low" />
+        <AnimatedBackground particleCount={8} glowIntensity="low" />
         <div className="premium-survey-content">
           <div className="survey-loading" role="status" aria-live="polite">
             <div className="survey-loading__spinner" aria-hidden="true" />
@@ -307,12 +307,12 @@ export default function SurveyMode() {
   if (state.showThankYou) {
     return (
       <div className="premium-survey">
-        <AnimatedBackground particleCount={20} glowIntensity="high" />
+        <AnimatedBackground particleCount={10} glowIntensity="medium" />
         <ThankYouScreen
           message={t('survey.satisfaction.thankYou', 'Teşekkür Ederiz!')}
           subMessage={t('survey.discovery.thankYouMessage', 'Geri bildiriminiz bizim için değerli.')}
           showCelebration={true}
-          showConfetti={true}
+          showConfetti={false}
         />
       </div>
     );
@@ -325,7 +325,7 @@ export default function SurveyMode() {
       onTouchStart={resetInactivityTimer}
     >
       {/* Animated Background (Requirement 1.1, 11.5) */}
-      <AnimatedBackground particleCount={20} glowIntensity="medium" />
+      <AnimatedBackground particleCount={12} glowIntensity="low" />
 
       {/* Timer Display */}
       {shouldShowTimer && (

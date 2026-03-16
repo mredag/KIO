@@ -88,6 +88,7 @@ Do not reintroduce `nexus`, `atlas`, or `ledger` unless there is a deliberate pr
   - `~/.config/autostart/kiosk.desktop` only imports `DISPLAY`, `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, and `XDG_SESSION_TYPE`, then starts `kio-kiosk.service`
   - `kio-kiosk.service` owns the Chromium process
   - `start-kiosk.sh` stays Wayland-safe, removes X11-only helpers like `xset` / `unclutter`, waits for the Wayland socket plus backend `/api/kiosk/health` and `/kiosk`, then launches Chromium as a single managed process
+  - `KIOSK_GPU_MODE=hardware` is now the default and should be kept unless the owner explicitly asks for a temporary software-rendering fallback during recovery
 - Production frontend serving on the Pi should prefer `backend/public` when present, because `deployment/raspberry-pi/update-pi.sh` copies the built frontend there. Do not hard-wire kiosk boot to depend only on `frontend/dist`.
 - Service-specific `bilgi` asks such as `kickboks hakkinda bilgi verirmisin` should stay off the generic info template path when the service/topic is already explicit in the message.
 - The live webhook and the simulator now share the same conduct ladder wiring: `DMSafetyPhraseService` plus `SuspiciousUserService` run before normal DM generation.

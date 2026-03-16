@@ -41,6 +41,12 @@ export const errorHandler = (logger?: LoggerService) => {
       details = { validation: err.message };
     }
 
+    const errnoError = err as NodeJS.ErrnoException;
+    if (errnoError.code === 'ENOENT' && req.path.startsWith('/uploads/')) {
+      statusCode = 404;
+      message = 'Media not found';
+    }
+
     // Handle database errors
     if (err.message?.includes('SQLITE_') || err.message?.includes('database')) {
       statusCode = 500;
